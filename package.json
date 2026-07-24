@@ -1,0 +1,8 @@
+{
+  "name": "personal-agent",
+  "private": true,
+  "workspaces": ["hub", "packages/protocol"],
+  "scripts": {
+    "dev": "npm run dev --workspace @mxideass/hub"
+  }
+}

@@ -13,6 +13,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
@@ -34,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import mx.ideass.personal.agent.chat.ChatScreen
 import mx.ideass.personal.agent.connection.ConnectionScreen
 import mx.ideass.personal.agent.service.AgentService
+import mx.ideass.personal.agent.voice.VoiceScreen
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -114,6 +119,7 @@ private object Routes {
     const val Boot = "boot"
     const val Connection = "connection"
     const val Chat = "chat"
+    const val Voice = "voice"
 }
 
 @HiltViewModel
@@ -168,6 +174,28 @@ private fun AppNav(
             ChatScreen(
                 onOpenConnection = {
                     navController.navigate(Routes.Connection)
+                },
+                onOpenVoice = {
+                    navController.navigate(Routes.Voice)
+                },
+            )
+        }
+        composable(
+            route = Routes.Voice,
+            enterTransition = {
+                fadeIn() + slideInVertically { it / 12 }
+            },
+            exitTransition = {
+                fadeOut() + slideOutVertically { it / 12 }
+            },
+            popEnterTransition = { fadeIn() },
+            popExitTransition = {
+                fadeOut() + slideOutVertically { it / 10 }
+            },
+        ) {
+            VoiceScreen(
+                onFinished = {
+                    navController.popBackStack()
                 },
             )
         }

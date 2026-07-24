@@ -1,6 +1,5 @@
 package mx.ideass.personal.agent.chat
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,7 +39,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,13 +52,13 @@ import mx.ideass.personal.agent.network.ConnectionState
 @Composable
 fun ChatScreen(
     onOpenConnection: () -> Unit,
+    onOpenVoice: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val connection by viewModel.connectionState.collectAsStateWithLifecycle()
     val hadConnection by viewModel.hadConnection.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val context = LocalContext.current
     val degraded = hadConnection && connection !is ConnectionState.Conectado
 
     LaunchedEffect(ui.messages.size, ui.messages.lastOrNull()?.text) {
@@ -102,9 +100,7 @@ fun ChatScreen(
             onDraftChange = viewModel::onDraftChange,
             onSend = viewModel::send,
             micEnabled = connection is ConnectionState.Conectado,
-            onMicClick = {
-                Toast.makeText(context, "la voz llega pronto", Toast.LENGTH_SHORT).show()
-            },
+            onMicClick = onOpenVoice,
         )
     }
 }
@@ -293,6 +289,7 @@ private fun ChatInputBar(
         Spacer(Modifier.width(10.dp))
         IconButton(
             onClick = onMicClick,
+            enabled = micEnabled,
             modifier = Modifier
                 .size(52.dp)
                 .clip(CircleShape)

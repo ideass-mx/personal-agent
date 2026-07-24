@@ -24,6 +24,10 @@ object AppColors {
     val userText = Color(0xFFD9EFE6)
     val warn = Color(0xFFFAC775)
     val warnTint = Color(0xFF2E2417)
+    /** Turno del agente hablando (sesión de voz). */
+    val speaking = Color(0xFF378ADD)
+    val speakingText = Color(0xFF5FA8E8)
+    val idle = Color(0xFF8A8F98)
 }
 
 object AppRadii {

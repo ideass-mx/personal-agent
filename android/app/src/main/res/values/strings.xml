@@ -5,4 +5,16 @@
     <string name="notification_channel_conexion_desc">Estado de la conexión con tu hub</string>
     <string name="notification_conectado">Agente conectado</string>
     <string name="notification_reconnectando">Reconectando…</string>
+    <string name="voice_permission_title">Micrófono</string>
+    <string name="voice_permission_body">El agente necesita el micrófono para escucharte en la conversación de voz. El audio se queda en tu teléfono; solo se envía el texto reconocido a tu hub.</string>
+    <string name="voice_permission_allow">Permitir</string>
+    <string name="voice_permission_deny">Ahora no</string>
+    <string name="voice_listening">Escuchando…</string>
+    <string name="voice_thinking">Pensando…</string>
+    <string name="voice_speaking">Hablando…</string>
+    <string name="voice_idle">En pausa</string>
+    <string name="voice_end">Terminar</string>
+    <string name="voice_error_stt">El reconocimiento de voz no está disponible en este dispositivo.</string>
+    <string name="voice_error_tts">La síntesis de voz no está disponible en este dispositivo.</string>
+    <string name="voice_error_permission">Sin permiso de micrófono no puedo escucharte.</string>
 </resources>

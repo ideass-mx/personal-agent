@@ -1,0 +1,8 @@
+{
+  "name": "@mxideass/protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./messages.ts" },
+  "dependencies": { "zod": "^3.24.0" }
+}
