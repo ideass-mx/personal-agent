@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Silueta blanca para la barra de estado: círculo con "A". -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2C6.48,2 2,6.48 2,12s4.48,10 10,10 10,-4.48 10,-10S17.52,2 12,2z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M12,6.2L8.2,17h1.7l0.95,-2.6h2.3L14.1,17h1.7L12,6.2zM11.35,12.8l0.65,-1.85 0.65,1.85h-1.3z" />
+</vector>
