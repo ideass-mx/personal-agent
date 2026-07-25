@@ -233,7 +233,7 @@ private fun ErrorPane(
 }
 
 @Composable
-private fun VoiceSessionContent(
+internal fun VoiceSessionContent(
     ui: VoiceSessionUi,
     onEnd: () -> Unit,
 ) {
