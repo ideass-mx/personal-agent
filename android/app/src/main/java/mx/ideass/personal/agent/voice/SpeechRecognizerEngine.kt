@@ -47,7 +47,9 @@ class SpeechRecognizerEngine(
             ensureRecognizer()
             if (listening) return@post
             listening = true
-            recognizer?.startListening(recognitionIntent())
+            val locale = preferredLanguageTag()
+            Log.i(TAG, "STT locale seleccionado: $locale")
+            recognizer?.startListening(recognitionIntent(locale))
         }
     }
 
@@ -133,22 +135,20 @@ class SpeechRecognizerEngine(
         recognizer = r
     }
 
-    private fun recognitionIntent(): Intent {
-        val locale = preferredLocale()
+    private fun recognitionIntent(locale: String): Intent {
         return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, locale.toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, locale)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         }
     }
 
-    private fun preferredLocale(): Locale {
-        val mx = Locale.forLanguageTag("es-MX")
-        val available = Locale.getAvailableLocales()
-        return if (available.any { it.toLanguageTag().startsWith("es") }) mx else Locale("es")
+    private fun preferredLanguageTag(): String {
+        val systemLanguageTag = Locale.getDefault().toLanguageTag()
+        return if (systemLanguageTag.startsWith("es", ignoreCase = true)) systemLanguageTag else "es"
     }
 
     companion object {
