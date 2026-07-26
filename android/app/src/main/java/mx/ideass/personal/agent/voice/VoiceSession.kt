@@ -19,6 +19,7 @@ import mx.ideass.personal.agent.chat.ChatStore
 import mx.ideass.personal.agent.network.HubClient
 import mx.ideass.personal.agent.protocol.ServerMessage
 import mx.ideass.personal.agent.voice.audio.BluetoothScoController
+import mx.ideass.personal.agent.voice.audio.VoiceFeedback
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -40,6 +41,7 @@ class VoiceSession @Inject constructor(
     private val hubClient: HubClient,
     private val chatStore: ChatStore,
     private val bluetoothSco: BluetoothScoController,
+    private val voiceFeedback: VoiceFeedback,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -88,6 +90,7 @@ class VoiceSession @Inject constructor(
             tts?.destroy()
             tts = null
             ttsReady = false
+            voiceFeedback.release()
             bluetoothSco.stop()
             setState(VoiceState.Idle)
             _ui.value = VoiceSessionUi(state = VoiceState.Idle)
@@ -282,6 +285,7 @@ class VoiceSession @Inject constructor(
         hubJob = null
         destroyStt()
         tts?.stop()
+        voiceFeedback.release()
         bluetoothSco.stop()
         setState(VoiceState.Idle)
         _ui.update {
@@ -298,12 +302,24 @@ class VoiceSession @Inject constructor(
     }
 
     private fun setState(next: VoiceState) {
+        val prev = _state.value
         _state.value = next
+        when {
+            next is VoiceState.Listening && prev !is VoiceState.Listening -> {
+                // SCO ya activo (bluetoothSco.start al abrir sesión). Earcon antes del STT
+                // (STT_RESTART_DELAY_MS > LISTENING_MS).
+                voiceFeedback.playListeningEarcon()
+            }
+            next is VoiceState.Thinking && prev is VoiceState.Listening -> {
+                voiceFeedback.playThinkingEarcon()
+            }
+        }
     }
 
     companion object {
         private const val TAG = "VoiceSession"
-        private const val STT_RESTART_DELAY_MS = 280L
+        /** Debe superar VoiceFeedback.LISTENING_MS para no pisar el earcon con el STT. */
+        private const val STT_RESTART_DELAY_MS = 320L
         const val SILENCE_RMS = -45f
     }
 }
