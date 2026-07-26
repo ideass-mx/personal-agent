@@ -30,6 +30,12 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppTheme
 import mx.ideass.personal.agent.voice.VoiceSession
@@ -53,6 +59,8 @@ class AgentVoiceInteractionSession(
      */
     private val viewTreeOwner = SessionViewTreeOwner()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var endCollectJob: Job? = null
     private var voiceStarted = false
 
     override fun onCreateContentView(): View {
@@ -99,25 +107,53 @@ class AgentVoiceInteractionSession(
         super.onShow(args, showFlags)
         Log.d(TAG, "onShow showFlags=$showFlags")
         viewTreeOwner.moveTo(Lifecycle.State.RESUMED)
-        if (voiceStarted) return
+
+        // Toggle: segunda invocación (power / triple-toque) cierra en vez de reabrir.
+        // No hide() aquí: el earcon de cierre necesita SCO; sessionEnded → hide().
+        if (voiceStarted || voiceSession.isSessionActive) {
+            ensureEndCollector()
+            voiceSession.closeByReinvocation()
+            return
+        }
+
         voiceStarted = true
+        ensureEndCollector()
         Log.d(TAG, "AgentVoiceSession: starting VoiceSession")
         voiceSession.start()
     }
 
+    private fun ensureEndCollector() {
+        if (endCollectJob?.isActive == true) return
+        endCollectJob = scope.launch {
+            voiceSession.sessionEnded.collect {
+                hide()
+            }
+        }
+    }
+
     override fun onHide() {
-        if (voiceStarted) {
+        endCollectJob?.cancel()
+        endCollectJob = null
+        if (voiceStarted || voiceSession.isSessionActive) {
             voiceStarted = false
+            // Si el cierre con earcon aún no terminó, stop() cancela el pending y limpia ya.
             voiceSession.stop()
+        } else {
+            voiceStarted = false
         }
         viewTreeOwner.moveTo(Lifecycle.State.CREATED)
         super.onHide()
     }
 
     override fun onDestroy() {
-        if (voiceStarted) {
+        endCollectJob?.cancel()
+        endCollectJob = null
+        scope.cancel()
+        if (voiceStarted || voiceSession.isSessionActive) {
             voiceStarted = false
             voiceSession.stop()
+        } else {
+            voiceStarted = false
         }
         viewTreeOwner.destroy()
         super.onDestroy()

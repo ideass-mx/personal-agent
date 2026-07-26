@@ -21,6 +21,8 @@ class SpeechRecognizerEngine(
     private val listener: Listener,
 ) {
     interface Listener {
+        /** El usuario empezó a hablar (cancela el silencio inicial de sesión). */
+        fun onSpeechStarted() {}
         fun onPartial(text: String)
         fun onFinal(text: String)
         fun onRmsChanged(rmsdB: Float)
@@ -78,7 +80,9 @@ class SpeechRecognizerEngine(
         val r = SpeechRecognizer.createSpeechRecognizer(context)
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) = Unit
-            override fun onBeginningOfSpeech() = Unit
+            override fun onBeginningOfSpeech() {
+                listener.onSpeechStarted()
+            }
             override fun onRmsChanged(rmsdB: Float) = listener.onRmsChanged(rmsdB)
             override fun onBufferReceived(buffer: ByteArray?) = Unit
             override fun onEndOfSpeech() {
@@ -143,6 +147,20 @@ class SpeechRecognizerEngine(
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+            // Endpointing: pausas naturales a media oración no deben cortar la frase.
+            // El silencio inicial de sesión (~8 s) lo gestiona VoiceSession, no estos extras.
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
+                ENDPOINT_SILENCE_MS,
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
+                ENDPOINT_SILENCE_MS,
+            )
+            putExtra(
+                RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
+                MIN_SPEECH_LENGTH_MS,
+            )
         }
     }
 
@@ -153,6 +171,10 @@ class SpeechRecognizerEngine(
 
     companion object {
         private const val TAG = "SpeechRecognizerEngine"
+        /** Silencio tras hablar para dar la frase por terminada (~2 s). */
+        private const val ENDPOINT_SILENCE_MS = 2000L
+        /** Duración mínima de escucha antes de permitir cierre por silencio (~3 s). */
+        private const val MIN_SPEECH_LENGTH_MS = 3000L
 
         fun isRecognitionAvailable(context: Context): Boolean =
             SpeechRecognizer.isRecognitionAvailable(context)
