@@ -8,8 +8,8 @@ import android.util.Log
 /**
  * Activity sin UI (transparente) que recibe VOICE_COMMAND (triple toque de los
  * auriculares Bluetooth) y reenvía la invocación al asistente del sistema
- * mediante ACTION_ASSIST, la misma ruta que dispara el botón de encendido.
- * No monta UI propia: rebota hacia la sesión de asistente y se cierra.
+ * pidiendo showSession() al VoiceInteractionService vivo. No monta UI propia:
+ * rebota hacia la sesión de asistente y se cierra.
  */
 class VoiceCommandTrampolineActivity : Activity() {
 
@@ -17,17 +17,22 @@ class VoiceCommandTrampolineActivity : Activity() {
         super.onCreate(savedInstanceState)
         Log.d(TAG, "Trampoline: received VOICE_COMMAND")
 
-        Log.d(TAG, "Trampoline: dispatching to assistant")
-        val assist = Intent(Intent.ACTION_ASSIST).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val svc = AgentVoiceInteractionService.instance
+        if (svc != null) {
+            svc.requestShow()
+            Log.d(TAG, "Trampoline: requestShow via service instance")
+        } else {
+            Log.d(TAG, "Trampoline: service instance null, fallback")
+            val assist = Intent(Intent.ACTION_ASSIST).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(assist)
         }
-        startActivity(assist)
 
-        Log.d(TAG, "Trampoline: finish")
         finish()
     }
 
     private companion object {
-        const val TAG = "AgentVoiceSession"
+        const val TAG = "Trampoline"
     }
 }
