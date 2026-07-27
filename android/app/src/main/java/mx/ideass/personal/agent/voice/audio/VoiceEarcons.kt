@@ -1,8 +1,6 @@
 package mx.ideass.personal.agent.voice.audio
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Build
 import android.os.Handler
@@ -21,9 +19,10 @@ import kotlin.math.sin
 /**
  * Lenguaje de earcons del asistente. Ondas sinusoidales por [AudioTrack] con
  * envolvente suave (attack ~10 ms, release ~80 ms) y notas de la escala
- * pentatónica de Do mayor. Rutea por
- * [AudioAttributes.USAGE_VOICE_COMMUNICATION] para salir por SCO/buds
- * (mismo canal que [BluetoothScoController]), no por el altavoz.
+ * pentatónica de Do mayor.
+ *
+ * Mismo path que el TTS: [VoiceAudioPath] (16 kHz, USAGE_VOICE_COMMUNICATION)
+ * para no forzar createOrUpdatePatch al alternar earcon ↔ voz.
  */
 @Singleton
 class VoiceEarcons @Inject constructor(
@@ -116,6 +115,7 @@ class VoiceEarcons @Inject constructor(
             return 0L
         }
         track = created
+        Log.i(TAG, "Earcon: sample rate = ${VoiceAudioPath.SAMPLE_RATE_HZ}")
         val written = created.write(pcm, 0, pcm.size)
         if (written < 0) {
             Log.w(TAG, "AudioTrack write falló: $written")
@@ -136,28 +136,11 @@ class VoiceEarcons @Inject constructor(
     }
 
     private fun createTrack(pcmShorts: Int): AudioTrack {
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        val format = AudioFormat.Builder()
-            .setSampleRate(SAMPLE_RATE)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-            .build()
         val bytes = pcmShorts * 2
         return AudioTrack.Builder()
-            .setAudioAttributes(attrs)
-            .setAudioFormat(format)
-            .setBufferSizeInBytes(
-                bytes.coerceAtLeast(
-                    AudioTrack.getMinBufferSize(
-                        SAMPLE_RATE,
-                        AudioFormat.CHANNEL_OUT_MONO,
-                        AudioFormat.ENCODING_PCM_16BIT,
-                    ),
-                ),
-            )
+            .setAudioAttributes(VoiceAudioPath.attributes())
+            .setAudioFormat(VoiceAudioPath.pcmMonoFormat())
+            .setBufferSizeInBytes(bytes.coerceAtLeast(VoiceAudioPath.minBufferBytes()))
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
             .also { it.setVolume(VOLUME) }
@@ -251,7 +234,7 @@ class VoiceEarcons @Inject constructor(
 
     companion object {
         private const val TAG = "VoiceEarcons"
-        private const val SAMPLE_RATE = 16_000
+        private const val SAMPLE_RATE = VoiceAudioPath.SAMPLE_RATE_HZ
         private const val AMPLITUDE = 10_000.0
         private const val VOLUME = 1f
         /** Segunda nota del timeout (~70 %) para sensación de apagarse. */

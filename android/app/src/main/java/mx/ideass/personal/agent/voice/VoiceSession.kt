@@ -88,13 +88,17 @@ class VoiceSession @Inject constructor(
             hubJob = null
             _ui.value = VoiceSessionUi()
             setState(VoiceState.Idle)
-            bluetoothSco.start()
             sttAvailable = SpeechRecognizerEngine.isRecognitionAvailable(context)
             if (!sttAvailable) {
                 failFatal("El reconocimiento de voz no está disponible en este dispositivo.")
                 return@post
             }
-            prepareTts()
+            // SCO una vez al inicio; esperar CONNECTED antes del primer earcon/STT/TTS.
+            bluetoothSco.start { connected ->
+                if (!sessionActive) return@start
+                Log.i(TAG, "SCO listo connected=$connected; iniciando TTS/ciclo")
+                prepareTts()
+            }
         }
     }
 
@@ -232,9 +236,22 @@ class VoiceSession @Inject constructor(
 
     private fun enterListening() {
         if (!sessionActive) return
+        val prev = _state.value
+        // scheduleSttRestart no pasa por aquí: solo entradas genuinas (inicio o post-Speaking).
+        val playReadyEarcon = prev !is VoiceState.Listening
+
+        if (prev is VoiceState.Speaking || prev is VoiceState.Thinking) {
+            bluetoothSco.markCycleTransition(prev.javaClass.simpleName, "Listening")
+        }
+
         hubJob?.cancel()
         hubJob = null
-        tts?.stop()
+        // Tras Speaking el TTS ya terminó (onDone). Llamar stop() aquí postea un
+        // tts.stop() asíncrono que corta el AudioTrack del earcon en SCO.
+        // No tocar SCO ni AudioManager aquí: mismo canal de toda la sesión.
+        if (prev !is VoiceState.Speaking) {
+            tts?.stop()
+        }
         destroyStt()
         beginSilenceWindow()
         setState(VoiceState.Listening)
@@ -247,13 +264,22 @@ class VoiceSession @Inject constructor(
                 errorMessage = it.errorMessage,
             )
         }
+        if (playReadyEarcon) {
+            // Después del TTS, antes del STT: «ahora habla tú».
+            earcons.playListening()
+        }
         armSilenceTimeout()
         val token = restartToken
+        val sttDelay = if (playReadyEarcon) {
+            max(STT_RESTART_DELAY_MS, VoiceEarcons.LISTENING_MS + EARCON_STT_SLACK_MS)
+        } else {
+            STT_RESTART_DELAY_MS
+        }
         mainHandler.postDelayed({
             if (!sessionActive || token != restartToken) return@postDelayed
             if (_state.value !is VoiceState.Listening) return@postDelayed
             startStt()
-        }, STT_RESTART_DELAY_MS)
+        }, sttDelay)
     }
 
     private fun startStt() {
@@ -391,8 +417,10 @@ class VoiceSession @Inject constructor(
 
     private fun enterSpeaking(text: String) {
         if (!sessionActive) return
+        bluetoothSco.markCycleTransition(_state.value.javaClass.simpleName, "Speaking")
         cancelSilenceTimeout()
         silenceStartedAtElapsed = 0L
+        // Half-duplex: solo apaga STT. SCO/modo/focus quedan intactos.
         destroyStt()
         setState(VoiceState.Speaking)
         _ui.update {
@@ -502,10 +530,6 @@ class VoiceSession @Inject constructor(
         val prev = _state.value
         _state.value = next
         when {
-            next is VoiceState.Listening && prev !is VoiceState.Listening -> {
-                // SCO ya activo. Earcon antes del STT (STT_RESTART_DELAY_MS > LISTENING_MS).
-                earcons.playListening()
-            }
             next is VoiceState.Thinking && prev is VoiceState.Listening -> {
                 earcons.playThinking()
             }
@@ -525,6 +549,8 @@ class VoiceSession @Inject constructor(
         private const val TAG = "VoiceSession"
         /** Debe superar VoiceEarcons.LISTENING_MS para no pisar el earcon con el STT. */
         private const val STT_RESTART_DELAY_MS = 350L
+        /** Margen extra tras el earcon de listening antes de abrir el micrófono. */
+        private const val EARCON_STT_SLACK_MS = 60L
         /** Silencio continuo sin habla útil antes de cerrar la sesión. */
         private const val INITIAL_SILENCE_TIMEOUT_MS = 6_000L
         private const val CLOSE_CLEANUP_SLACK_MS = 50L
