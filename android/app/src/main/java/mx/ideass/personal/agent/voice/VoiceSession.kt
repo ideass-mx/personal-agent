@@ -435,7 +435,10 @@ class VoiceSession @Inject constructor(
             failFatal("La síntesis de voz no está disponible en este dispositivo.")
             return
         }
-        engine.speak(text)
+        // UI/chat conservan [text]; al TTS solo la versión hablable.
+        val spoken = sanitizeForTts(text)
+        Log.i(TAG, "TTS texto limpio: $spoken")
+        engine.speak(spoken)
     }
 
     private fun failFatal(message: String) {
