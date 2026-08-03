@@ -52,3 +52,4 @@ npm-debug.log*
 .cache/
 tmp/
 temp/
+.scratch/

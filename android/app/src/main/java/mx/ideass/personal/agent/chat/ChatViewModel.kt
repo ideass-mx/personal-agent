@@ -2,8 +2,9 @@ package mx.ideass.personal.agent.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import mx.ideass.personal.agent.gateway.session.SessionProvider
+import mx.ideass.personal.agent.network.ChatConnection
 import mx.ideass.personal.agent.network.ConnectionState
-import mx.ideass.personal.agent.network.HubClient
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,12 +27,15 @@ data class ChatMessage(
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val draft: String = "",
+    val activeSessionName: String = "",
+    val activeSessionKey: String = "",
 )
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val hubClient: HubClient,
+    private val chatConnection: ChatConnection,
     private val chatStore: ChatStore,
+    private val sessionProvider: SessionProvider,
 ) : ViewModel() {
 
     private val _draft = MutableStateFlow("")
@@ -39,11 +43,21 @@ class ChatViewModel @Inject constructor(
     val ui: StateFlow<ChatUiState> = combine(
         chatStore.messages,
         _draft,
-    ) { messages, draft ->
-        ChatUiState(messages = messages, draft = draft)
+        sessionProvider.knownSessions,
+        sessionProvider.activeSession,
+    ) { messages, draft, known, active ->
+        val activeKey = active?.sessionKey
+        val name = known.find { it.sessionKey == activeKey }?.displayName
+            ?: activeKey.orEmpty()
+        ChatUiState(
+            messages = messages,
+            draft = draft,
+            activeSessionName = name,
+            activeSessionKey = activeKey.orEmpty(),
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatUiState())
 
-    val connectionState: StateFlow<ConnectionState> = hubClient.connectionState
+    val connectionState: StateFlow<ConnectionState> = chatConnection.connectionState
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConnectionState.SinConfigurar)
 
     private val _hadConnection = MutableStateFlow(false)
@@ -54,7 +68,7 @@ class ChatViewModel @Inject constructor(
             chatStore.ensureLoaded()
         }
         viewModelScope.launch {
-            hubClient.connectionState.collect { state ->
+            chatConnection.connectionState.collect { state ->
                 if (state is ConnectionState.Conectado) {
                     _hadConnection.value = true
                 }
@@ -69,9 +83,9 @@ class ChatViewModel @Inject constructor(
         if (text.isEmpty()) return
         _draft.value = ""
         viewModelScope.launch {
-            val queued = !hubClient.isConnected()
+            val queued = !chatConnection.isConnected()
             chatStore.appendUserMessage(text, queued)
-            hubClient.sendUserMessage(text, chatStore.currentConversationId())
+            chatConnection.sendUserMessage(text, chatStore.currentConversationId())
         }
     }
 }

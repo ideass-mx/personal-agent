@@ -1,0 +1,24 @@
+package mx.ideass.personal.agent.network
+
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+
+/**
+ * Contrato de conexión de chat que consumen UI y AgentService.
+ * Implementaciones: hub legacy y Gateway OpenClaw.
+ */
+interface ChatConnection {
+    val connectionState: StateFlow<ConnectionState>
+    val inbound: SharedFlow<ChatInbound>
+
+    fun start()
+    fun reconnectNow()
+    fun sendUserMessage(text: String, conversationId: String?)
+    fun isConnected(): Boolean
+
+    suspend fun probe(
+        address: String,
+        token: String,
+        deviceName: String,
+    ): Result<Long>
+}

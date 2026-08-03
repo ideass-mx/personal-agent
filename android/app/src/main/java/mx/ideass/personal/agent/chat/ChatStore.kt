@@ -7,18 +7,26 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import mx.ideass.personal.agent.app.AppPreferences
+import mx.ideass.personal.agent.gateway.session.SessionProvider
+import mx.ideass.personal.agent.network.ChatInbound
 import mx.ideass.personal.agent.protocol.ProtocolJson
 import mx.ideass.personal.agent.protocol.ServerMessage
-import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,153 +41,184 @@ data class StoredChatMessage(
 private val Context.chatDataStore: DataStore<Preferences> by preferencesDataStore(name = "chat")
 
 /**
- * Hilo de chat persistente. El service lo alimenta aunque la UI esté muerta;
- * al reabrir, la UI solo observa este store.
+ * Hilos de chat particionados por sessionKey.
+ * La UI observa [messages] (= hilo de la sesión activa).
+ * Eventos de otras sesiones se guardan pero no se pintan en la abierta.
  */
 @Singleton
 class ChatStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val preferences: AppPreferences,
+    private val sessionProvider: SessionProvider,
 ) {
     private object Keys {
         val Messages = stringPreferencesKey("messages_json")
+        val Threads = stringPreferencesKey("threads_json")
     }
 
     private val mutex = Mutex()
+    private val threads = ChatThreads()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val observingActive = AtomicBoolean(false)
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
-    private var conversationId: String? = null
-    private var streamingId: String? = null
     private var loaded = false
 
     suspend fun ensureLoaded() = mutex.withLock {
-        if (loaded) return
-        conversationId = preferences.getConversationId()
-        val raw = context.chatDataStore.data.first()[Keys.Messages]
-        if (!raw.isNullOrBlank()) {
-            val stored = ProtocolJson.decodeFromString(
-                ListSerializer(StoredChatMessage.serializer()),
-                raw,
-            )
-            _messages.value = stored.map {
-                ChatMessage(
-                    id = it.id,
-                    text = it.text,
-                    fromUser = it.fromUser,
-                    queued = it.queued,
-                    streaming = false,
-                )
-            }
-        }
-        loaded = true
+        ensureLoadedLocked()
+        startObservingActiveLocked()
     }
 
-    fun currentConversationId(): String? = conversationId
+    /** sessionKey activa (para send de UI). */
+    fun currentConversationId(): String? =
+        sessionProvider.activeSession.value?.sessionKey
+            ?: threads.visibleSessionKey
 
-    suspend fun appendUserMessage(text: String, queued: Boolean): ChatMessage = mutex.withLock {
+    suspend fun appendUserMessage(
+        text: String,
+        queued: Boolean,
+        sessionKey: String? = null,
+    ): ChatMessage = mutex.withLock {
         ensureLoadedLocked()
-        val local = ChatMessage(
-            id = UUID.randomUUID().toString(),
-            text = text,
-            fromUser = true,
-            queued = queued,
-        )
-        _messages.value = _messages.value + local
+        val key = sessionKey?.trim()?.takeIf { it.isNotEmpty() } ?: requireActiveKeyLocked()
+        val local = threads.appendUser(key, text, queued)
+        if (key == threads.visibleSessionKey) {
+            publishVisibleLocked()
+        }
         persistLocked()
         local
     }
 
     suspend fun markQueuedAsSent() = mutex.withLock {
         ensureLoadedLocked()
-        if (_messages.value.none { it.queued }) return
-        _messages.value = _messages.value.map { if (it.queued) it.copy(queued = false) else it }
+        threads.markQueuedAsSent()
+        publishVisibleLocked()
         persistLocked()
     }
 
-    suspend fun handleServer(msg: ServerMessage) = mutex.withLock {
+    suspend fun handleInbound(msg: ChatInbound) = mutex.withLock {
         ensureLoadedLocked()
+        val key = resolveInboundKeyLocked(msg.sessionKey) ?: return
+        val affectsVisible = threads.handleInbound(key, msg)
+        if (affectsVisible) {
+            publishVisibleLocked()
+        }
+        persistLocked()
+        // TODO(CP4+): marcar actividad en lista si !affectsVisible
+    }
+
+    suspend fun handleServer(msg: ServerMessage) {
         when (msg) {
-            is ServerMessage.AssistantChunk -> {
-                val id = streamingId ?: UUID.randomUUID().toString().also { streamingId = it }
-                val current = _messages.value
-                val existing = current.find { it.id == id }
-                _messages.value = if (existing == null) {
-                    current + ChatMessage(
-                        id = id,
-                        text = msg.text,
-                        fromUser = false,
-                        streaming = true,
-                    )
-                } else {
-                    current.map {
-                        if (it.id == id) it.copy(text = it.text + msg.text) else it
-                    }
-                }
-                persistLocked()
-            }
-            is ServerMessage.AssistantDone -> {
-                conversationId = msg.conversationId
-                preferences.saveConversationId(msg.conversationId)
-                val id = streamingId
-                streamingId = null
-                if (id != null) {
-                    _messages.value = _messages.value.map {
-                        if (it.id == id) it.copy(streaming = false) else it
-                    }
-                    persistLocked()
-                }
-            }
-            is ServerMessage.Error -> {
-                streamingId = null
-                _messages.value = _messages.value + ChatMessage(
-                    id = UUID.randomUUID().toString(),
-                    text = "Error: ${msg.message}",
-                    fromUser = false,
-                )
-                persistLocked()
-            }
+            is ServerMessage.AssistantChunk ->
+                handleInbound(ChatInbound.AssistantDelta(text = msg.text, replace = false))
+            is ServerMessage.AssistantDone ->
+                handleInbound(ChatInbound.AssistantDone(msg.conversationId))
+            is ServerMessage.Error ->
+                handleInbound(ChatInbound.Error(code = msg.code, message = msg.message))
             else -> Unit
+        }
+    }
+
+    /** Sustituye el hilo local (p. ej. tras merge de chat.history — CP3). */
+    suspend fun replaceThread(sessionKey: String, messages: List<ChatMessage>) = mutex.withLock {
+        ensureLoadedLocked()
+        threads.replaceMessages(sessionKey, messages)
+        if (sessionKey.trim() == threads.visibleSessionKey) {
+            publishVisibleLocked()
+        }
+        persistLocked()
+    }
+
+    /** Fusiona mensajes remotos de `chat.history` con el hilo local (sin duplicar). */
+    suspend fun mergeRemoteHistory(sessionKey: String, remote: List<ChatMessage>) = mutex.withLock {
+        ensureLoadedLocked()
+        val key = sessionKey.trim()
+        require(key.isNotEmpty()) { "session_key_blank" }
+        val merged = ChatHistoryMapper.merge(threads.messagesFor(key), remote)
+        threads.replaceMessages(key, merged)
+        if (key == threads.visibleSessionKey) {
+            publishVisibleLocked()
+        }
+        persistLocked()
+    }
+
+    private fun startObservingActiveLocked() {
+        if (!observingActive.compareAndSet(false, true)) return
+        scope.launch {
+            sessionProvider.activeSession.collect { active ->
+                mutex.withLock {
+                    val key = active?.sessionKey?.trim()?.takeIf { it.isNotEmpty() }
+                    threads.setVisibleSession(key)
+                    publishVisibleLocked()
+                }
+            }
         }
     }
 
     private suspend fun ensureLoadedLocked() {
         if (loaded) return
-        conversationId = preferences.getConversationId()
-        val raw = context.chatDataStore.data.first()[Keys.Messages]
-        if (!raw.isNullOrBlank()) {
+        val prefs = context.chatDataStore.data.first()
+        val rawThreads = prefs[Keys.Threads]
+        if (!rawThreads.isNullOrBlank()) {
             val stored = ProtocolJson.decodeFromString(
-                ListSerializer(StoredChatMessage.serializer()),
-                raw,
+                MapSerializer(String.serializer(), ListSerializer(StoredChatMessage.serializer())),
+                rawThreads,
             )
-            _messages.value = stored.map {
-                ChatMessage(
-                    id = it.id,
-                    text = it.text,
-                    fromUser = it.fromUser,
-                    queued = it.queued,
-                    streaming = false,
+            threads.restore(stored)
+        } else {
+            // Migración mono-hilo → partición bajo la key activa o legacy.
+            val rawLegacy = prefs[Keys.Messages]
+            if (!rawLegacy.isNullOrBlank()) {
+                val stored = ProtocolJson.decodeFromString(
+                    ListSerializer(StoredChatMessage.serializer()),
+                    rawLegacy,
                 )
+                val legacyKey = sessionProvider.activeSession.value?.sessionKey
+                    ?: preferences.getConversationId()
+                    ?: "legacy"
+                threads.restore(mapOf(legacyKey to stored))
             }
         }
+        val visible = sessionProvider.activeSession.value?.sessionKey
+            ?: preferences.getConversationId()
+        threads.setVisibleSession(visible)
+        publishVisibleLocked()
         loaded = true
     }
 
+    private fun resolveInboundKeyLocked(inboundSessionKey: String?): String? {
+        inboundSessionKey?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return sessionProvider.activeSession.value?.sessionKey?.trim()?.takeIf { it.isNotEmpty() }
+            ?: threads.visibleSessionKey
+    }
+
+    private fun requireActiveKeyLocked(): String {
+        val key = sessionProvider.activeSession.value?.sessionKey?.trim()?.takeIf { it.isNotEmpty() }
+            ?: threads.visibleSessionKey
+        require(!key.isNullOrBlank()) { "session_key_unavailable" }
+        return key
+    }
+
+    private fun publishVisibleLocked() {
+        _messages.value = threads.visibleMessages()
+    }
+
     private suspend fun persistLocked() {
-        val toSave = _messages.value.map {
-            StoredChatMessage(
-                id = it.id,
-                text = it.text,
-                fromUser = it.fromUser,
-                queued = it.queued,
-            )
-        }
+        val snapshot = threads.snapshot()
         val json = ProtocolJson.encodeToString(
-            ListSerializer(StoredChatMessage.serializer()),
-            toSave,
+            MapSerializer(String.serializer(), ListSerializer(StoredChatMessage.serializer())),
+            snapshot,
         )
         context.chatDataStore.edit { prefs ->
-            prefs[Keys.Messages] = json
+            prefs[Keys.Threads] = json
+            // Deja de escribir el formato mono-hilo.
+            prefs.remove(Keys.Messages)
+        }
+        val visible = threads.visibleSessionKey
+        if (!visible.isNullOrBlank()) {
+            preferences.saveConversationId(visible)
         }
     }
 }

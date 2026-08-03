@@ -2,7 +2,6 @@ package mx.ideass.personal.agent.app
 
 import android.Manifest
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
@@ -32,19 +31,28 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import mx.ideass.personal.agent.chat.ChatScreen
+import mx.ideass.personal.agent.chat.SessionsScreen
 import mx.ideass.personal.agent.connection.ConnectionScreen
+import mx.ideass.personal.agent.assistant.AgentVoiceInteractionService
 import mx.ideass.personal.agent.service.AgentService
+import mx.ideass.personal.agent.voice.VoiceOrigin
 import mx.ideass.personal.agent.voice.VoiceScreen
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -52,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
     private var boundService: AgentService? = null
     private var serviceBound = false
+    private val pendingVoiceLaunch = MutableStateFlow(false)
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -75,23 +84,50 @@ class MainActivity : ComponentActivity() {
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
         requestNotificationPermissionIfNeeded()
         AgentService.start(this)
+        consumeHablarIntent(intent)
         setContent {
             AppTheme {
+                val launchVoice by pendingVoiceLaunch.collectAsStateWithLifecycle()
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .systemBarsPadding(),
                 ) {
-                    AppNav()
+                    AppNav(
+                        launchVoice = launchVoice,
+                        onVoiceLaunched = { pendingVoiceLaunch.value = false },
+                    )
                 }
             }
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeHablarIntent(intent)
+    }
+
+    private fun consumeHablarIntent(intent: Intent?) {
+        if (intent?.action != AgentService.ACTION_HABLAR) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        }
+        val vis = AgentVoiceInteractionService.instance
+        if (vis != null) {
+            vis.requestShow()
+            return
+        }
+        pendingVoiceLaunch.value = true
+    }
+
     override fun onStart() {
         super.onStart()
+        // Sin BIND_AUTO_CREATE: el FGS ya se pidió en onCreate; el bind solo
+        // observa estado y no crea/promueve el service por su cuenta.
         val intent = Intent(this, AgentService::class.java)
-        bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE)
+        bindService(intent, serviceConnection, 0)
     }
 
     override fun onStop() {
@@ -119,7 +155,16 @@ private object Routes {
     const val Boot = "boot"
     const val Connection = "connection"
     const val Chat = "chat"
-    const val Voice = "voice"
+    const val Sessions = "sessions"
+    /** Invocación del asistente (racha nueva). */
+    const val VoiceAssistant = "voice"
+    /** Micrófono desde conversación abierta (`sessionKey` URL-encoded). */
+    const val VoiceInConversation = "voice/in/{sessionKey}"
+
+    fun voiceInConversation(sessionKey: String): String {
+        val encoded = URLEncoder.encode(sessionKey, StandardCharsets.UTF_8.toString())
+        return "voice/in/$encoded"
+    }
 }
 
 @HiltViewModel
@@ -133,6 +178,8 @@ class BootViewModel @Inject constructor(
 
 @Composable
 private fun AppNav(
+    launchVoice: Boolean = false,
+    onVoiceLaunched: () -> Unit = {},
     bootViewModel: BootViewModel = hiltViewModel(),
 ) {
     val configured by bootViewModel.configured.collectAsStateWithLifecycle()
@@ -147,6 +194,14 @@ private fun AppNav(
                 popUpTo(Routes.Boot) { inclusive = true }
             }
         }
+    }
+
+    LaunchedEffect(launchVoice, ready, configured) {
+        if (!launchVoice || !ready || configured != true) return@LaunchedEffect
+        navController.navigate(Routes.VoiceAssistant) {
+            launchSingleTop = true
+        }
+        onVoiceLaunched()
     }
 
     NavHost(
@@ -175,13 +230,22 @@ private fun AppNav(
                 onOpenConnection = {
                     navController.navigate(Routes.Connection)
                 },
-                onOpenVoice = {
-                    navController.navigate(Routes.Voice)
+                onOpenVoice = { sessionKey ->
+                    navController.navigate(Routes.voiceInConversation(sessionKey))
+                },
+                onOpenSessions = {
+                    navController.navigate(Routes.Sessions)
                 },
             )
         }
+        composable(Routes.Sessions) {
+            SessionsScreen(
+                onBack = { navController.popBackStack() },
+                onSessionSelected = { navController.popBackStack() },
+            )
+        }
         composable(
-            route = Routes.Voice,
+            route = Routes.VoiceAssistant,
             enterTransition = {
                 fadeIn() + slideInVertically { it / 12 }
             },
@@ -194,6 +258,32 @@ private fun AppNav(
             },
         ) {
             VoiceScreen(
+                origin = VoiceOrigin.AssistantInvocation,
+                onFinished = {
+                    navController.popBackStack()
+                },
+            )
+        }
+        composable(
+            route = Routes.VoiceInConversation,
+            arguments = listOf(
+                navArgument("sessionKey") { type = NavType.StringType },
+            ),
+            enterTransition = {
+                fadeIn() + slideInVertically { it / 12 }
+            },
+            exitTransition = {
+                fadeOut() + slideOutVertically { it / 12 }
+            },
+            popEnterTransition = { fadeIn() },
+            popExitTransition = {
+                fadeOut() + slideOutVertically { it / 10 }
+            },
+        ) { entry ->
+            val raw = entry.arguments?.getString("sessionKey").orEmpty()
+            val key = URLDecoder.decode(raw, StandardCharsets.UTF_8.toString())
+            VoiceScreen(
+                origin = VoiceOrigin.InConversation(key),
                 onFinished = {
                     navController.popBackStack()
                 },

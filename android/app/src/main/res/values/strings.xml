@@ -17,4 +17,33 @@
     <string name="voice_error_stt">El reconocimiento de voz no está disponible en este dispositivo.</string>
     <string name="voice_error_tts">La síntesis de voz no está disponible en este dispositivo.</string>
     <string name="voice_error_permission">Sin permiso de micrófono no puedo escucharte.</string>
+    <string name="voice_error_no_network_spoken">No hay conexión con el agente.</string>
+    <string name="voice_error_no_network_ui">Sin conexión con el agente.</string>
+    <string name="voice_error_no_reply_spoken">No hubo respuesta del agente.</string>
+    <string name="voice_error_no_reply_ui">No hubo respuesta del agente a tiempo.</string>
+    <string name="voice_error_streak_spoken">No pude abrir la conversación de voz.</string>
+    <string name="voice_error_streak_ui">No pude abrir la conversación de voz. Revisa la conexión.</string>
+    <!-- LEGADO: errores de la sesión fija Rápidas (voz ya usa voice_error_streak_*). -->
+    <string name="voice_error_quick_spoken">No pude abrir la sesión de voz.</string>
+    <string name="voice_error_quick_ui">No pude abrir la sesión de voz. Revisa la conexión.</string>
+    <string name="voice_error_stt_spoken">No puedo escucharte ahora.</string>
+    <string name="voice_error_tts_spoken">No puedo hablar ahora.</string>
+    <string name="notification_action_hablar">Hablar</string>
+    <string name="notification_channel_voz">Voz</string>
+    <string name="notification_channel_voz_desc">Captura de micrófono durante la conversación de voz</string>
+    <string name="notification_voz_escuchando">Escuchando…</string>
+    <!-- Nombre provisional de racha de voz (%1$s = HH:mm local). -->
+    <string name="session_voice_streak_provisional">Conversación de voz — %1$s</string>
+    <!-- Comandos de cierre de racha (exact match tras normalizar; marca blanca). -->
+    <string-array name="voice_hang_commands">
+        <item>listo</item>
+        <item>adiós</item>
+        <item>termina</item>
+        <item>gracias</item>
+    </string-array>
+    <!-- Prompt de título-resumen al colgar la racha (queda en el historial). -->
+    <string name="voice_streak_title_prompt">Dame solo un título de máximo 6 palabras para esta conversación. Responde únicamente el título.</string>
+    <!-- LEGADO: sesión fija «Rápidas» (ya no es destino del flujo de voz). -->
+    <string name="session_quick_display_name">Rápidas</string>
+    <string name="session_quick_id">rapidas</string>
 </resources>

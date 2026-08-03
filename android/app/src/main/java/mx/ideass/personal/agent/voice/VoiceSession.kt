@@ -19,9 +19,10 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.chat.ChatStore
-import mx.ideass.personal.agent.network.HubClient
-import mx.ideass.personal.agent.protocol.ServerMessage
+import mx.ideass.personal.agent.network.ChatConnection
+import mx.ideass.personal.agent.network.ChatInbound
 import mx.ideass.personal.agent.voice.audio.BluetoothScoController
 import mx.ideass.personal.agent.voice.audio.VoiceEarcons
 import javax.inject.Inject
@@ -39,17 +40,39 @@ data class VoiceSessionUi(
 /**
  * Ciclo continuo manos libres: Listening → Thinking → Speaking → Listening.
  * Half-duplex estricto: el STT está apagado mientras habla el TTS.
+ *
+ * Origen [VoiceOrigin.AssistantInvocation]: abre [VoiceStreak] (sesión nueva).
+ * Origen [VoiceOrigin.InConversation]: continúa esa sessionKey sin crear ni titular.
+ *
+ * TODO(Fase 2): comandos de sesión, enrutado a la activa, anuncio auditivo.
  */
 @Singleton
 class VoiceSession @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val hubClient: HubClient,
+    private val chatConnection: ChatConnection,
     private val chatStore: ChatStore,
+    private val voiceStreak: VoiceStreak,
+    private val voiceStreakTitle: VoiceStreakTitle,
     private val bluetoothSco: BluetoothScoController,
     private val earcons: VoiceEarcons,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val micGate = VoiceMicSessionGate()
+    private val hangCommands: Set<String> =
+        context.resources.getStringArray(R.array.voice_hang_commands).toSet()
+    private val errorCopy = VoiceErrorCopy(
+        noNetworkSpoken = context.getString(R.string.voice_error_no_network_spoken),
+        noNetworkUi = context.getString(R.string.voice_error_no_network_ui),
+        noReplySpoken = context.getString(R.string.voice_error_no_reply_spoken),
+        noReplyUi = context.getString(R.string.voice_error_no_reply_ui),
+        streakUnavailableSpoken = context.getString(R.string.voice_error_streak_spoken),
+        streakUnavailableUi = context.getString(R.string.voice_error_streak_ui),
+        sttUnavailableSpoken = context.getString(R.string.voice_error_stt_spoken),
+        sttUnavailableUi = context.getString(R.string.voice_error_stt),
+        ttsUnavailableSpoken = context.getString(R.string.voice_error_tts_spoken),
+        ttsUnavailableUi = context.getString(R.string.voice_error_tts),
+    )
 
     private val _ui = MutableStateFlow(VoiceSessionUi())
     val ui: StateFlow<VoiceSessionUi> = _ui.asStateFlow()
@@ -66,6 +89,19 @@ class VoiceSession @Inject constructor(
     private var ttsReady = false
     private var sttAvailable = false
     private var sessionActive = false
+    /** sessionKey destino de esta invocación de voz (racha o conversación abierta). */
+    private var streakSessionKey: String? = null
+    /** Nombre provisional solo en rachas (null = no titular al colgar). */
+    private var streakProvisionalName: String? = null
+    /** true solo si el origen fue AssistantInvocation y se abrió racha. */
+    private var titlesOnHang = false
+    /** Contexto de racha capturado en hangUp para titulado async. */
+    private var pendingTitleSessionKey: String? = null
+    private var pendingTitleProvisionalName: String? = null
+    /** Primera utterance enviada al chat en esta invocación (fallback A de rachas). */
+    private var firstUserUtterance: String? = null
+    /** Tras anunciar un error por TTS, limpiar en onDone (no volver a Listening). */
+    private var closingAfterAnnounce = false
     private var hubJob: Job? = null
     private var restartToken = 0
     private var silenceTimeoutRunnable: Runnable? = null
@@ -78,10 +114,20 @@ class VoiceSession @Inject constructor(
 
     val isSessionActive: Boolean get() = sessionActive
 
-    fun start() {
+    /** Key destino actual (tests). */
+    fun currentStreakSessionKey(): String? = streakSessionKey
+
+    fun start(origin: VoiceOrigin = VoiceOrigin.AssistantInvocation) {
         mainHandler.post {
             if (sessionActive) return@post
             cancelPendingClose()
+            closingAfterAnnounce = false
+            streakSessionKey = null
+            streakProvisionalName = null
+            titlesOnHang = false
+            pendingTitleSessionKey = null
+            pendingTitleProvisionalName = null
+            firstUserUtterance = null
             sessionActive = true
             restartToken += 1
             hubJob?.cancel()
@@ -89,21 +135,31 @@ class VoiceSession @Inject constructor(
             _ui.value = VoiceSessionUi()
             setState(VoiceState.Idle)
             sttAvailable = SpeechRecognizerEngine.isRecognitionAvailable(context)
-            if (!sttAvailable) {
-                failFatal("El reconocimiento de voz no está disponible en este dispositivo.")
-                return@post
-            }
+            acquireMicForeground()
+            val bindPlan = VoiceOriginPolicy.bindPlan(origin)
             // SCO una vez al inicio; esperar CONNECTED antes del primer earcon/STT/TTS.
             bluetoothSco.start { connected ->
                 if (!sessionActive) return@start
-                Log.i(TAG, "SCO listo connected=$connected; iniciando TTS/ciclo")
-                prepareTts()
+                Log.i(TAG, "SCO listo connected=$connected; iniciando TTS/ciclo origin=$origin")
+                prepareTts(bindPlan)
             }
         }
     }
 
+    /**
+     * Cierre forzado sin earcon (VIS onHide / ViewModel clear).
+     * Si había racha (titulado activo), dispara título async como hangUp.
+     * Para colgar con earcon usar [hangUp].
+     */
     fun stop() {
         mainHandler.post {
+            if (sessionActive && titlesOnHang) {
+                scheduleStreakTitle(
+                    sessionKey = streakSessionKey,
+                    provisionalName = streakProvisionalName,
+                    firstUtterance = firstUserUtterance,
+                )
+            }
             performStop(closeEarcon = CloseEarcon.None, notifyEnded = false)
         }
     }
@@ -112,13 +168,73 @@ class VoiceSession @Inject constructor(
     fun closeByReinvocation() {
         mainHandler.post {
             Log.i(TAG, "VoiceSession: toggle close por reinvocacion")
-            performStop(closeEarcon = CloseEarcon.Manual, notifyEnded = true)
+            hangUpLocked(HangReason.Reinvocation)
+        }
+    }
+
+    /** Colgar la voz (UI / comando / silencio / reinvocación). Unifica earcon + cleanup. */
+    fun hangUp(reason: HangReason) {
+        mainHandler.post { hangUpLocked(reason) }
+    }
+
+    private fun hangUpLocked(reason: HangReason) {
+        if (!sessionActive && streakSessionKey == null) {
+            performStop(closeEarcon = CloseEarcon.None, notifyEnded = false)
+            return
+        }
+        Log.i(TAG, "hangUp reason=$reason titlesOnHang=$titlesOnHang")
+        if (titlesOnHang) {
+            scheduleStreakTitle(
+                sessionKey = streakSessionKey,
+                provisionalName = streakProvisionalName,
+                firstUtterance = firstUserUtterance,
+            )
+        }
+        val earcon = when (reason) {
+            HangReason.SilenceTimeout -> CloseEarcon.Timeout
+            HangReason.Ui,
+            HangReason.Command,
+            HangReason.Reinvocation,
+            -> CloseEarcon.Manual
+        }
+        performStop(closeEarcon = earcon, notifyEnded = true)
+    }
+
+    /**
+     * Titulado fuera del camino crítico: captura valores y lanza async.
+     * Si la app muere antes de completar, queda el provisional (aceptable).
+     */
+    private fun scheduleStreakTitle(
+        sessionKey: String?,
+        provisionalName: String?,
+        firstUtterance: String?,
+    ) {
+        val key = sessionKey?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val provisional = provisionalName?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        pendingTitleSessionKey = key
+        pendingTitleProvisionalName = provisional
+        val prompt = context.getString(R.string.voice_streak_title_prompt)
+        val first = firstUtterance
+        scope.launch {
+            try {
+                voiceStreakTitle.applyAfterHang(
+                    sessionKey = key,
+                    provisionalName = provisional,
+                    firstUserUtterance = first,
+                    titlePrompt = prompt,
+                )
+            } finally {
+                if (pendingTitleSessionKey == key) {
+                    pendingTitleSessionKey = null
+                    pendingTitleProvisionalName = null
+                }
+            }
         }
     }
 
     private fun closeBySilenceTimeout() {
-        Log.i(TAG, "Timeout 6s alcanzado, cerrando sesion")
-        performStop(closeEarcon = CloseEarcon.Timeout, notifyEnded = true)
+        Log.i(TAG, "Timeout ${VoiceTurnPolicy.STREAK_SILENCE_TIMEOUT_MS}ms de silencio, colgando racha")
+        hangUpLocked(HangReason.SilenceTimeout)
     }
 
     /**
@@ -128,6 +244,7 @@ class VoiceSession @Inject constructor(
     private fun performStop(closeEarcon: CloseEarcon, notifyEnded: Boolean) {
         cancelSilenceTimeout()
         silenceStartedAtElapsed = 0L
+        closingAfterAnnounce = false
 
         // Cierre con earcon en curso: stop() inmediato corta y limpia; otro close se ignora.
         if (pendingCloseRunnable != null) {
@@ -142,6 +259,10 @@ class VoiceSession @Inject constructor(
         if (!hadWork) {
             earcons.release()
             bluetoothSco.stop()
+            releaseMicForeground()
+            streakSessionKey = null
+            streakProvisionalName = null
+            titlesOnHang = false
             if (_state.value !is VoiceState.Idle) {
                 setState(VoiceState.Idle)
                 _ui.value = VoiceSessionUi(state = VoiceState.Idle)
@@ -186,8 +307,13 @@ class VoiceSession @Inject constructor(
         tts?.destroy()
         tts = null
         ttsReady = false
+        streakSessionKey = null
+        streakProvisionalName = null
+        titlesOnHang = false
+        // pendingTitle* se conserva para titulado async; se limpia al start.
         earcons.release()
         bluetoothSco.stop()
+        releaseMicForeground()
         setState(VoiceState.Idle)
         _ui.value = VoiceSessionUi(state = VoiceState.Idle)
         Log.i(TAG, "VoiceSession: sesion cerrada limpia")
@@ -201,9 +327,10 @@ class VoiceSession @Inject constructor(
         pendingCloseRunnable = null
     }
 
-    private fun prepareTts() {
+    private fun prepareTts(bindPlan: VoiceBindPlan) {
         tts?.destroy()
         ttsReady = false
+        closingAfterAnnounce = false
         tts = TtsEngine(
             context = context,
             listener = object : TtsEngine.Listener {
@@ -211,19 +338,37 @@ class VoiceSession @Inject constructor(
                     if (!sessionActive) return
                     ttsReady = available
                     if (!available) {
-                        failFatal("La síntesis de voz no está disponible en este dispositivo.")
+                        failFatalEarcon(errorCopy.ui(VoiceErrorKind.TtsUnavailable))
                         return
                     }
-                    enterListening()
+                    val startDecision = VoiceTurnPolicy.afterSessionStart(
+                        connected = chatConnection.isConnected(),
+                        sttAvailable = sttAvailable,
+                    )
+                    if (startDecision is VoiceTurnDecision.AudibleError) {
+                        announceErrorAndClose(startDecision.kind)
+                        return
+                    }
+                    bindTargetThenListen(bindPlan)
                 }
 
                 override fun onDone() {
+                    if (closingAfterAnnounce) {
+                        closingAfterAnnounce = false
+                        finishCleanupAfterAnnounce()
+                        return
+                    }
                     if (!sessionActive) return
                     if (_state.value !is VoiceState.Speaking) return
                     enterListening()
                 }
 
                 override fun onError(message: String) {
+                    if (closingAfterAnnounce) {
+                        closingAfterAnnounce = false
+                        finishCleanupAfterAnnounce()
+                        return
+                    }
                     if (!sessionActive) return
                     Log.w(TAG, message)
                     if (_state.value is VoiceState.Speaking) {
@@ -232,6 +377,41 @@ class VoiceSession @Inject constructor(
                 }
             },
         )
+    }
+
+    private fun bindTargetThenListen(bindPlan: VoiceBindPlan) {
+        hubJob?.cancel()
+        hubJob = scope.launch {
+            if (!sessionActive) return@launch
+            when (bindPlan) {
+                is VoiceBindPlan.Invalid -> {
+                    announceErrorAndClose(VoiceErrorKind.StreakUnavailable)
+                }
+                is VoiceBindPlan.UseExisting -> {
+                    streakSessionKey = bindPlan.sessionKey
+                    streakProvisionalName = null
+                    titlesOnHang = false
+                    enterListening()
+                }
+                is VoiceBindPlan.CreateStreak -> {
+                    val opened = voiceStreak.open()
+                    if (!sessionActive) return@launch
+                    if (opened == null) {
+                        val kind = if (!chatConnection.isConnected()) {
+                            VoiceErrorKind.NoNetwork
+                        } else {
+                            VoiceErrorKind.StreakUnavailable
+                        }
+                        announceErrorAndClose(kind)
+                        return@launch
+                    }
+                    streakSessionKey = opened.session.sessionKey
+                    streakProvisionalName = opened.provisionalName
+                    titlesOnHang = VoiceOriginPolicy.titlesOnHang(bindPlan)
+                    enterListening()
+                }
+            }
+        }
     }
 
     private fun enterListening() {
@@ -316,7 +496,11 @@ class VoiceSession @Inject constructor(
 
                 override fun onError(message: String, fatal: Boolean) {
                     if (!sessionActive) return
-                    if (fatal) failFatal(message) else scheduleSttRestart()
+                    if (fatal) {
+                        announceErrorAndClose(VoiceErrorKind.SttUnavailable)
+                    } else {
+                        scheduleSttRestart()
+                    }
                 }
             },
         )
@@ -325,8 +509,8 @@ class VoiceSession @Inject constructor(
     }
 
     /**
-     * Reinicia STT solo si el silencio acumulado aún no llega a 6 s.
-     * Si ya los superó, cierra la sesión (el timeout gana al auto-restart).
+     * Reinicia STT solo si el silencio acumulado aún no llega al timeout de racha.
+     * Si ya lo superó, cuelga (el timeout gana al auto-restart).
      */
     private fun scheduleSttRestart() {
         destroyStt()
@@ -334,7 +518,7 @@ class VoiceSession @Inject constructor(
         if (silentMs >= 0L) {
             Log.i(TAG, "Silencio acumulado: ${silentMs}ms")
         }
-        if (silentMs >= INITIAL_SILENCE_TIMEOUT_MS) {
+        if (silentMs >= VoiceTurnPolicy.STREAK_SILENCE_TIMEOUT_MS) {
             closeBySilenceTimeout()
             return
         }
@@ -345,7 +529,7 @@ class VoiceSession @Inject constructor(
             if (_state.value !is VoiceState.Listening) return@postDelayed
             // Re-chequeo por si el tiempo ganó mientras esperábamos el delay.
             val again = accumulatedSilenceMs()
-            if (again >= INITIAL_SILENCE_TIMEOUT_MS) {
+            if (again >= VoiceTurnPolicy.STREAK_SILENCE_TIMEOUT_MS) {
                 Log.i(TAG, "Silencio acumulado: ${again}ms")
                 closeBySilenceTimeout()
                 return@postDelayed
@@ -364,8 +548,32 @@ class VoiceSession @Inject constructor(
             return
         }
         onUsefulSpeechDetected()
-        // Half-duplex: apaga STT antes de Thinking (y del earcon thinking).
+        // Half-duplex: apaga STT antes de decidir (Hang / Thinking).
         destroyStt()
+        val targetKey = streakSessionKey
+        when (
+            val decision = VoiceTurnPolicy.afterUtterance(
+                text = trimmed,
+                streakReady = !targetKey.isNullOrBlank(),
+                hangCommands = hangCommands,
+            )
+        ) {
+            is VoiceTurnDecision.ContinueListening -> {
+                enterListening()
+                return
+            }
+            is VoiceTurnDecision.Hang -> {
+                Log.i(TAG, "Comando de colgar: «$trimmed»")
+                _ui.update { it.copy(userTranscript = trimmed, rmsDb = SILENCE_RMS) }
+                hangUpLocked(HangReason.Command)
+                return
+            }
+            is VoiceTurnDecision.AudibleError -> {
+                announceErrorAndClose(decision.kind)
+                return
+            }
+            is VoiceTurnDecision.Send -> Unit
+        }
         setState(VoiceState.Thinking)
         _ui.update {
             it.copy(
@@ -379,35 +587,62 @@ class VoiceSession @Inject constructor(
         val replyBuffer = StringBuilder()
         hubJob?.cancel()
         hubJob = scope.launch {
+            val key = targetKey!!
             val finished = CompletableDeferred<String?>()
             val collector = launch {
-                hubClient.serverMessages.collect { msg ->
+                chatConnection.inbound.collect { msg ->
                     if (finished.isCompleted) return@collect
+                    if (msg.sessionKey != null && msg.sessionKey != key) {
+                        return@collect
+                    }
                     when (msg) {
-                        is ServerMessage.AssistantChunk -> {
+                        is ChatInbound.AssistantDelta -> {
+                            if (msg.replace) {
+                                replyBuffer.clear()
+                            }
                             replyBuffer.append(msg.text)
                             _ui.update { it.copy(agentText = replyBuffer.toString()) }
                         }
-                        is ServerMessage.AssistantDone -> {
+                        is ChatInbound.AssistantDone -> {
                             finished.complete(replyBuffer.toString().trim().ifEmpty { null })
                         }
-                        is ServerMessage.Error -> {
-                            Log.w(TAG, "Hub error: ${msg.message}")
+                        is ChatInbound.Error -> {
+                            Log.w(TAG, "Chat error: ${msg.message}")
                             _ui.update { it.copy(errorMessage = msg.message) }
                             finished.complete(null)
                         }
-                        else -> Unit
                     }
                 }
             }
             try {
-                chatStore.appendUserMessage(trimmed, queued = !hubClient.isConnected())
-                hubClient.sendUserMessage(trimmed, chatStore.currentConversationId())
-                val reply = finished.await()
-                if (reply.isNullOrEmpty()) {
-                    enterListening()
-                } else {
-                    enterSpeaking(reply)
+                val online = chatConnection.isConnected()
+                if (!online) {
+                    chatConnection.reconnectNow()
+                }
+                if (firstUserUtterance == null) {
+                    firstUserUtterance = trimmed
+                }
+                chatStore.appendUserMessage(
+                    text = trimmed,
+                    queued = !online,
+                    sessionKey = key,
+                )
+                chatConnection.sendUserMessage(trimmed, key)
+                val reply = kotlinx.coroutines.withTimeoutOrNull(
+                    VoiceTurnPolicy.REPLY_TIMEOUT_MS,
+                ) {
+                    finished.await()
+                }
+                if (!sessionActive) return@launch
+                when (
+                    val wait = VoiceTurnPolicy.afterReplyWait(
+                        timedOut = reply == null && !finished.isCompleted,
+                        reply = reply,
+                    )
+                ) {
+                    is VoiceWaitResult.Speak -> enterSpeaking(wait.text)
+                    is VoiceWaitResult.ContinueListening -> enterListening()
+                    is VoiceWaitResult.AudibleError -> announceErrorAndClose(wait.kind)
                 }
             } finally {
                 collector.cancel()
@@ -432,19 +667,72 @@ class VoiceSession @Inject constructor(
         }
         val engine = tts
         if (engine == null || !ttsReady) {
-            failFatal("La síntesis de voz no está disponible en este dispositivo.")
+            failFatalEarcon(errorCopy.ui(VoiceErrorKind.TtsUnavailable))
             return
         }
         // UI/chat conservan [text]; al TTS solo la versión hablable.
         val spoken = sanitizeForTts(text)
-        Log.i(TAG, "TTS texto limpio: $spoken")
         engine.speak(spoken)
     }
 
-    private fun failFatal(message: String) {
+    /** Anuncia el error por TTS (si hay motor) y cierra la sesión de voz. */
+    private fun announceErrorAndClose(kind: VoiceErrorKind) {
+        val spoken = errorCopy.spoken(kind)
+        val uiMessage = errorCopy.ui(kind)
         cancelSilenceTimeout()
         silenceStartedAtElapsed = 0L
         cancelPendingClose()
+        hubJob?.cancel()
+        hubJob = null
+        destroyStt()
+        tts?.stop()
+
+        val engine = tts
+        if (engine == null || !ttsReady) {
+            failFatalEarcon(uiMessage)
+            return
+        }
+        closingAfterAnnounce = true
+        setState(VoiceState.Speaking)
+        _ui.update {
+            it.copy(
+                state = VoiceState.Speaking,
+                agentText = "",
+                rmsDb = SILENCE_RMS,
+                errorMessage = uiMessage,
+            )
+        }
+        engine.speak(spoken)
+    }
+
+    private fun finishCleanupAfterAnnounce() {
+        sessionActive = false
+        restartToken += 1
+        hubJob?.cancel()
+        hubJob = null
+        destroyStt()
+        tts?.destroy()
+        tts = null
+        ttsReady = false
+        streakSessionKey = null
+        streakProvisionalName = null
+        titlesOnHang = false
+        earcons.release()
+        bluetoothSco.stop()
+        releaseMicForeground()
+        setState(VoiceState.Idle)
+        _ui.update {
+            it.copy(state = VoiceState.Idle)
+        }
+        Log.i(TAG, "VoiceSession: sesion cerrada tras anuncio")
+        _sessionEnded.tryEmit(Unit)
+    }
+
+    private fun failFatalEarcon(message: String) {
+        cancelSilenceTimeout()
+        silenceStartedAtElapsed = 0L
+        cancelPendingClose()
+        closingAfterAnnounce = false
         sessionActive = false
         restartToken += 1
         hubJob?.cancel()
@@ -459,8 +747,12 @@ class VoiceSession @Inject constructor(
             tts?.destroy()
             tts = null
             ttsReady = false
+            streakSessionKey = null
+            streakProvisionalName = null
+            titlesOnHang = false
             earcons.release()
             bluetoothSco.stop()
+            releaseMicForeground()
             setState(VoiceState.Idle)
             _ui.update {
                 VoiceSessionUi(
@@ -473,6 +765,18 @@ class VoiceSession @Inject constructor(
         }
         pendingCloseRunnable = runnable
         mainHandler.postDelayed(runnable, holdMs)
+    }
+
+    private fun acquireMicForeground() {
+        if (micGate.onSessionStart()) {
+            VoiceMicForegroundService.start(context)
+        }
+    }
+
+    private fun releaseMicForeground() {
+        if (micGate.onSessionEnd()) {
+            VoiceMicForegroundService.stop(context)
+        }
     }
 
     private fun destroyStt() {
@@ -521,7 +825,7 @@ class VoiceSession @Inject constructor(
             closeBySilenceTimeout()
         }
         silenceTimeoutRunnable = runnable
-        mainHandler.postDelayed(runnable, INITIAL_SILENCE_TIMEOUT_MS)
+        mainHandler.postDelayed(runnable, VoiceTurnPolicy.STREAK_SILENCE_TIMEOUT_MS)
     }
 
     private fun cancelSilenceTimeout() {
@@ -554,8 +858,6 @@ class VoiceSession @Inject constructor(
         private const val STT_RESTART_DELAY_MS = 350L
         /** Margen extra tras el earcon de listening antes de abrir el micrófono. */
         private const val EARCON_STT_SLACK_MS = 60L
-        /** Silencio continuo sin habla útil antes de cerrar la sesión. */
-        private const val INITIAL_SILENCE_TIMEOUT_MS = 6_000L
         private const val CLOSE_CLEANUP_SLACK_MS = 50L
         const val SILENCE_RMS = -45f
     }

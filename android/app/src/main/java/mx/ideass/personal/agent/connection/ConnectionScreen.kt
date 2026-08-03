@@ -7,8 +7,10 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -58,12 +60,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppRadii
+import mx.ideass.personal.agent.app.ConnectionBackend
 import mx.ideass.personal.agent.network.ConnectionState
 import mx.ideass.personal.agent.service.ConnectionHealth
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConnectionScreen(
     onConnected: () -> Unit,
@@ -92,9 +96,17 @@ fun ConnectionScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "Conecta tu hub",
+            text = if (ui.backend == ConnectionBackend.GATEWAY) {
+                "Conecta el Gateway"
+            } else {
+                "Conecta tu hub"
+            },
             color = AppColors.textPrimary,
             fontSize = 28.sp,
+            modifier = Modifier.combinedClickable(
+                onClick = {},
+                onLongClick = { viewModel.toggleBackendSelector() },
+            ),
         )
         Text(
             text = "Tu agente vive en tu servidor, no en la nube de nadie.",
@@ -102,14 +114,52 @@ fun ConnectionScreen(
             fontSize = 15.sp,
         )
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (ui.debugBuild && ui.showBackendSelector) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = { viewModel.onBackendChange(ConnectionBackend.HUB) },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (ui.backend == ConnectionBackend.HUB) {
+                            AppColors.accent
+                        } else {
+                            AppColors.textMuted
+                        },
+                    ),
+                ) { Text("Hub") }
+                OutlinedButton(
+                    onClick = { viewModel.onBackendChange(ConnectionBackend.GATEWAY) },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (ui.backend == ConnectionBackend.GATEWAY) {
+                            AppColors.accent
+                        } else {
+                            AppColors.textMuted
+                        },
+                    ),
+                ) { Text("Gateway") }
+            }
+        }
 
         OutlinedTextField(
             value = ui.address,
             onValueChange = viewModel::onAddressChange,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Dirección") },
-            placeholder = { Text("ws://10.0.2.2:8787") },
+            placeholder = {
+                Text(
+                    if (ui.backend == ConnectionBackend.GATEWAY) {
+                        "wss://host:18789"
+                    } else {
+                        "ws://10.0.2.2:8787"
+                    },
+                )
+            },
             singleLine = true,
             shape = RoundedCornerShape(AppRadii.card),
             colors = fieldColors,
@@ -144,6 +194,40 @@ fun ConnectionScreen(
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         )
+
+        if (ui.backend == ConnectionBackend.GATEWAY) {
+            OutlinedTextField(
+                value = ui.bootstrapToken,
+                onValueChange = viewModel::onBootstrapChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Setup-code (opcional)") },
+                singleLine = true,
+                shape = RoundedCornerShape(AppRadii.card),
+                colors = fieldColors,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            OutlinedTextField(
+                value = ui.agentId,
+                onValueChange = viewModel::onAgentIdChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("agentId (opcional)") },
+                singleLine = true,
+                shape = RoundedCornerShape(AppRadii.card),
+                colors = fieldColors,
+                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
+            )
+            OutlinedTextField(
+                value = ui.sessionKey,
+                onValueChange = viewModel::onSessionKeyChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("sessionKey (opcional)") },
+                singleLine = true,
+                shape = RoundedCornerShape(AppRadii.card),
+                colors = fieldColors,
+                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
+            )
+        }
 
         OutlinedTextField(
             value = ui.deviceName,
@@ -180,6 +264,17 @@ fun ConnectionScreen(
             }
         }
 
+        if (ui.testing) {
+            OutlinedButton(
+                onClick = viewModel::cancelConnect,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(AppRadii.cta),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textMuted),
+            ) {
+                Text(if (ui.pairingPending) "Cancelar emparejamiento" else "Cancelar")
+            }
+        }
+
         ui.resultMessage?.let { message ->
             Text(
                 text = message,
@@ -194,11 +289,11 @@ fun ConnectionScreen(
         }
 
         if (ui.hasSavedConfig) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             ConnectionHealthSection(health = health)
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "Los datos se guardan solo en este teléfono.",
             color = AppColors.textMuted,
@@ -261,7 +356,7 @@ private fun ConnectionHealthSection(health: ConnectionHealth) {
         )
         HealthRow(label = "Último mensaje", value = formatLastMessage(health.lastMessageReceivedMs))
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
             text = "Exención de batería: ${if (batteryExempt) "concedida" else "no concedida"}",
@@ -331,6 +426,8 @@ private fun healthStateLabel(state: ConnectionState): String = when (state) {
     is ConnectionState.Reconectando -> {
         if (state.segundos > 0) "Reconectando · ${state.segundos}s" else "Reconectando…"
     }
+    is ConnectionState.Emparejando -> "Emparejando"
+    is ConnectionState.Error -> state.message
     is ConnectionState.SinConfigurar -> "Sin configurar"
 }
 

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -52,7 +53,8 @@ import mx.ideass.personal.agent.network.ConnectionState
 @Composable
 fun ChatScreen(
     onOpenConnection: () -> Unit,
-    onOpenVoice: () -> Unit,
+    onOpenVoice: (sessionKey: String) -> Unit,
+    onOpenSessions: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
@@ -75,7 +77,9 @@ fun ChatScreen(
     ) {
         ChatHeader(
             connection = connection,
+            activeSessionName = ui.activeSessionName,
             onOpenConnection = onOpenConnection,
+            onOpenSessions = onOpenSessions,
         )
 
         if (degraded) {
@@ -99,8 +103,12 @@ fun ChatScreen(
             draft = ui.draft,
             onDraftChange = viewModel::onDraftChange,
             onSend = viewModel::send,
-            micEnabled = connection is ConnectionState.Conectado,
-            onMicClick = onOpenVoice,
+            micEnabled = connection is ConnectionState.Conectado &&
+                ui.activeSessionKey.isNotBlank(),
+            onMicClick = {
+                val key = ui.activeSessionKey.trim()
+                if (key.isNotEmpty()) onOpenVoice(key)
+            },
         )
     }
 }
@@ -108,7 +116,9 @@ fun ChatScreen(
 @Composable
 private fun ChatHeader(
     connection: ConnectionState,
+    activeSessionName: String,
     onOpenConnection: () -> Unit,
+    onOpenSessions: () -> Unit,
 ) {
     val (subtitle, subtitleColor) = when (connection) {
         is ConnectionState.Conectado -> "en línea" to AppColors.accent
@@ -120,17 +130,21 @@ private fun ChatHeader(
             }
             label to AppColors.warn
         }
+        is ConnectionState.Emparejando -> "emparejando…" to AppColors.warn
+        is ConnectionState.Error -> "error de conexión" to AppColors.warn
         is ConnectionState.SinConfigurar -> "sin configurar" to AppColors.warn
     }
+    val sessionLabel = activeSessionName.ifBlank { "Sesiones" }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
+                .padding(start = 8.dp)
                 .size(40.dp)
                 .clip(CircleShape)
                 .background(AppColors.accentTint),
@@ -139,9 +153,27 @@ private fun ChatHeader(
             Text("A", color = AppColors.accent, fontSize = 18.sp)
         }
         Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onOpenSessions)
+                .padding(vertical = 4.dp),
+        ) {
             Text("Agente", color = AppColors.textPrimary, fontSize = 18.sp)
-            Text(subtitle, color = subtitleColor, fontSize = 13.sp)
+            Text(
+                text = "$subtitle · $sessionLabel",
+                color = subtitleColor,
+                fontSize = 13.sp,
+                maxLines = 1,
+            )
+        }
+        IconButton(onClick = onOpenSessions) {
+            Icon(
+                imageVector = Icons.Default.Forum,
+                contentDescription = "Sesiones",
+                tint = AppColors.textMuted,
+            )
         }
         IconButton(onClick = onOpenConnection) {
             Icon(

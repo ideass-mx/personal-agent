@@ -29,21 +29,27 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.MainActivity
+import mx.ideass.personal.agent.chat.ChatHistorySync
 import mx.ideass.personal.agent.chat.ChatStore
+import mx.ideass.personal.agent.network.ChatConnection
+import mx.ideass.personal.agent.network.ChatInbound
 import mx.ideass.personal.agent.network.ConnectionState
-import mx.ideass.personal.agent.network.HubClient
-import mx.ideass.personal.agent.protocol.ServerMessage
+import mx.ideass.personal.agent.voice.VoiceLaunch
 import javax.inject.Inject
 
 /**
- * Dueño único de la conexión con el hub. Sobrevive a que la UI muera;
+ * Dueño único de la conexión (hub o Gateway). Sobrevive a que la UI muera;
  * la Activity solo se une (bind) para observar estado.
+ *
+ * Tipo FGS: [ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE] — canal persistente
+ * 24/7 sin el tope de 6h de dataSync (Android 15).
  */
 @AndroidEntryPoint
 class AgentService : Service() {
 
-    @Inject lateinit var hubClient: HubClient
+    @Inject lateinit var chatConnection: ChatConnection
     @Inject lateinit var chatStore: ChatStore
+    @Inject lateinit var chatHistorySync: ChatHistorySync
     @Inject lateinit var healthTracker: ConnectionHealthTracker
 
     private val binder = LocalBinder()
@@ -62,8 +68,14 @@ class AgentService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startInForeground(getString(R.string.notification_reconnectando))
-        hubClient.start()
+        if (!startInForeground(getString(R.string.notification_reconnectando))) {
+            // Red de seguridad: sin FGS no somos útiles como service; el socket
+            // singleton puede seguir vivo si otro código ya lo arrancó.
+            stopSelf()
+            return
+        }
+        chatConnection.start()
+        chatHistorySync.start()
         observeConnection()
         observeMessages()
         registerNetworkCallback()
@@ -72,24 +84,41 @@ class AgentService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Por si el sistema recrea el service sin pasar por onCreate a tiempo.
-        startInForeground(currentNotificationText())
+        if (intent?.action == ACTION_HABLAR) {
+            launchVoiceFallback()
+        }
+        // Idempotente: si ya estamos en foreground, no re-promover.
+        if (!AgentForegroundGate.isActive) {
+            if (!startInForeground(currentNotificationText())) {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        }
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        // specialUse no tiene cuota de 6h; defensa ante cambios futuros de tipo.
+        Log.w(TAG, "onTimeout fgsType=$fgsType — stopSelf limpio")
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        AgentForegroundGate.markInactive()
+        stopSelf(startId)
+    }
+
     override fun onDestroy() {
         unregisterNetworkCallback()
         releaseWakeLock()
         scope.cancel()
+        AgentForegroundGate.markInactive()
         Log.i(TAG, "AgentService destruido")
         super.onDestroy()
     }
 
     private fun observeConnection() {
         scope.launch {
-            hubClient.connectionState.collectLatest { state ->
+            chatConnection.connectionState.collectLatest { state ->
                 healthTracker.onConnectionState(state)
                 updateNotification(state)
                 if (state is ConnectionState.Conectado) {
@@ -102,17 +131,16 @@ class AgentService : Service() {
     private fun observeMessages() {
         scope.launch {
             chatStore.ensureLoaded()
-            hubClient.serverMessages.collect { msg ->
+            chatConnection.inbound.collect { msg ->
                 Log.i(PA_TAG, "mensaje recibido: ${msg::class.simpleName}")
                 healthTracker.onMessageReceived()
                 when (msg) {
-                    is ServerMessage.AssistantChunk -> acquireWakeLock()
-                    is ServerMessage.AssistantDone,
-                    is ServerMessage.Error,
+                    is ChatInbound.AssistantDelta -> acquireWakeLock()
+                    is ChatInbound.AssistantDone,
+                    is ChatInbound.Error,
                     -> releaseWakeLock()
-                    else -> Unit
                 }
-                chatStore.handleServer(msg)
+                chatStore.handleInbound(msg)
             }
         }
     }
@@ -121,7 +149,7 @@ class AgentService : Service() {
         scope.launch {
             while (true) {
                 delay(HEARTBEAT_INTERVAL_MS)
-                Log.i(PA_TAG, "service vivo, estado=${hubClient.connectionState.value}")
+                Log.i(PA_TAG, "service vivo, estado=${chatConnection.connectionState.value}")
             }
         }
     }
@@ -141,7 +169,7 @@ class AgentService : Service() {
                 if (!networkWasLost) return
                 networkWasLost = false
                 Log.i(TAG, "Red disponible — reconexión inmediata")
-                hubClient.reconnectNow()
+                chatConnection.reconnectNow()
             }
 
             override fun onCapabilitiesChanged(
@@ -154,7 +182,7 @@ class AgentService : Service() {
                 ) {
                     networkWasLost = false
                     Log.i(TAG, "Red validada — reconexión inmediata")
-                    hubClient.reconnectNow()
+                    chatConnection.reconnectNow()
                 }
             }
         }
@@ -206,15 +234,45 @@ class AgentService : Service() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun startInForeground(text: String) {
-        val notification = buildNotification(text)
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            notification,
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
-        )
-        lastNotificationText = text
+    /**
+     * Promueve a foreground. Idempotente si ya estamos activos.
+     *
+     * La captura de excepciones es **red de seguridad**, no la solución:
+     * el tipo correcto es specialUse (sin tope de 6h de dataSync).
+     *
+     * @return true si el servicio está (o ya estaba) en foreground.
+     */
+    private fun startInForeground(text: String): Boolean {
+        if (AgentForegroundGate.isActive) {
+            if (text != lastNotificationText) {
+                lastNotificationText = text
+                val manager = getSystemService(NotificationManager::class.java)
+                manager?.notify(NOTIFICATION_ID, buildNotification(text))
+            }
+            return true
+        }
+        return try {
+            val notification = buildNotification(text)
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+            AgentForegroundGate.markActive()
+            lastNotificationText = text
+            true
+        } catch (e: Exception) {
+            // Red de seguridad: no tumbar el proceso.
+            // Nombre por string: la clase es API 31+ y minSdk es 29.
+            if (isFgsStartDenied(e)) {
+                Log.e(TAG, "FGS no permitido (red de seguridad): ${e.message}")
+            } else {
+                Log.e(TAG, "Fallo al promover a foreground: ${e.javaClass.simpleName}: ${e.message}")
+            }
+            AgentForegroundGate.markInactive()
+            false
+        }
     }
 
     private fun updateNotification(state: ConnectionState) {
@@ -229,7 +287,7 @@ class AgentService : Service() {
     }
 
     private fun currentNotificationText(): String {
-        return when (hubClient.connectionState.value) {
+        return when (chatConnection.connectionState.value) {
             is ConnectionState.Conectado -> getString(R.string.notification_conectado)
             else -> getString(R.string.notification_reconnectando)
         }
@@ -245,6 +303,15 @@ class AgentService : Service() {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val hablarIntent = Intent(this, AgentService::class.java).apply {
+            action = ACTION_HABLAR
+        }
+        val hablarPending = PendingIntent.getService(
+            this,
+            1,
+            hablarIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(getString(R.string.app_name))
@@ -254,8 +321,22 @@ class AgentService : Service() {
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(pending)
+            .addAction(
+                R.drawable.ic_notification,
+                getString(R.string.notification_action_hablar),
+                hablarPending,
+            )
             .build()
+    }
+
+    /**
+     * Disparador fallback «Hablar»: VIS si el rol de asistente está vivo;
+     * si no, abre la pantalla de voz de la app.
+     */
+    private fun launchVoiceFallback() {
+        VoiceLaunch.fromFallback(this)
     }
 
     companion object {
@@ -265,14 +346,39 @@ class AgentService : Service() {
         private const val NOTIFICATION_ID = 42
         private const val WAKE_LOCK_TIMEOUT_MS = 10 * 60 * 1000L
         private const val HEARTBEAT_INTERVAL_MS = 60 * 1000L
+        private const val FGS_DENIED_CLASS =
+            "android.app.ForegroundServiceStartNotAllowedException"
 
+        /** Acción de notificación / tile: iniciar flujo de voz (racha). */
+        const val ACTION_HABLAR = "mx.ideass.personal.agent.action.HABLAR"
+
+        /**
+         * Arranca el FGS si aún no está en foreground (idempotente).
+         * La captura aquí es red de seguridad; la solución es specialUse.
+         */
         fun start(context: Context) {
+            if (AgentForegroundGate.shouldSkipStart()) {
+                Log.d(TAG, "AgentService ya en foreground — start omitido")
+                return
+            }
             val intent = Intent(context, AgentService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                if (isFgsStartDenied(e)) {
+                    Log.e(TAG, "startForegroundService no permitido (red de seguridad): ${e.message}")
+                } else {
+                    Log.e(TAG, "Fallo al arrancar AgentService: ${e.javaClass.simpleName}: ${e.message}")
+                }
             }
         }
+
+        private fun isFgsStartDenied(e: Throwable): Boolean =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                e.javaClass.name == FGS_DENIED_CLASS
     }
 }

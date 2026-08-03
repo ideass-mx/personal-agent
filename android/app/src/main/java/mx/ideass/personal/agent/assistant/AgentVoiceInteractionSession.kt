@@ -38,6 +38,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppTheme
+import mx.ideass.personal.agent.voice.VoiceOrigin
 import mx.ideass.personal.agent.voice.VoiceSession
 import mx.ideass.personal.agent.voice.VoiceSessionContent
 
@@ -119,7 +120,7 @@ class AgentVoiceInteractionSession(
         voiceStarted = true
         ensureEndCollector()
         Log.d(TAG, "AgentVoiceSession: starting VoiceSession")
-        voiceSession.start()
+        voiceSession.start(VoiceOrigin.AssistantInvocation)
     }
 
     private fun ensureEndCollector() {

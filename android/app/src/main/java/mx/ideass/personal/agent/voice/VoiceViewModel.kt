@@ -21,7 +21,10 @@ class VoiceViewModel @Inject constructor(
 
     fun startSession() = voiceSession.start()
 
-    fun endSession() = voiceSession.stop()
+    fun startSession(origin: VoiceOrigin) = voiceSession.start(origin)
+
+    /** Colgar la racha desde UI (earcon manual). */
+    fun endSession() = voiceSession.hangUp(HangReason.Ui)
 
     override fun onCleared() {
         voiceSession.stop()

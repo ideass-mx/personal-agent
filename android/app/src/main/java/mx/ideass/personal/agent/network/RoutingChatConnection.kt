@@ -1,0 +1,89 @@
+package mx.ideass.personal.agent.network
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+import mx.ideass.personal.agent.app.AppPreferences
+import mx.ideass.personal.agent.app.ConnectionBackend
+import mx.ideass.personal.agent.gateway.client.GatewayChatConnection
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Enruta al hub o al Gateway según preferencias.
+ * La UI solo conoce [ChatConnection].
+ */
+@Singleton
+class RoutingChatConnection @Inject constructor(
+    private val preferences: AppPreferences,
+    private val hub: HubChatConnection,
+    private val gateway: GatewayChatConnection,
+) : ChatConnection {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val _connectionState =
+        MutableStateFlow<ConnectionState>(ConnectionState.SinConfigurar)
+    override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+
+    private val _inbound = MutableSharedFlow<ChatInbound>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    override val inbound: SharedFlow<ChatInbound> = _inbound.asSharedFlow()
+
+    @Volatile
+    private var active: ChatConnection = gateway
+    private var bridgeJobs: List<Job> = emptyList()
+    private var started = false
+
+    override fun start() {
+        if (started) return
+        started = true
+        scope.launch {
+            preferences.connectionBackend
+                .distinctUntilChanged()
+                .collectLatest { backend ->
+                    val next = if (backend == ConnectionBackend.GATEWAY) gateway else hub
+                    switchTo(next)
+                    next.start()
+                }
+        }
+    }
+
+    override fun reconnectNow() = active.reconnectNow()
+
+    override fun sendUserMessage(text: String, conversationId: String?) =
+        active.sendUserMessage(text, conversationId)
+
+    override fun isConnected(): Boolean = active.isConnected()
+
+    override suspend fun probe(
+        address: String,
+        token: String,
+        deviceName: String,
+    ): Result<Long> = active.probe(address, token, deviceName)
+
+    private fun switchTo(next: ChatConnection) {
+        bridgeJobs.forEach { it.cancel() }
+        active = next
+        bridgeJobs = listOf(
+            scope.launch {
+                next.connectionState.collect { _connectionState.value = it }
+            },
+            scope.launch {
+                next.inbound.collect { _inbound.emit(it) }
+            },
+        )
+    }
+}

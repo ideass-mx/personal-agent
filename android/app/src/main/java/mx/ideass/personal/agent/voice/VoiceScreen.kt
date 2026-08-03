@@ -63,6 +63,7 @@ import kotlin.math.max
 
 @Composable
 fun VoiceScreen(
+    origin: VoiceOrigin = VoiceOrigin.AssistantInvocation,
     onFinished: () -> Unit,
     viewModel: VoiceViewModel = hiltViewModel(),
 ) {
@@ -83,13 +84,13 @@ fun VoiceScreen(
         permissionGranted = micOk
         showRationale = false
         if (micOk) {
-            viewModel.startSession()
+            viewModel.startSession(origin)
         }
     }
 
-    LaunchedEffect(permissionGranted) {
+    LaunchedEffect(permissionGranted, origin) {
         if (permissionGranted && !showRationale) {
-            viewModel.startSession()
+            viewModel.startSession(origin)
         }
     }
 
