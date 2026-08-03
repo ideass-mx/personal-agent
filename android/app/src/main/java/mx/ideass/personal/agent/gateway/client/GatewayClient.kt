@@ -1,6 +1,7 @@
 package mx.ideass.personal.agent.gateway.client
 
 import android.content.Context
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +47,8 @@ import mx.ideass.personal.agent.gateway.protocol.JsonMessageText
 import mx.ideass.personal.agent.gateway.protocol.RpcMethods
 import mx.ideass.personal.agent.gateway.protocol.SessionsCreateParams
 import mx.ideass.personal.agent.gateway.protocol.SessionsCreateResult
+import mx.ideass.personal.agent.gateway.protocol.SessionsDeleteParams
+import mx.ideass.personal.agent.gateway.protocol.SessionsPatchParams
 import mx.ideass.personal.agent.gateway.rpc.GatewayRpcException
 import mx.ideass.personal.agent.gateway.rpc.IdempotencyKeys
 import mx.ideass.personal.agent.gateway.rpc.PendingRpc
@@ -229,6 +232,66 @@ class GatewayClient @Inject constructor(
                 displayName = label,
                 agentId = resolvedAgent,
             )
+        }
+    }
+
+    /**
+     * Borrado remoto best-effort (tag v2026.7.1, scopes write):
+     * 1) `sessions.patch` { archived: true }
+     * 2) `sessions.delete` { archivedOnly: true, deleteTranscript: true }
+     *
+     * Fallos de red/RPC solo se registran en log; el borrado local no depende de esto.
+     */
+    suspend fun deleteSessionRemoteBestEffort(sessionKey: String, agentId: String?) {
+        val key = sessionKey.trim()
+        if (key.isEmpty()) return
+        val session = gatewaySession
+        if (session == null) {
+            Log.w(TAG, "sessions.delete omitido (sin sesión gateway): $key")
+            return
+        }
+        val timeout = activeConfig?.rpcTimeoutMs ?: GatewayConfig.DEFAULT_RPC_TIMEOUT_MS
+        val agent = agentId?.trim()?.takeIf { it.isNotEmpty() } ?: agentIdFromSessionKey(key)
+        runCatching {
+            session.rpc.request(
+                method = RpcMethods.SESSIONS_PATCH,
+                params = GatewayJson.encodeToJsonElement(
+                    SessionsPatchParams(key = key, agentId = agent, archived = true),
+                ),
+                timeoutMs = timeout,
+            )
+        }.onFailure { err ->
+            Log.w(TAG, "sessions.patch archived falló key=$key: ${err.message}")
+        }
+        runCatching {
+            session.rpc.request(
+                method = RpcMethods.SESSIONS_DELETE,
+                params = GatewayJson.encodeToJsonElement(
+                    SessionsDeleteParams(
+                        key = key,
+                        agentId = agent,
+                        deleteTranscript = true,
+                        archivedOnly = true,
+                    ),
+                ),
+                timeoutMs = timeout,
+            )
+        }.onFailure { err ->
+            Log.w(TAG, "sessions.delete falló key=$key: ${err.message}")
+        }
+    }
+
+    /** Descarta sends en cola locales cuya preferredSessionKey está en [sessionKeys]. */
+    suspend fun dropPendingForSessions(sessionKeys: Collection<String>) {
+        val keys = sessionKeys.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (keys.isEmpty()) return
+        queueMutex.withLock {
+            val kept = pendingQueue.filterNot { item ->
+                val preferred = item.preferredSessionKey?.trim()?.takeIf { it.isNotEmpty() }
+                preferred != null && preferred in keys
+            }
+            pendingQueue.clear()
+            pendingQueue.addAll(kept)
         }
     }
 
@@ -508,6 +571,10 @@ class GatewayClient @Inject constructor(
     private enum class CloseReason { TRANSPORT, PAIRING }
 
     private fun extractText(message: JsonElement?): String? = JsonMessageText.extract(message)
+
+    companion object {
+        private const val TAG = "GatewayClient"
+    }
 }
 
 /**

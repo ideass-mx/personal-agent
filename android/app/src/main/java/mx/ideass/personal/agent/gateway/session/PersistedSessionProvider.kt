@@ -175,6 +175,35 @@ class PersistedSessionProvider @Inject constructor(
         updated
     }
 
+    override suspend fun removeSessions(
+        sessionKeys: Collection<String>,
+    ): SessionRemovalResult = mutex.withLock {
+        ensureLoadedLocked()
+        val requested = sessionKeys.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (requested.isEmpty()) {
+            return SessionRemovalResult(removedKeys = emptyList(), switchedToMain = false)
+        }
+        val removable = _known.value.filter { !it.isMain && it.sessionKey in requested }
+        if (removable.isEmpty()) {
+            return SessionRemovalResult(removedKeys = emptyList(), switchedToMain = false)
+        }
+        val removeKeys = removable.map { it.sessionKey }.toSet()
+        val activeKey = _active.value?.sessionKey
+        val switchedToMain = activeKey != null && activeKey in removeKeys
+        if (switchedToMain) {
+            val main = _known.value.firstOrNull { it.isMain }
+                ?: error("session_main_missing: no se puede borrar la activa sin principal")
+            _active.value = ActiveSession(sessionKey = main.sessionKey, agentId = main.agentId)
+            touchActivityLocked(main.sessionKey)
+        }
+        _known.value = sortKnown(_known.value.filterNot { it.sessionKey in removeKeys })
+        persistLocked()
+        SessionRemovalResult(
+            removedKeys = removable.map { it.sessionKey },
+            switchedToMain = switchedToMain,
+        )
+    }
+
     override suspend fun clear() = mutex.withLock {
         context.gatewaySessionStore.edit { it.clear() }
         _active.value = null

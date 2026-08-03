@@ -17,6 +17,7 @@ object RpcMethods {
     const val SESSIONS_RESOLVE: String = "sessions.resolve"
     const val SESSIONS_CREATE: String = "sessions.create"
     const val SESSIONS_PATCH: String = "sessions.patch"
+    const val SESSIONS_DELETE: String = "sessions.delete"
     const val SESSIONS_MESSAGES_SUBSCRIBE: String = "sessions.messages.subscribe"
     const val SESSIONS_MESSAGES_UNSUBSCRIBE: String = "sessions.messages.unsubscribe"
 

@@ -1,8 +1,10 @@
 package mx.ideass.personal.agent.chat
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,25 +27,40 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppRadii
 
+/**
+ * Lista de sesiones.
+ *
+ * Borrado: long-press entra a modo selección (la principal no es seleccionable);
+ * taps agregan/quitan; confirmación con conteo. Se eligió selección + menú de
+ * acciones frente a swipe porque no había patrón swipe en la app y CP2 exige
+ * multi-selección.
+ */
 @Composable
 fun SessionsScreen(
     onBack: () -> Unit,
@@ -52,17 +69,37 @@ fun SessionsScreen(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
 
+    if (ui.pendingDeleteKeys.isNotEmpty()) {
+        DeleteSessionsDialog(
+            names = ui.pendingDeleteNames,
+            count = ui.pendingDeleteKeys.size,
+            deleting = ui.deleting,
+            onConfirm = viewModel::confirmDelete,
+            onDismiss = viewModel::dismissDeleteConfirm,
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(AppColors.background)
             .imePadding(),
     ) {
-        SessionsHeader(
-            onBack = onBack,
-            onCreate = viewModel::openCreate,
-            createEnabled = !ui.creating,
-        )
+        if (ui.selectionMode) {
+            SelectionHeader(
+                selectedCount = ui.selectedCount,
+                deleting = ui.deleting,
+                onExit = viewModel::exitSelection,
+                onSelectAll = viewModel::selectAllDeletable,
+                onDelete = { viewModel.requestDelete() },
+            )
+        } else {
+            SessionsHeader(
+                onBack = onBack,
+                onCreate = viewModel::openCreate,
+                createEnabled = !ui.creating,
+            )
+        }
 
         if (ui.errorMessage != null && !ui.showCreate) {
             Text(
@@ -95,16 +132,28 @@ fun SessionsScreen(
             items(ui.sessions, key = { it.sessionKey }) { row ->
                 SessionRow(
                     row = row,
+                    selectionMode = ui.selectionMode,
                     onClick = {
-                        viewModel.select(row.sessionKey)
-                        onSessionSelected()
+                        if (ui.selectionMode) {
+                            if (row.selectable) {
+                                viewModel.toggleSelection(row.sessionKey)
+                            }
+                        } else {
+                            viewModel.select(row.sessionKey)
+                            onSessionSelected()
+                        }
+                    },
+                    onLongClick = {
+                        if (row.selectable) {
+                            viewModel.enterSelection(row.sessionKey)
+                        }
                     },
                 )
             }
             if (ui.sessions.isEmpty()) {
                 item {
                     Text(
-                        text = "Aún no hay sesiones. Conéctate al agente para cargar la principal.",
+                        text = stringResource(R.string.sessions_empty),
                         color = AppColors.textMuted,
                         fontSize = 14.sp,
                         modifier = Modifier.padding(top = 24.dp),
@@ -112,9 +161,42 @@ fun SessionsScreen(
                 }
             }
         }
-
-        // TODO: renombrar / archivar / borrar sesiones
     }
+}
+
+@Composable
+private fun DeleteSessionsDialog(
+    names: List<String>,
+    count: Int,
+    deleting: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val title = if (count == 1) {
+        stringResource(R.string.sessions_delete_confirm_title)
+    } else {
+        stringResource(R.string.sessions_delete_confirm_title_plural)
+    }
+    val body = if (count == 1) {
+        stringResource(R.string.sessions_delete_confirm_one, names.firstOrNull().orEmpty())
+    } else {
+        stringResource(R.string.sessions_delete_confirm_many, count)
+    }
+    AlertDialog(
+        onDismissRequest = { if (!deleting) onDismiss() },
+        title = { Text(title) },
+        text = { Text(body) },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = !deleting) {
+                Text(stringResource(R.string.sessions_delete_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !deleting) {
+                Text(stringResource(R.string.sessions_delete_cancel))
+            }
+        },
+    )
 }
 
 @Composable
@@ -132,14 +214,18 @@ private fun SessionsHeader(
         IconButton(onClick = onBack) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Volver",
+                contentDescription = stringResource(R.string.sessions_back),
                 tint = AppColors.textMuted,
             )
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text("Sesiones", color = AppColors.textPrimary, fontSize = 18.sp)
             Text(
-                text = "Toca una para cambiar de hilo",
+                text = stringResource(R.string.sessions_title),
+                color = AppColors.textPrimary,
+                fontSize = 18.sp,
+            )
+            Text(
+                text = stringResource(R.string.sessions_subtitle),
                 color = AppColors.textMuted,
                 fontSize = 13.sp,
             )
@@ -147,8 +233,65 @@ private fun SessionsHeader(
         IconButton(onClick = onCreate, enabled = createEnabled) {
             Icon(
                 imageVector = Icons.Default.Add,
-                contentDescription = "Nueva sesión",
+                contentDescription = stringResource(R.string.sessions_new),
                 tint = if (createEnabled) AppColors.accent else AppColors.textMuted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectionHeader(
+    selectedCount: Int,
+    deleting: Boolean,
+    onExit: () -> Unit,
+    onSelectAll: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onExit, enabled = !deleting) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = stringResource(R.string.sessions_selection_exit),
+                tint = AppColors.textMuted,
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.sessions_selection_count,
+                    selectedCount,
+                    selectedCount,
+                ),
+                color = AppColors.textPrimary,
+                fontSize = 18.sp,
+            )
+            Text(
+                text = stringResource(R.string.sessions_select_all),
+                color = AppColors.accent,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(enabled = !deleting, onClick = onSelectAll)
+                    .padding(vertical = 2.dp),
+            )
+        }
+        IconButton(
+            onClick = onDelete,
+            enabled = !deleting && selectedCount > 0,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = stringResource(
+                    R.string.sessions_delete_action_count,
+                    selectedCount,
+                ),
+                tint = if (!deleting && selectedCount > 0) AppColors.warn else AppColors.textMuted,
             )
         }
     }
@@ -173,14 +316,20 @@ private fun CreateSessionPanel(
             .border(1.dp, AppColors.border, RoundedCornerShape(AppRadii.card))
             .padding(14.dp),
     ) {
-        Text("Nueva sesión", color = AppColors.textPrimary, fontSize = 15.sp)
+        Text(
+            text = stringResource(R.string.sessions_create_title),
+            color = AppColors.textPrimary,
+            fontSize = 15.sp,
+        )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = if (connected) {
-                "Dale un nombre (p. ej. Trabajo, Domótica)"
-            } else {
-                "Necesitas conexión con el agente para crear"
-            },
+            text = stringResource(
+                if (connected) {
+                    R.string.sessions_create_hint
+                } else {
+                    R.string.sessions_create_need_connection
+                },
+            ),
             color = AppColors.textMuted,
             fontSize = 13.sp,
         )
@@ -200,7 +349,11 @@ private fun CreateSessionPanel(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             decorationBox = { inner ->
                 if (draftName.isEmpty()) {
-                    Text("Nombre", color = AppColors.textMuted, fontSize = 15.sp)
+                    Text(
+                        text = stringResource(R.string.sessions_create_name_placeholder),
+                        color = AppColors.textMuted,
+                        fontSize = 15.sp,
+                    )
                 }
                 inner()
             },
@@ -216,7 +369,7 @@ private fun CreateSessionPanel(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Cancelar",
+                text = stringResource(R.string.sessions_delete_cancel),
                 color = AppColors.textMuted,
                 fontSize = 14.sp,
                 modifier = Modifier
@@ -226,7 +379,9 @@ private fun CreateSessionPanel(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = if (creating) "Creando…" else "Crear",
+                text = stringResource(
+                    if (creating) R.string.sessions_creating else R.string.sessions_create,
+                ),
                 color = AppColors.onAccent,
                 fontSize = 14.sp,
                 modifier = Modifier
@@ -246,60 +401,78 @@ private fun CreateSessionPanel(
     Spacer(Modifier.height(8.dp))
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SessionRow(
     row: SessionRowUi,
+    selectionMode: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val borderColor = when {
-        row.isActive -> AppColors.accent
+        row.selected -> AppColors.accent
+        row.isActive && !selectionMode -> AppColors.accent
         else -> AppColors.border
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(AppRadii.card))
-            .background(AppColors.surface)
+            .background(
+                if (row.selected) AppColors.accentTint else AppColors.surface,
+            )
             .border(1.dp, borderColor, RoundedCornerShape(AppRadii.card))
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(if (row.isMain) AppColors.accentTint else AppColors.background),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (row.isMain) {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = null,
-                    tint = AppColors.accent,
-                    modifier = Modifier.size(18.dp),
-                )
-            } else {
-                Text(
-                    text = row.displayName.take(1).uppercase(),
-                    color = AppColors.textMuted,
-                    fontSize = 14.sp,
-                )
+        if (selectionMode) {
+            SelectionCheckbox(selected = row.selected, enabled = row.selectable)
+            Spacer(Modifier.width(12.dp))
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(if (row.isMain) AppColors.accentTint else AppColors.background),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (row.isMain) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = AppColors.accent,
+                        modifier = Modifier.size(18.dp),
+                    )
+                } else {
+                    Text(
+                        text = row.displayName.take(1).uppercase(),
+                        color = AppColors.textMuted,
+                        fontSize = 14.sp,
+                    )
+                }
             }
+            Spacer(Modifier.width(12.dp))
         }
-        Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = row.displayName,
-                    color = AppColors.textPrimary,
+                    color = if (row.selectable || !selectionMode) {
+                        AppColors.textPrimary
+                    } else {
+                        AppColors.textMuted
+                    },
                     fontSize = 15.sp,
                     fontWeight = if (row.isMain || row.isActive) FontWeight.SemiBold else FontWeight.Normal,
                 )
                 if (row.isMain) {
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "principal",
+                        text = stringResource(R.string.sessions_badge_main),
                         color = AppColors.accent,
                         fontSize = 11.sp,
                         modifier = Modifier
@@ -310,18 +483,51 @@ private fun SessionRow(
                 }
             }
             Text(
-                text = if (row.isActive) "activa" else row.sessionKey,
+                text = if (row.isActive) {
+                    stringResource(R.string.sessions_badge_active)
+                } else {
+                    row.sessionKey
+                },
                 color = if (row.isActive) AppColors.accent else AppColors.textMuted,
                 fontSize = 12.sp,
                 maxLines = 1,
             )
         }
-        if (row.isActive) {
+        if (!selectionMode && row.isActive) {
             Icon(
                 imageVector = Icons.Default.Check,
-                contentDescription = "Activa",
+                contentDescription = stringResource(R.string.sessions_badge_active),
                 tint = AppColors.accent,
                 modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectionCheckbox(selected: Boolean, enabled: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .border(
+                width = 2.dp,
+                color = when {
+                    !enabled -> AppColors.border
+                    selected -> AppColors.accent
+                    else -> AppColors.textMuted
+                },
+                shape = CircleShape,
+            )
+            .background(if (selected && enabled) AppColors.accent else AppColors.surface),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected && enabled) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = AppColors.onAccent,
+                modifier = Modifier.size(14.dp),
             )
         }
     }

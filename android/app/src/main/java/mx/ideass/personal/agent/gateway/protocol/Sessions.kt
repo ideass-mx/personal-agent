@@ -79,6 +79,30 @@ data class SessionsPatchParams(
     val unread: Boolean? = null,
 )
 
+/**
+ * Params de `sessions.delete` (`SessionsDeleteParamsSchema`, tag v2026.7.1).
+ *
+ * Con scopes `operator.write` (CHAT_MINIMAL) el contrato es archive-then-delete:
+ * primero `sessions.patch` { archived: true }, luego este RPC con
+ * [archivedOnly]=true y [deleteTranscript]=true.
+ */
+@Serializable
+data class SessionsDeleteParams(
+    val key: String,
+    val agentId: String? = null,
+    val deleteTranscript: Boolean? = null,
+    val archivedOnly: Boolean? = null,
+)
+
+/** Resultado de `sessions.delete`. */
+@Serializable
+data class SessionsDeleteResult(
+    val ok: Boolean = true,
+    val key: String? = null,
+    val deleted: Boolean? = null,
+    val archived: List<String>? = null,
+)
+
 /** Params de `sessions.messages.subscribe`. */
 @Serializable
 data class SessionsMessagesSubscribeParams(

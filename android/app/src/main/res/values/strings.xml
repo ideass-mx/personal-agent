@@ -46,4 +46,32 @@
     <!-- LEGADO: sesión fija «Rápidas» (ya no es destino del flujo de voz). -->
     <string name="session_quick_display_name">Rápidas</string>
     <string name="session_quick_id">rapidas</string>
+
+    <!-- Lista de sesiones / borrado -->
+    <string name="sessions_title">Sesiones</string>
+    <string name="sessions_subtitle">Toca una para cambiar · mantén pulsado para seleccionar</string>
+    <string name="sessions_back">Volver</string>
+    <string name="sessions_new">Nueva sesión</string>
+    <string name="sessions_empty">Aún no hay sesiones. Conéctate al agente para cargar la principal.</string>
+    <string name="sessions_badge_main">principal</string>
+    <string name="sessions_badge_active">activa</string>
+    <string name="sessions_create_title">Nueva sesión</string>
+    <string name="sessions_create_hint">Dale un nombre (p. ej. Trabajo, Domótica)</string>
+    <string name="sessions_create_need_connection">Necesitas conexión con el agente para crear</string>
+    <string name="sessions_create_name_placeholder">Nombre</string>
+    <string name="sessions_create">Crear</string>
+    <string name="sessions_creating">Creando…</string>
+    <string name="sessions_selection_exit">Salir de selección</string>
+    <string name="sessions_select_all">Seleccionar todas</string>
+    <string name="sessions_delete_action_count">Eliminar (%1$d)</string>
+    <string name="sessions_delete_confirm_title">Eliminar sesión</string>
+    <string name="sessions_delete_confirm_title_plural">Eliminar sesiones</string>
+    <string name="sessions_delete_confirm_one">¿Eliminar «%1$s»? Esta acción no se puede deshacer.</string>
+    <string name="sessions_delete_confirm_many">¿Eliminar %1$d sesiones? Esta acción no se puede deshacer.</string>
+    <string name="sessions_delete_confirm">Eliminar</string>
+    <string name="sessions_delete_cancel">Cancelar</string>
+    <plurals name="sessions_selection_count">
+        <item quantity="one">%d seleccionada</item>
+        <item quantity="other">%d seleccionadas</item>
+    </plurals>
 </resources>

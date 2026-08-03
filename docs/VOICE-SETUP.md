@@ -109,3 +109,7 @@ el agente lo dice por voz (no falla en silencio).
   efímero de tipo `microphone` y se libera al terminar.
 - No hace falta wake word ni comandos de sesión («cambia a X») en esta fase.
 - El rename del título es local; sync Gateway (`sessions.patch`) queda como TODO.
+- Borrar sesiones (lista): limpia catálogo local, mensajes y prefs asociadas.
+  Remoto best-effort vía archive→delete (`sessions.patch` archived +
+  `sessions.delete` con `archivedOnly`/`deleteTranscript`); si el RPC falla,
+  el borrado local sigue. La principal no se puede borrar. Sin undo.

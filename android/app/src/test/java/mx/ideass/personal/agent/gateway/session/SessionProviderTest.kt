@@ -254,6 +254,81 @@ class SessionProviderTest {
         assertEquals(null, agentIdFromSessionKey("agent:"))
     }
 
+    @Test
+    fun removeSessions_dropsCatalogEntriesButKeepsMain() = runBlocking {
+        val provider = InMemorySessionProvider()
+        provider.resolveForConnection(
+            GatewayConfig(url = "wss://gw"),
+            sampleHello(mainSessionKey = "agent:main:main"),
+        )
+        val a = "agent:main:dashboard:a"
+        val b = "agent:main:dashboard:b"
+        provider.registerWithoutActivating(a, "A", "main")
+        provider.registerWithoutActivating(b, "B", "main")
+
+        val result = provider.removeSessions(listOf(a, "agent:main:main", b))
+        assertEquals(listOf(a, b), result.removedKeys)
+        assertFalse(result.switchedToMain)
+        assertEquals(
+            listOf("agent:main:main"),
+            provider.knownSessions.value.map { it.sessionKey },
+        )
+        assertTrue(provider.knownSessions.value.single().isMain)
+        assertEquals("agent:main:main", provider.activeSession.value?.sessionKey)
+    }
+
+    @Test
+    fun removeSessions_activeReassignsToMain() = runBlocking {
+        val provider = InMemorySessionProvider()
+        provider.resolveForConnection(
+            GatewayConfig(url = "wss://gw"),
+            sampleHello(mainSessionKey = "agent:main:main"),
+        )
+        val work = "agent:main:dashboard:work"
+        provider.registerAndActivate(work, "Trabajo", "main")
+        assertEquals(work, provider.activeSession.value?.sessionKey)
+
+        val result = provider.removeSessions(listOf(work))
+        assertEquals(listOf(work), result.removedKeys)
+        assertTrue(result.switchedToMain)
+        assertEquals("agent:main:main", provider.activeSession.value?.sessionKey)
+        assertFalse(provider.knownSessions.value.any { it.sessionKey == work })
+    }
+
+    @Test
+    fun removeSessions_mainAloneIsNoOpByConstruction() = runBlocking {
+        val provider = InMemorySessionProvider()
+        provider.resolveForConnection(
+            GatewayConfig(url = "wss://gw"),
+            sampleHello(mainSessionKey = "agent:main:main"),
+        )
+        val before = provider.knownSessions.value
+        val result = provider.removeSessions(listOf("agent:main:main"))
+        assertTrue(result.removedKeys.isEmpty())
+        assertFalse(result.switchedToMain)
+        assertEquals(before, provider.knownSessions.value)
+        assertEquals("agent:main:main", provider.activeSession.value?.sessionKey)
+    }
+
+    @Test
+    fun removeSessions_batchLeavesCatalogConsistent() = runBlocking {
+        val provider = InMemorySessionProvider()
+        provider.resolveForConnection(
+            GatewayConfig(url = "wss://gw"),
+            sampleHello(mainSessionKey = "agent:main:main"),
+        )
+        val keys = (1..5).map { "agent:main:dashboard:trash-$it" }
+        keys.forEach { provider.registerWithoutActivating(it, "Trash", "main") }
+        provider.setActive(keys[2], "main")
+
+        val result = provider.removeSessions(keys + "agent:main:main")
+        assertEquals(keys.toSet(), result.removedKeys.toSet())
+        assertTrue(result.switchedToMain)
+        assertEquals(1, provider.knownSessions.value.size)
+        assertTrue(provider.knownSessions.value.single().isMain)
+        assertEquals("agent:main:main", provider.activeSession.value?.sessionKey)
+    }
+
     private fun sampleHello(mainSessionKey: String): HelloOk = HelloOk(
         protocol = 4,
         server = HelloOkServer(version = "2026.7.1", connId = "c"),

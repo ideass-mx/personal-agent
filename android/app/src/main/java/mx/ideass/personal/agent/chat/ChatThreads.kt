@@ -112,6 +112,22 @@ class ChatThreads {
         )
     }
 
+    /**
+     * Descarta particiones locales (mensajes, streams y queued/pending).
+     * Si la visible era una de ellas, [visibleSessionKey] queda null hasta
+     * que el observador de sesión activa la reasigne.
+     */
+    fun removeSessions(sessionKeys: Collection<String>) {
+        val keys = sessionKeys.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (keys.isEmpty()) return
+        for (key in keys) {
+            threads.remove(key)
+        }
+        if (visibleSessionKey in keys) {
+            visibleSessionKey = null
+        }
+    }
+
     fun snapshot(): Map<String, List<StoredChatMessage>> =
         threads.mapValues { (_, state) ->
             state.messages.map {

@@ -56,6 +56,21 @@ interface SessionProvider {
      */
     suspend fun updateDisplayName(sessionKey: String, displayName: String): KnownSession?
 
+    /**
+     * Elimina del catálogo local las keys indicadas.
+     * La principal (`isMain`) nunca se elimina (filtrada por construcción).
+     * Si la activa está entre las eliminadas, se reasigna a la principal antes
+     * de quitarlas del catálogo.
+     */
+    suspend fun removeSessions(sessionKeys: Collection<String>): SessionRemovalResult
+
     /** Limpia catálogo y activa (tests / reset). No se llama en reconexión. */
     suspend fun clear()
 }
+
+/** Resultado de [SessionProvider.removeSessions]. */
+data class SessionRemovalResult(
+    val removedKeys: List<String>,
+    /** True si la activa estaba entre las eliminadas y pasó a la principal. */
+    val switchedToMain: Boolean,
+)

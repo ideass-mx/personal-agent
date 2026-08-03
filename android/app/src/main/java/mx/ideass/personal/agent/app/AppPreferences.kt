@@ -174,6 +174,17 @@ class AppPreferences @Inject constructor(
         }
     }
 
+    /** Si la pref apunta a alguna de [sessionKeys], la limpia (evitar huérfanos al borrar). */
+    suspend fun clearQuickSessionKeyIfMatching(sessionKeys: Collection<String>) {
+        val targets = sessionKeys.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        if (targets.isEmpty()) return
+        val current = getQuickSessionKey() ?: return
+        if (current !in targets) return
+        context.dataStore.edit { prefs ->
+            prefs.remove(Keys.QuickSessionKey)
+        }
+    }
+
     suspend fun saveConversationId(id: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.ConversationId] = id

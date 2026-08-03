@@ -221,4 +221,31 @@ class ChatStoreInboundTest {
         threads.handleInbound("s1", ChatInbound.AssistantDone("s1", runId = "r1"))
         assertFalse(threads.hasAssistantWork("s1"))
     }
+
+    @Test
+    fun removeSessions_dropsPartitionIncludingQueued() {
+        val threads = ChatThreads()
+        threads.setVisibleSession("keep")
+        threads.appendUser("keep", "queda", queued = false)
+        threads.appendUser("trash", "en cola", queued = true)
+        assertTrue(threads.hasAssistantWork("trash"))
+        assertEquals(setOf("keep", "trash"), threads.knownSessionKeys())
+
+        threads.removeSessions(listOf("trash"))
+        assertFalse(threads.knownSessionKeys().contains("trash"))
+        assertEquals(listOf("queda"), threads.messagesFor("keep").map { it.text })
+        assertTrue(threads.messagesFor("trash").isEmpty())
+        assertFalse(threads.hasAssistantWork("trash"))
+        assertEquals("keep", threads.visibleSessionKey)
+    }
+
+    @Test
+    fun removeSessions_clearsVisibleIfDeleted() {
+        val threads = ChatThreads()
+        threads.setVisibleSession("gone")
+        threads.appendUser("gone", "hola", queued = true)
+        threads.removeSessions(listOf("gone"))
+        assertEquals(null, threads.visibleSessionKey)
+        assertTrue(threads.visibleMessages().isEmpty())
+    }
 }

@@ -173,6 +173,17 @@ class ChatStore @Inject constructor(
         persistLocked()
     }
 
+    /**
+     * Elimina particiones locales de las keys indicadas (mensajes + queued).
+     * No toca el catálogo de [SessionProvider].
+     */
+    suspend fun removeSessions(sessionKeys: Collection<String>) = mutex.withLock {
+        ensureLoadedLocked()
+        threads.removeSessions(sessionKeys)
+        publishVisibleLocked()
+        persistLocked()
+    }
+
     private fun startObservingActiveLocked() {
         if (!observingActive.compareAndSet(false, true)) return
         scope.launch {

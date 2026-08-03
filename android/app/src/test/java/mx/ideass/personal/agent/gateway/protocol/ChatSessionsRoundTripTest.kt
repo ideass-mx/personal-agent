@@ -122,6 +122,31 @@ class ChatSessionsRoundTripTest {
     }
 
     @Test
+    fun sessionsDeleteAndPatchArchived_roundTrip() {
+        val patch = SessionsPatchParams(
+            key = "agent:main:dashboard:old",
+            agentId = "main",
+            archived = true,
+        )
+        val delete = SessionsDeleteParams(
+            key = "agent:main:dashboard:old",
+            agentId = "main",
+            deleteTranscript = true,
+            archivedOnly = true,
+        )
+        assertEquals(patch, GatewayJson.decodeFromString<SessionsPatchParams>(
+            GatewayJson.encodeToString(patch),
+        ))
+        assertEquals(delete, GatewayJson.decodeFromString<SessionsDeleteParams>(
+            GatewayJson.encodeToString(delete),
+        ))
+        val encodedDelete = GatewayJson.encodeToString(delete)
+        assertTrue(encodedDelete.contains("\"archivedOnly\":true"))
+        assertTrue(encodedDelete.contains("\"deleteTranscript\":true"))
+        assertEquals(RpcMethods.SESSIONS_DELETE, "sessions.delete")
+    }
+
+    @Test
     fun devicePairSetupCode_roundTrip() {
         val result = DevicePairSetupCodeResult(
             setupCode = "SETUP-CODE",
