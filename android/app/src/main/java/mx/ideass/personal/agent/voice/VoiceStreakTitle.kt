@@ -17,6 +17,8 @@ import javax.inject.Singleton
  * solo si el display name sigue siendo el provisional (no-destructivo).
  *
  * Fuera del camino crítico del cierre: el usuario ya oyó el earcon.
+ * Espera a que no haya respuesta en vuelo en esa sesión antes del chat.send
+ * de título (evita carrera con el turno anterior).
  */
 @Singleton
 class VoiceStreakTitle @Inject constructor(
@@ -38,6 +40,9 @@ class VoiceStreakTitle @Inject constructor(
         recordUserPrompt = { key, text ->
             chatStore.appendUserMessage(text = text, queued = false, sessionKey = key)
         },
+        waitForSessionIdle = { key, timeoutMs ->
+            chatStore.awaitAssistantIdle(key, timeoutMs)
+        },
         sessionKey = sessionKey,
         provisionalName = provisionalName,
         firstUserUtterance = firstUserUtterance,
@@ -47,11 +52,15 @@ class VoiceStreakTitle @Inject constructor(
 
 /**
  * Orquestación testeable del titulado (sin depender de ChatStore/Android).
+ *
+ * [waitForSessionIdle] true = idle a tiempo (se puede enviar prompt);
+ * false = timeout → fallback A sin chat.send de título.
  */
 internal suspend fun runStreakTitleAfterHang(
     sessionProvider: SessionProvider,
     chatConnection: ChatConnection,
     recordUserPrompt: suspend (sessionKey: String, text: String) -> Unit,
+    waitForSessionIdle: suspend (sessionKey: String, timeoutMs: Long) -> Boolean,
     sessionKey: String,
     provisionalName: String,
     firstUserUtterance: String?,
@@ -67,13 +76,19 @@ internal suspend fun runStreakTitleAfterHang(
     }
 
     val agentRaw = if (chatConnection.isConnected()) {
-        requestAgentTitle(
-            chatConnection = chatConnection,
-            recordUserPrompt = recordUserPrompt,
-            sessionKey = key,
-            titlePrompt = titlePrompt,
-            replyTimeoutMs = replyTimeoutMs,
-        )
+        val idle = waitForSessionIdle(key, replyTimeoutMs)
+        if (!idle) {
+            // Respuesta previa no cerró a tiempo: no competir con otro chat.send.
+            null
+        } else {
+            requestAgentTitle(
+                chatConnection = chatConnection,
+                recordUserPrompt = recordUserPrompt,
+                sessionKey = key,
+                titlePrompt = titlePrompt,
+                replyTimeoutMs = replyTimeoutMs,
+            )
+        }
     } else {
         null
     }

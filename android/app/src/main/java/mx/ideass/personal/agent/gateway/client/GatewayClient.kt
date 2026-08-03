@@ -398,15 +398,19 @@ class GatewayClient @Inject constructor(
                 _chatEvents.emit(event.payload)
                 when (val chat = event.payload) {
                     is ChatEvent.Delta -> {
-                        val text = chat.deltaText.ifEmpty {
-                            extractText(chat.message).orEmpty()
+                        val snapshot = extractText(chat.message)
+                        val useSnapshot = !snapshot.isNullOrEmpty()
+                        val text = when {
+                            useSnapshot -> snapshot!!
+                            else -> chat.deltaText
                         }
-                        if (text.isNotEmpty() || chat.replace == true) {
+                        if (text.isNotEmpty() || chat.replace == true || useSnapshot) {
                             _inbound.emit(
                                 ChatInbound.AssistantDelta(
                                     text = text,
-                                    replace = chat.replace == true,
+                                    replace = useSnapshot || chat.replace == true,
                                     sessionKey = chat.sessionKey,
+                                    runId = chat.runId,
                                 ),
                             )
                         }
@@ -419,11 +423,17 @@ class GatewayClient @Inject constructor(
                                         text = full,
                                         replace = true,
                                         sessionKey = chat.sessionKey,
+                                        runId = chat.runId,
                                     ),
                                 )
                             }
                         }
-                        _inbound.emit(ChatInbound.AssistantDone(chat.sessionKey))
+                        _inbound.emit(
+                            ChatInbound.AssistantDone(
+                                conversationId = chat.sessionKey,
+                                runId = chat.runId,
+                            ),
+                        )
                     }
                     is ChatEvent.Error -> {
                         _inbound.emit(
@@ -431,6 +441,7 @@ class GatewayClient @Inject constructor(
                                 code = chat.errorKind?.name ?: "CHAT_ERROR",
                                 message = chat.errorMessage ?: "error de chat",
                                 sessionKey = chat.sessionKey,
+                                runId = chat.runId,
                             ),
                         )
                     }
@@ -440,6 +451,7 @@ class GatewayClient @Inject constructor(
                                 code = "ABORTED",
                                 message = chat.errorMessage ?: "cancelado",
                                 sessionKey = chat.sessionKey,
+                                runId = chat.runId,
                             ),
                         )
                     }

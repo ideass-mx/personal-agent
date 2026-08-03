@@ -122,4 +122,103 @@ class ChatStoreInboundTest {
             threads.messagesFor(quick).map { it.text },
         )
     }
+
+    @Test
+    fun interleavedRuns_sameSession_keepBothBubblesComplete() {
+        val threads = ChatThreads()
+        val key = "agent:main:dashboard:streak-1"
+        threads.setVisibleSession(key)
+        threads.appendUser(key, "sabes qué me pasó", queued = false)
+        threads.appendUser(key, "Dame solo un título…", queued = false)
+
+        // Deltas mezclados; finales en orden inverso (título primero).
+        threads.handleInbound(
+            key,
+            ChatInbound.AssistantDelta("N", replace = false, sessionKey = key, runId = "run-A"),
+        )
+        threads.handleInbound(
+            key,
+            ChatInbound.AssistantDelta(
+                "Datos adicionales",
+                replace = true,
+                sessionKey = key,
+                runId = "run-B",
+            ),
+        )
+        threads.handleInbound(
+            key,
+            ChatInbound.AssistantDelta(
+                "Nunca lo conté del todo",
+                replace = true,
+                sessionKey = key,
+                runId = "run-A",
+            ),
+        )
+        threads.handleInbound(
+            key,
+            ChatInbound.AssistantDelta(
+                "Datos adicionales sobre lo ocurrido",
+                replace = true,
+                sessionKey = key,
+                runId = "run-B",
+            ),
+        )
+        threads.handleInbound(key, ChatInbound.AssistantDone(key, runId = "run-B"))
+        threads.handleInbound(
+            key,
+            ChatInbound.AssistantDelta(
+                "Nunca lo conté del todo a nadie",
+                replace = true,
+                sessionKey = key,
+                runId = "run-A",
+            ),
+        )
+        threads.handleInbound(key, ChatInbound.AssistantDone(key, runId = "run-A"))
+
+        assertEquals(
+            listOf(
+                "sabes qué me pasó",
+                "Dame solo un título…",
+                "Nunca lo conté del todo a nadie",
+                "Datos adicionales sobre lo ocurrido",
+            ),
+            threads.visibleMessages().map { it.text },
+        )
+        assertFalse(threads.hasAssistantWork(key))
+        assertTrue(threads.visibleMessages().none { it.streaming })
+    }
+
+    @Test
+    fun snapshotReplace_prefersFullTextOverConcat() {
+        val threads = ChatThreads()
+        threads.setVisibleSession("s1")
+        threads.appendUser("s1", "hola", queued = false)
+        threads.handleInbound(
+            "s1",
+            ChatInbound.AssistantDelta("Ho", replace = false, sessionKey = "s1", runId = "r1"),
+        )
+        threads.handleInbound(
+            "s1",
+            ChatInbound.AssistantDelta(
+                "Hola completo",
+                replace = true,
+                sessionKey = "s1",
+                runId = "r1",
+            ),
+        )
+        threads.handleInbound("s1", ChatInbound.AssistantDone("s1", runId = "r1"))
+        assertEquals(
+            listOf("hola", "Hola completo"),
+            threads.visibleMessages().map { it.text },
+        )
+    }
+
+    @Test
+    fun pendingReply_countsAsAssistantWorkUntilDone() {
+        val threads = ChatThreads()
+        threads.appendUser("s1", "ping", queued = false)
+        assertTrue(threads.hasAssistantWork("s1"))
+        threads.handleInbound("s1", ChatInbound.AssistantDone("s1", runId = "r1"))
+        assertFalse(threads.hasAssistantWork("s1"))
+    }
 }

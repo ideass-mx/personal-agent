@@ -6,11 +6,17 @@ import java.util.UUID
 /**
  * Partición de mensajes por sessionKey (sin Android/DataStore).
  * La UI solo ve el hilo [visibleSessionKey].
+ *
+ * Streams concurrentes: un acumulador por [ChatInbound.runId] (o legado
+ * mono-stream si runId es null). [replace]=true sustituye el texto (snapshot).
  */
 class ChatThreads {
     private data class ThreadState(
         val messages: List<ChatMessage> = emptyList(),
-        val streamingId: String? = null,
+        /** runKey → id de burbuja en streaming. */
+        val streamingByRun: Map<String, String> = emptyMap(),
+        /** chat.send / appendUser pendientes de AssistantDone (por sesión). */
+        val pendingReplies: Int = 0,
     )
 
     private val threads = linkedMapOf<String, ThreadState>()
@@ -31,6 +37,12 @@ class ChatThreads {
 
     fun knownSessionKeys(): Set<String> = threads.keys.toSet()
 
+    /** True si hay stream activo o un send aún sin AssistantDone en esa sesión. */
+    fun hasAssistantWork(sessionKey: String): Boolean {
+        val state = threads[sessionKey.trim()] ?: return false
+        return state.streamingByRun.isNotEmpty() || state.pendingReplies > 0
+    }
+
     fun appendUser(sessionKey: String, text: String, queued: Boolean): ChatMessage {
         val key = requireKey(sessionKey)
         val local = ChatMessage(
@@ -40,7 +52,10 @@ class ChatThreads {
             queued = queued,
         )
         val state = threads[key] ?: ThreadState()
-        threads[key] = state.copy(messages = state.messages + local)
+        threads[key] = state.copy(
+            messages = state.messages + local,
+            pendingReplies = state.pendingReplies + 1,
+        )
         return local
     }
 
@@ -69,12 +84,12 @@ class ChatThreads {
     fun handleInbound(sessionKey: String, msg: ChatInbound): Boolean {
         val key = requireKey(sessionKey)
         when (msg) {
-            is ChatInbound.AssistantDelta -> applyDelta(key, msg.text, msg.replace)
-            is ChatInbound.AssistantDone -> completeAssistant(key)
+            is ChatInbound.AssistantDelta -> applyDelta(key, msg.text, msg.replace, msg.runId)
+            is ChatInbound.AssistantDone -> completeAssistant(key, msg.runId)
             is ChatInbound.Error -> {
+                completeAssistant(key, msg.runId)
                 val state = threads[key] ?: ThreadState()
                 threads[key] = state.copy(
-                    streamingId = null,
                     messages = state.messages + ChatMessage(
                         id = UUID.randomUUID().toString(),
                         text = "Error: ${msg.message}",
@@ -89,7 +104,12 @@ class ChatThreads {
     fun replaceMessages(sessionKey: String, messages: List<ChatMessage>) {
         val key = requireKey(sessionKey)
         val state = threads[key] ?: ThreadState()
-        threads[key] = state.copy(messages = messages, streamingId = null)
+        threads[key] = state.copy(
+            messages = messages,
+            streamingByRun = emptyMap(),
+            // Conserva pendingReplies: un replace de history no cancela sends en vuelo.
+            pendingReplies = state.pendingReplies,
+        )
     }
 
     fun snapshot(): Map<String, List<StoredChatMessage>> =
@@ -123,9 +143,10 @@ class ChatThreads {
         }
     }
 
-    private fun applyDelta(key: String, text: String, replace: Boolean) {
+    private fun applyDelta(key: String, text: String, replace: Boolean, runId: String?) {
+        val runKey = runKeyOf(runId)
         val state = threads[key] ?: ThreadState()
-        val id = state.streamingId ?: UUID.randomUUID().toString()
+        val id = state.streamingByRun[runKey] ?: UUID.randomUUID().toString()
         val current = state.messages
         val existing = current.find { it.id == id }
         val nextMessages = if (existing == null) {
@@ -144,18 +165,31 @@ class ChatThreads {
                 }
             }
         }
-        threads[key] = state.copy(messages = nextMessages, streamingId = id)
+        threads[key] = state.copy(
+            messages = nextMessages,
+            streamingByRun = state.streamingByRun + (runKey to id),
+        )
     }
 
-    private fun completeAssistant(key: String) {
+    private fun completeAssistant(key: String, runId: String?) {
         val state = threads[key] ?: return
-        val id = state.streamingId
+        val runKey = runId?.trim()?.takeIf { it.isNotEmpty() }
+        val (nextStreaming, completedIds) = if (runKey == null) {
+            // Legado / Done sin runId: cierra todos los streams de la sesión.
+            emptyMap<String, String>() to state.streamingByRun.values.toSet()
+        } else {
+            val id = state.streamingByRun[runKey]
+            (state.streamingByRun - runKey) to setOfNotNull(id)
+        }
         threads[key] = state.copy(
-            streamingId = null,
-            messages = if (id == null) {
+            streamingByRun = nextStreaming,
+            pendingReplies = (state.pendingReplies - 1).coerceAtLeast(0),
+            messages = if (completedIds.isEmpty()) {
                 state.messages
             } else {
-                state.messages.map { if (it.id == id) it.copy(streaming = false) else it }
+                state.messages.map {
+                    if (it.id in completedIds) it.copy(streaming = false) else it
+                }
             },
         )
     }
@@ -164,5 +198,13 @@ class ChatThreads {
         val key = sessionKey.trim()
         require(key.isNotEmpty()) { "session_key_blank" }
         return key
+    }
+
+    companion object {
+        /** Clave interna cuando el wire no trae runId (hub legado). */
+        internal const val LEGACY_RUN_KEY: String = ""
+
+        internal fun runKeyOf(runId: String?): String =
+            runId?.trim()?.takeIf { it.isNotEmpty() } ?: LEGACY_RUN_KEY
     }
 }

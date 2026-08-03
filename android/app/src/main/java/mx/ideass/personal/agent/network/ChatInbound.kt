@@ -5,19 +5,23 @@ package mx.ideass.personal.agent.network
  * Independiente del wire (hub casero vs Gateway OpenClaw).
  *
  * [sessionKey] enruta al hilo correcto. Null = sesión activa (hub legacy).
+ * [runId] identifica el turno/run del stream (protocolo Gateway v4); null = legado mono-stream.
  */
 sealed interface ChatInbound {
     val sessionKey: String?
+    val runId: String?
 
     data class AssistantDelta(
         val text: String,
         val replace: Boolean = false,
         override val sessionKey: String? = null,
+        override val runId: String? = null,
     ) : ChatInbound
 
     data class AssistantDone(
         /** Para Gateway es la sessionKey del evento. */
         val conversationId: String,
+        override val runId: String? = null,
     ) : ChatInbound {
         override val sessionKey: String get() = conversationId
     }
@@ -26,5 +30,6 @@ sealed interface ChatInbound {
         val code: String,
         val message: String,
         override val sessionKey: String? = null,
+        override val runId: String? = null,
     ) : ChatInbound
 }

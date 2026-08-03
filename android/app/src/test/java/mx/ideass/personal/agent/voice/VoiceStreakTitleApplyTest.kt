@@ -48,6 +48,7 @@ class VoiceStreakTitleApplyTest {
             sessionProvider = provider,
             chatConnection = chat,
             recordUserPrompt = { _, _ -> },
+            waitForSessionIdle = { _, _ -> true },
             sessionKey = key,
             provisionalName = "Conversación de voz — 10:00",
             firstUserUtterance = "cómo está el clima",
@@ -72,6 +73,7 @@ class VoiceStreakTitleApplyTest {
             sessionProvider = provider,
             chatConnection = chat,
             recordUserPrompt = { _, _ -> },
+            waitForSessionIdle = { _, _ -> true },
             sessionKey = key,
             provisionalName = "Conversación de voz — 10:00",
             firstUserUtterance = "cómo está el clima hoy",
@@ -97,6 +99,7 @@ class VoiceStreakTitleApplyTest {
             sessionProvider = provider,
             chatConnection = chat,
             recordUserPrompt = { _, _ -> },
+            waitForSessionIdle = { _, _ -> true },
             sessionKey = key,
             provisionalName = "Conversación de voz — 10:00",
             firstUserUtterance = "recordatorio del dentista",
@@ -120,6 +123,7 @@ class VoiceStreakTitleApplyTest {
             sessionProvider = provider,
             chatConnection = chat,
             recordUserPrompt = { _, _ -> },
+            waitForSessionIdle = { _, _ -> true },
             sessionKey = key,
             provisionalName = provisional,
             firstUserUtterance = "algo",
@@ -132,6 +136,60 @@ class VoiceStreakTitleApplyTest {
             "Nombre a mano",
             provider.knownSessions.value.find { it.sessionKey == key }?.displayName,
         )
+    }
+
+    @Test
+    fun inFlightReply_waitsThenSendsTitlePrompt() = runBlocking {
+        val provider = primedProvider()
+        val key = registerStreak(provider, "Conversación de voz — 10:00")
+        val chat = FakeTitleChatConnection(connected = true)
+        chat.autoReply(key, "Titulo corto")
+        var waitCalls = 0
+        var recorded = 0
+
+        val applied = runStreakTitleAfterHang(
+            sessionProvider = provider,
+            chatConnection = chat,
+            recordUserPrompt = { _, _ -> recorded += 1 },
+            waitForSessionIdle = { _, _ ->
+                waitCalls += 1
+                true
+            },
+            sessionKey = key,
+            provisionalName = "Conversación de voz — 10:00",
+            firstUserUtterance = "sabes qué me pasó",
+            titlePrompt = prompt,
+            replyTimeoutMs = 2_000L,
+        )
+
+        assertEquals(1, waitCalls)
+        assertEquals(1, recorded)
+        assertEquals("Titulo corto", applied)
+        assertEquals(prompt, chat.lastSent?.first)
+    }
+
+    @Test
+    fun inFlightTimeout_usesFallbackWithoutSendingTitlePrompt() = runBlocking {
+        val provider = primedProvider()
+        val key = registerStreak(provider, "Conversación de voz — 10:00")
+        val chat = FakeTitleChatConnection(connected = true)
+        var recorded = 0
+
+        val applied = runStreakTitleAfterHang(
+            sessionProvider = provider,
+            chatConnection = chat,
+            recordUserPrompt = { _, _ -> recorded += 1 },
+            waitForSessionIdle = { _, _ -> false },
+            sessionKey = key,
+            provisionalName = "Conversación de voz — 10:00",
+            firstUserUtterance = "sabes qué me pasó ayer en la oficina",
+            titlePrompt = prompt,
+            replyTimeoutMs = 50L,
+        )
+
+        assertEquals(0, recorded)
+        assertNull(chat.lastSent)
+        assertEquals("sabes qué me pasó ayer en la oficina", applied)
     }
 
     private suspend fun primedProvider(): InMemorySessionProvider {

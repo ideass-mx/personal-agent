@@ -10,6 +10,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
@@ -60,6 +62,8 @@ class ChatStore @Inject constructor(
     private val threads = ChatThreads()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val observingActive = AtomicBoolean(false)
+    /** Señal al cambiar trabajo de asistente en vuelo (titulado / awaits). */
+    private val assistantWorkChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 64)
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
@@ -76,6 +80,27 @@ class ChatStore @Inject constructor(
         sessionProvider.activeSession.value?.sessionKey
             ?: threads.visibleSessionKey
 
+    /**
+     * Espera a que [sessionKey] no tenga respuesta en vuelo ni send pendiente.
+     * @return true si quedó idle a tiempo; false si expiró el timeout.
+     */
+    suspend fun awaitAssistantIdle(sessionKey: String, timeoutMs: Long): Boolean {
+        val key = sessionKey.trim()
+        if (key.isEmpty()) return true
+        mutex.withLock {
+            ensureLoadedLocked()
+            if (!threads.hasAssistantWork(key)) return true
+        }
+        val idle = withTimeoutOrNull(timeoutMs) {
+            while (true) {
+                val busy = mutex.withLock { threads.hasAssistantWork(key) }
+                if (!busy) return@withTimeoutOrNull true
+                assistantWorkChanged.first()
+            }
+        }
+        return idle == true
+    }
+
     suspend fun appendUserMessage(
         text: String,
         queued: Boolean,
@@ -88,6 +113,7 @@ class ChatStore @Inject constructor(
             publishVisibleLocked()
         }
         persistLocked()
+        assistantWorkChanged.tryEmit(Unit)
         local
     }
 
@@ -98,15 +124,18 @@ class ChatStore @Inject constructor(
         persistLocked()
     }
 
-    suspend fun handleInbound(msg: ChatInbound) = mutex.withLock {
-        ensureLoadedLocked()
-        val key = resolveInboundKeyLocked(msg.sessionKey) ?: return
-        val affectsVisible = threads.handleInbound(key, msg)
-        if (affectsVisible) {
-            publishVisibleLocked()
+    suspend fun handleInbound(msg: ChatInbound) {
+        mutex.withLock {
+            ensureLoadedLocked()
+            val key = resolveInboundKeyLocked(msg.sessionKey) ?: return@withLock
+            val affectsVisible = threads.handleInbound(key, msg)
+            if (affectsVisible) {
+                publishVisibleLocked()
+            }
+            persistLocked()
+            assistantWorkChanged.tryEmit(Unit)
+            // TODO(CP4+): marcar actividad en lista si !affectsVisible
         }
-        persistLocked()
-        // TODO(CP4+): marcar actividad en lista si !affectsVisible
     }
 
     suspend fun handleServer(msg: ServerMessage) {
