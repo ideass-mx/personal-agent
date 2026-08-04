@@ -6,8 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Desacople VIS ↔ racha + ventana estilo Gemini (keep-screen-on / keyguard)
- * + ciclo de vida del wake lock de pantalla (racha ∧ ventana, no turnos).
+ * Desacople superficie ↔ racha + Activity estilo Gemini (keep-screen-on /
+ * keyguard) + ciclo de vida del wake lock de pantalla (racha ∧ superficie,
+ * no turnos). La UI de racha vive en [VoiceLockscreenActivity], no en el VIS.
  */
 class VoiceVisDetachTest {
 

@@ -55,6 +55,20 @@
             </intent-filter>
         </activity>
 
+        <!--
+          Superficie de la racha sobre lockscreen (patrón Gemini FloatyActivity).
+          No exportada: solo VIS / VoiceLaunch internos.
+        -->
+        <activity
+            android:name=".voice.VoiceLockscreenActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.Agente.VoiceSession"
+            android:windowSoftInputMode="adjustResize" />
+
         <service
             android:name=".service.AgentService"
             android:exported="false"

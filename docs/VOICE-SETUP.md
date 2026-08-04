@@ -168,26 +168,57 @@ probar en el 15T (o equivalente):
 Si la racha muere al apagarse la pantalla, revisa primero las exenciones de
 la §2 (mismas que Fase 1; no hay permiso HyperOS nuevo para este fix).
 
-### Limitación conocida: huella (UDFPS) sobre la ventana
+### UDFPS sobre lockscreen: resuelto (patrón Activity / Gemini)
 
-En HyperOS, las ventanas del sensor de huella (`gxzw_*`) las dibuja Xiaomi
-**por encima de cualquier app**, incluida la sesión VIS opaca. La oclusión
-del keyguard (fondo / UI de bloqueo) funciona; la afordancia de huella puede
-seguir visible encima. **No seguir iterando** contra esto: no hay flag de
-ventana de app que lo retire de forma fiable. Alternativas de producto
-(fuera de alcance): Activity assistant / oclusión nativa del keyguard.
+**Veredicto (validado en Xiaomi 25069PTEBG / HyperOS V816, Android 15):
+alcanzable.** La UI de la racha debe ser una **Activity `showWhenLocked`
+resumida** (`VoiceLockscreenActivity`), no la ventana del
+`VoiceInteractionSession`. Con eso HyperOS retira `gxzw_touch` /
+`gxzw_anim` (mismo efecto que Gemini `FloatyActivity`).
+
+Evidencia en dispositivo (Hablar → `VoiceLockscreenActivity` sobre keyguard):
+
+| | Antes (lockscreen idle) | Después (Activity resumida) |
+|---|---|---|
+| `topResumedActivity` | Launcher / — | `…voice.VoiceLockscreenActivity` |
+| `Occluded` / `mKeyguardOccluded` | `false` | `true` |
+| `gxzw_*` | Window #0/#1 visibles | **ausentes** (solo `miui_keyguard_shortcut`) |
+
+Al `force-stop` / colgar: `Occluded=false` y `gxzw_*` vuelven.
+
+**Por qué falló la iteración previa:** se logró `mKeyguardOccluded=true` con
+una Activity oclusora vía `startAssistantActivity`, pero la UI real seguía
+en el VIS (`TYPE_VOICE_INTERACTION`). Con dos superficies, HyperOS seguía
+dibujando `gxzw_*`. Gemini pone la UI **en** la Activity (`FloatyActivity`:
+`showWhenLocked` + `turnScreenOn` + `singleTask` + `excludeFromRecents`) y
+esa queda como `topResumedActivity`.
+
+**Implementación actual:**
+
+- `VoiceLockscreenActivity` — superficie de racha (Compose / Terminar /
+  keep-screen-on / bit de wake `Agente:voz-pantalla`).
+- `AgentVoiceInteractionSession` — solo invocador: `start` / reinvocación +
+  `startAssistantActivity(VoiceLockscreenActivity)` y `hide()` del VIS.
+- `InConversation` (mic en chat) sigue en `MainActivity` / `VoiceScreen`;
+  no usa esta Activity.
+
+Flags aplicados (alineados a FloatyActivity + oclusión opaca):
+`setShowWhenLocked(true)`, `setTurnScreenOn(true)`, manifiesto
+`showWhenLocked`/`turnScreenOn`, sin `FLAG_DISMISS_KEYGUARD`, tema
+`Theme.Agente.VoiceSession` opaco fullscreen, `layoutInDisplayCutoutMode`
+short edges, `PixelFormat.OPAQUE`.
 
 ## 7. Notas
 
 - El FGS de conexión es `specialUse` (24/7). Durante la voz se añade un FGS
   efímero de tipo `microphone` y se libera **al colgar** (comando, UI,
-  silencio, reinvocación) — no al ocultarse la ventana del asistente.
+  silencio, reinvocación) — no al ocultarse la superficie de la racha.
 - Pantalla sobre keyguard: vía activa = `Agente:voz-pantalla` (racha ∧
-  ventana vía `VoiceScreenWakeController`). Distinto de `Agente:respuesta`
-  (PARTIAL por streaming en `AgentService`). Permiso `WAKE_LOCK` ya en el
-  manifest.
+  superficie vía `VoiceScreenWakeController` en `VoiceLockscreenActivity`).
+  Distinto de `Agente:respuesta` (PARTIAL por streaming en `AgentService`).
+  Permiso `WAKE_LOCK` ya en el manifest.
 - Exenciones HyperOS: las de la §2 bastan; este desacople VIS/racha no exige
-  ventana flotante extra ni otra regla de batería.
+  otra regla de batería.
 - No hace falta wake word ni comandos de sesión («cambia a X») en esta fase.
 - El rename del título es local; sync Gateway (`sessions.patch`) queda como TODO.
 - Borrar sesiones (lista): limpia catálogo local, mensajes y prefs asociadas.

@@ -30,9 +30,9 @@ class AgentVoiceInteractionService : VoiceInteractionService() {
     }
 
     /**
-     * Gesto / affordance desde el keyguard. Abrimos la sesión VIS (ventana
-     * opaca a pantalla completa con FLAG_SHOW_WHEN_LOCKED, sin dismiss del
-     * bloqueo) — no una Activity aparte que pida huella/PIN.
+     * Gesto / affordance desde el keyguard. Abrimos la sesión VIS, que lanza
+     * [mx.ideass.personal.agent.voice.VoiceLockscreenActivity] (showWhenLocked,
+     * sin dismiss del bloqueo) como superficie de la racha.
      */
     override fun onLaunchVoiceAssistFromKeyguard() {
         Log.d(TAG, "AgentVIS: onLaunchVoiceAssistFromKeyguard")

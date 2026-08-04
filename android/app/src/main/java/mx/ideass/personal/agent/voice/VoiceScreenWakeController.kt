@@ -8,9 +8,10 @@ import javax.inject.Singleton
 
 /**
  * Dueño de `Agente:voz-pantalla`: se adquiere **una vez** cuando racha activa
- * ∧ ventana VIS visible, y se sostiene hasta hangUp / onHide / onDestroy /
- * error fatal. Independiente del wake lock parcial `Agente:respuesta`
- * (streaming) y de las transiciones Listening→Thinking→Speaking.
+ * ∧ superficie visible ([VoiceLockscreenActivity]), y se sostiene hasta
+ * hangUp / onStop / onDestroy / error fatal. Independiente del wake lock
+ * parcial `Agente:respuesta` (streaming) y de las transiciones
+ * Listening→Thinking→Speaking.
  */
 @Singleton
 class VoiceScreenWakeController @Inject constructor(
@@ -21,7 +22,7 @@ class VoiceScreenWakeController @Inject constructor(
 
     val isHeld: Boolean get() = wakeLock.isHeld
 
-    /** Llamar desde la VIS en onShow / onHide / onDestroy. */
+    /** Llamar desde [VoiceLockscreenActivity] en onStart / onStop / onDestroy. */
     fun setWindowVisible(visible: Boolean) {
         if (!gate.setWindowVisible(visible)) return
         applyLock()
@@ -36,7 +37,7 @@ class VoiceScreenWakeController @Inject constructor(
         applyLock()
     }
 
-    /** Cinturón en onDestroy de la ventana. */
+    /** Cinturón en onDestroy de la superficie. */
     fun forceRelease() {
         gate.forceRelease()
         wakeLock.release()

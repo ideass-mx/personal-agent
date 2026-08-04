@@ -8,8 +8,8 @@
     </style>
 
     <!--
-      Sustituye Theme_DeviceDefault_VoiceInteractionSession (suele ser translúcido).
-      Pantalla completa opaca para ocluir el keyguard / afordancia UDFPS.
+      Tema de VoiceLockscreenActivity (racha sobre keyguard).
+      Pantalla completa opaca para ocluir el lockscreen / afordancia UDFPS.
     -->
     <style name="Theme.Agente.VoiceSession" parent="Theme.Agente">
         <item name="android:windowIsTranslucent">false</item>

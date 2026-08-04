@@ -39,8 +39,8 @@ import androidx.navigation.navArgument
 import mx.ideass.personal.agent.chat.ChatScreen
 import mx.ideass.personal.agent.chat.SessionsScreen
 import mx.ideass.personal.agent.connection.ConnectionScreen
-import mx.ideass.personal.agent.assistant.AgentVoiceInteractionService
 import mx.ideass.personal.agent.service.AgentService
+import mx.ideass.personal.agent.voice.VoiceLaunch
 import mx.ideass.personal.agent.voice.VoiceOrigin
 import mx.ideass.personal.agent.voice.VoiceScreen
 import dagger.hilt.android.AndroidEntryPoint
@@ -110,16 +110,9 @@ class MainActivity : ComponentActivity() {
 
     private fun consumeHablarIntent(intent: Intent?) {
         if (intent?.action != AgentService.ACTION_HABLAR) return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        }
-        val vis = AgentVoiceInteractionService.instance
-        if (vis != null) {
-            vis.requestShow()
-            return
-        }
-        pendingVoiceLaunch.value = true
+        // Misma ruta que notificación/tile: VIS o VoiceLockscreenActivity.
+        // No setShowWhenLocked aquí — la superficie de racha ya lo declara.
+        VoiceLaunch.fromFallback(this)
     }
 
     override fun onStart() {

@@ -83,9 +83,10 @@ class VoiceSession @Inject constructor(
     val state: StateFlow<VoiceState> = _state.asStateFlow()
 
     /**
-     * Emite cuando la sesión se cierra sola (timeout/toggle/error); la VIS debe hide().
+     * Emite cuando la sesión se cierra sola (timeout/toggle/error); la
+     * [VoiceLockscreenActivity] debe finish().
      * Sin buffer: un ended sin colector no debe envenenar la siguiente invocación
-     * (hide/release prematuro ~ms después del show).
+     * (finish prematuro ~ms después del show).
      */
     private val _sessionEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 0)
     val sessionEnded: SharedFlow<Unit> = _sessionEnded.asSharedFlow()
@@ -135,8 +136,8 @@ class VoiceSession @Inject constructor(
             pendingTitleProvisionalName = null
             firstUserUtterance = null
             sessionActive = true
-            // Pantalla: bit de racha (la VIS ya marcó ventana visible). Una sola
-            // adquisición; los turnos Listening/Thinking/Speaking no lo tocan.
+            // Pantalla: bit de racha (la Activity ya marcó superficie visible).
+            // Una sola adquisición; Listening/Thinking/Speaking no lo tocan.
             screenWake.setStreakActive(true)
             restartToken += 1
             hubJob?.cancel()
