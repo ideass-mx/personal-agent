@@ -26,8 +26,15 @@ class VoiceViewModel @Inject constructor(
     /** Colgar la racha desde UI (earcon manual). */
     fun endSession() = voiceSession.hangUp(HangReason.Ui)
 
+    /**
+     * Al salir de la pantalla de voz (nav / finish de Activity), cuelga si aún
+     * hubiera sesión. No aplica al VIS: esa ventana no usa este ViewModel y su
+     * onHide ya no llama [VoiceSession.stop].
+     */
     override fun onCleared() {
-        voiceSession.stop()
+        if (voiceSession.isSessionActive) {
+            voiceSession.stop()
+        }
         super.onCleared()
     }
 }

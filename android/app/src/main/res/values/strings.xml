@@ -41,8 +41,27 @@
         <item>termina</item>
         <item>gracias</item>
     </string-array>
-    <!-- Prompt de título-resumen al colgar la racha (queda en el historial). -->
+    <!--
+      Prompt de título-resumen al colgar la racha.
+      Se envía por chat.send; esta app lo oculta en UI (par prompt+respuesta).
+      Al cambiar el texto: añadir el valor anterior a voice_streak_title_prompt_history.
+    -->
     <string name="voice_streak_title_prompt">Dame solo un título de máximo 6 palabras para esta conversación. Responde únicamente el título.</string>
+    <!-- Vigente primero. Incluir textos viejos para que sesiones antiguas sigan ocultas tras chat.history. -->
+    <string-array name="voice_streak_title_prompt_history">
+        <item>@string/voice_streak_title_prompt</item>
+    </string-array>
+
+    <!--
+      Instrucción de estilo de voz (prepend al primer utterance de racha).
+      Al cambiar el texto: añadir el valor anterior a voice_style_instruction_history.
+    -->
+    <string name="voice_style_instruction">Estamos conversando por voz: responde breve y conversacional (2-4 frases), sin listas, sin formato markdown, sin emojis. Si la respuesta requiere detalle largo, da lo esencial y ofrece ampliar.</string>
+    <string name="voice_style_separator">\n\n</string>
+    <!-- Vigente primero. Incluir textos viejos para que el strip sobreviva a chat.history. -->
+    <string-array name="voice_style_instruction_history">
+        <item>@string/voice_style_instruction</item>
+    </string-array>
     <!-- LEGADO: sesión fija «Rápidas» (ya no es destino del flujo de voz). -->
     <string name="session_quick_display_name">Rápidas</string>
     <string name="session_quick_id">rapidas</string>

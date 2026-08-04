@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.chat.ChatStore
+import mx.ideass.personal.agent.chat.VoiceStyleWire
 import mx.ideass.personal.agent.network.ChatConnection
 import mx.ideass.personal.agent.network.ChatInbound
 import mx.ideass.personal.agent.voice.audio.BluetoothScoController
@@ -55,6 +56,7 @@ class VoiceSession @Inject constructor(
     private val voiceStreakTitle: VoiceStreakTitle,
     private val bluetoothSco: BluetoothScoController,
     private val earcons: VoiceEarcons,
+    private val screenWake: VoiceScreenWakeController,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -80,8 +82,12 @@ class VoiceSession @Inject constructor(
     private val _state = MutableStateFlow<VoiceState>(VoiceState.Idle)
     val state: StateFlow<VoiceState> = _state.asStateFlow()
 
-    /** Emite cuando la sesión se cierra sola (timeout/toggle/error); la VIS debe hide(). */
-    private val _sessionEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    /**
+     * Emite cuando la sesión se cierra sola (timeout/toggle/error); la VIS debe hide().
+     * Sin buffer: un ended sin colector no debe envenenar la siguiente invocación
+     * (hide/release prematuro ~ms después del show).
+     */
+    private val _sessionEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 0)
     val sessionEnded: SharedFlow<Unit> = _sessionEnded.asSharedFlow()
 
     private var stt: SpeechRecognizerEngine? = null
@@ -129,6 +135,9 @@ class VoiceSession @Inject constructor(
             pendingTitleProvisionalName = null
             firstUserUtterance = null
             sessionActive = true
+            // Pantalla: bit de racha (la VIS ya marcó ventana visible). Una sola
+            // adquisición; los turnos Listening/Thinking/Speaking no lo tocan.
+            screenWake.setStreakActive(true)
             restartToken += 1
             hubJob?.cancel()
             hubJob = null
@@ -147,8 +156,10 @@ class VoiceSession @Inject constructor(
     }
 
     /**
-     * Cierre forzado sin earcon (VIS onHide / ViewModel clear).
-     * Si había racha (titulado activo), dispara título async como hangUp.
+     * Cierre forzado sin earcon (p. ej. ViewModel clear al salir de [VoiceScreen]).
+     * El descarte de la ventana VIS **no** debe llamar aquí: la racha vive en este
+     * singleton + [VoiceMicForegroundService] hasta [hangUp] (comando, UI, timeout,
+     * reinvocación). Si había racha (titulado activo), dispara título async como hangUp.
      * Para colgar con earcon usar [hangUp].
      */
     fun stop() {
@@ -257,6 +268,7 @@ class VoiceSession @Inject constructor(
 
         val hadWork = sessionActive || stt != null || tts != null
         if (!hadWork) {
+            screenWake.setStreakActive(false)
             earcons.release()
             bluetoothSco.stop()
             releaseMicForeground()
@@ -274,6 +286,8 @@ class VoiceSession @Inject constructor(
         }
 
         sessionActive = false
+        // Liberar pantalla al colgar (no esperar al earcon ni a hide de la VIS).
+        screenWake.setStreakActive(false)
         restartToken += 1
         hubJob?.cancel()
         hubJob = null
@@ -619,15 +633,27 @@ class VoiceSession @Inject constructor(
                 if (!online) {
                     chatConnection.reconnectNow()
                 }
-                if (firstUserUtterance == null) {
+                val isFirst = firstUserUtterance == null
+                if (isFirst) {
                     firstUserUtterance = trimmed
                 }
+                // Prepend de estilo solo en racha (titlesOnHang) y solo el 1.er utterance.
+                // InConversation no aplica. El hilo guarda el wire; la UI hace strip.
+                val wireText = VoiceStyleWire.build(
+                    utterance = trimmed,
+                    applyStyle = VoiceStyleWire.shouldApply(
+                        titlesOnHang = titlesOnHang,
+                        isFirstUserUtterance = isFirst,
+                    ),
+                    styleInstruction = context.getString(R.string.voice_style_instruction),
+                    separator = context.getString(R.string.voice_style_separator),
+                )
                 chatStore.appendUserMessage(
-                    text = trimmed,
+                    text = wireText,
                     queued = !online,
                     sessionKey = key,
                 )
-                chatConnection.sendUserMessage(trimmed, key)
+                chatConnection.sendUserMessage(wireText, key)
                 val reply = kotlinx.coroutines.withTimeoutOrNull(
                     VoiceTurnPolicy.REPLY_TIMEOUT_MS,
                 ) {
@@ -707,6 +733,7 @@ class VoiceSession @Inject constructor(
 
     private fun finishCleanupAfterAnnounce() {
         sessionActive = false
+        screenWake.setStreakActive(false)
         restartToken += 1
         hubJob?.cancel()
         hubJob = null
@@ -734,6 +761,7 @@ class VoiceSession @Inject constructor(
         cancelPendingClose()
         closingAfterAnnounce = false
         sessionActive = false
+        screenWake.setStreakActive(false)
         restartToken += 1
         hubJob?.cancel()
         hubJob = null

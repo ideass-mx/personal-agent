@@ -45,6 +45,8 @@ como una sesión más en la lista.
 ## 2. Exenciones de batería (imprescindible)
 
 HyperOS puede congelar o matar el proceso tras minutos con pantalla apagada.
+Las mismas exenciones de Fase 1 cubren la racha con pantalla apagada (FGS de
+micrófono efímero); **no** hay un permiso HyperOS adicional para este flujo.
 
 En la pantalla **Conexión** de la app:
 
@@ -93,6 +95,8 @@ Siempre disponibles:
 
 ## 6. Comprobar que funciona
 
+### Humo (pantalla apagada al invocar)
+
 1. Conexión Gateway en verde; exención de batería concedida.
 2. Pantalla apagada, buds puestos → gesto o **Hablar**.
 3. Pregunta «¿qué día es hoy?» → oyes la respuesta en los buds.
@@ -103,13 +107,87 @@ Siempre disponibles:
 Si no hay red al invocar, o el Gateway no responde a tiempo a mitad de turno,
 el agente lo dice por voz (no falla en silencio).
 
+### Racha con pantalla que se apaga a mitad (regresión crítica)
+
+La ventana del asistente es solo UI: si el sistema la descarta al re-bloquearse
+la pantalla, **la conversación debe seguir** (FGS de micrófono + SCO/TTS en
+los buds).
+
+Mientras la ventana está **visible** y la racha activa, la pantalla no debe
+apagarse sola. Mecanismos (ambos con la misma condición
+ventana-visible ∧ racha-activa):
+
+1. `FLAG_KEEP_SCREEN_ON` / `View.keepScreenOn` — funciona con el teléfono
+   **desbloqueado**.
+2. **Wake lock de pantalla** (`SCREEN_BRIGHT_WAKE_LOCK` +
+   `ACQUIRE_CAUSES_WAKEUP`, tag `Agente:voz-pantalla`) — workaround porque
+   **HyperOS ignora el flag (1) cuando la ventana VIS está sobre el
+   keyguard** (`FLAG_SHOW_WHEN_LOCKED`). Ciclo de vida de **racha** (no de
+   turno ni del parcial `Agente:respuesta`): se adquiere una vez cuando
+   ventana visible ∧ racha activa (`VoiceScreenWakeController`); se sostiene
+   durante Listening→Thinking→Speaking; se libera solo en hangUp, onHide,
+   onDestroy o error fatal. La deprecación del wake lock es aceptable; el
+   plan B (`userActivity`) no está activo.
+
+Si el usuario apaga con el botón de bloqueo, la ventana puede desaparecer y
+el audio continúa; en esta iteración la UI no se re-muestra sola al despertar.
+
+#### Prueba en dispositivo (Xiaomi / HyperOS — validación final)
+
+Los tests unitarios no verifican que el sistema honre la pantalla; hay que
+probar en el 15T (o equivalente):
+
+1. Teléfono **bloqueado**, buds puestos → triple toque (o gesto de
+   asistente). La ventana debe aparecer **sobre el lockscreen** sin pedir
+   huella/PIN.
+2. Conversar **>1 minuto** sin tocar nada: la pantalla **no** debe apagarse
+   por el timeout de 15 s del sistema.
+3. **Durante la racha** (ventana aún visible), comprobar que el lock está
+   activo — no solo en el log histórico de ACQ/REL:
+   `adb shell dumpsys power | grep -i voz-pantalla`
+   Debe aparecer en la sección de wake locks held (tag `Agente:voz-pantalla`).
+   Si ves ACQ y REL a los ~ms del arranque, el ciclo de vida volvió a
+   romperse (regresión).
+4. (Opcional) Apaga con el botón de bloqueo **sin colgar** → audio sigue;
+   el wake lock de pantalla se libera al hide (correcto); al colgar, sin
+   residual (paso 6).
+5. Di «gracias» → earcon de cierre. La pantalla debe volver al timeout
+   normal (apagarse sola a los ~15 s configurados).
+6. Tras colgar: el mismo `grep -i voz-pantalla` **sin** lock activo held, y
+   `adb shell dumpsys power | grep -i wake` sin `Agente:voz-pantalla` held.
+7. Caso desbloqueado: invocar con el teléfono abierto → keep-screen-on como
+   antes (el wake lock también se adquiere; no cambia el comportamiento).
+8. Abre la app: la sesión titulada incluye **todos** los turnos (también los
+   posteriores al apagado manual).
+9. En Ajustes → Apps → Agente → servicios en primer plano (o batería /
+   notificaciones): **no** debe quedar un FGS de micrófono residual tras
+   colgar. Durante la racha sí puede verse la notificación «escuchando».
+
+Si la racha muere al apagarse la pantalla, revisa primero las exenciones de
+la §2 (mismas que Fase 1; no hay permiso HyperOS nuevo para este fix).
+
 ## 7. Notas
 
 - El FGS de conexión es `specialUse` (24/7). Durante la voz se añade un FGS
-  efímero de tipo `microphone` y se libera al terminar.
+  efímero de tipo `microphone` y se libera **al colgar** (comando, UI,
+  silencio, reinvocación) — no al ocultarse la ventana del asistente.
+- Pantalla sobre keyguard: vía activa = `Agente:voz-pantalla` (racha ∧
+  ventana vía `VoiceScreenWakeController`). Distinto de `Agente:respuesta`
+  (PARTIAL por streaming en `AgentService`). Permiso `WAKE_LOCK` ya en el
+  manifest.
+- Exenciones HyperOS: las de la §2 bastan; este desacople VIS/racha no exige
+  ventana flotante extra ni otra regla de batería.
 - No hace falta wake word ni comandos de sesión («cambia a X») en esta fase.
 - El rename del título es local; sync Gateway (`sessions.patch`) queda como TODO.
 - Borrar sesiones (lista): limpia catálogo local, mensajes y prefs asociadas.
   Remoto best-effort vía archive→delete (`sessions.patch` archived +
   `sessions.delete` con `archivedOnly`/`deleteTranscript`); si el RPC falla,
   el borrado local sigue. La principal no se puede borrar. Sin undo.
+- **Turnos ocultos (solo esta app):** en rachas, el primer mensaje lleva un
+  prepend de estilo de voz en el wire, y al colgar se envía un par
+  prompt/respuesta de titulado. Esta app los filtra al pintar (y tras
+  `chat.history`). Otros clientes del Gateway (app oficial, WebChat) verán
+  esos turnos crudos — trade-off aceptado. Si cambias el texto de
+  `voice_style_instruction` o `voice_streak_title_prompt`, añade el valor
+  anterior a su `*_history` en recursos o las sesiones viejas volverán a
+  mostrarlos.

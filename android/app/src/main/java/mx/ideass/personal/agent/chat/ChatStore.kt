@@ -52,6 +52,7 @@ class ChatStore @Inject constructor(
     @ApplicationContext private val context: Context,
     private val preferences: AppPreferences,
     private val sessionProvider: SessionProvider,
+    private val hiddenTranscript: HiddenTranscriptConfig,
 ) {
     private object Keys {
         val Messages = stringPreferencesKey("messages_json")
@@ -242,7 +243,13 @@ class ChatStore @Inject constructor(
     }
 
     private fun publishVisibleLocked() {
-        _messages.value = threads.visibleMessages()
+        // Filtra estilo/titulado solo al pintar; el hilo persistido conserva el wire.
+        _messages.value = HiddenTranscript.forDisplay(
+            messages = threads.visibleMessages(),
+            styleInstructions = hiddenTranscript.styleInstructionHistory,
+            styleSeparator = hiddenTranscript.styleSeparator,
+            titlePrompts = hiddenTranscript.titlePromptHistory,
+        )
     }
 
     private suspend fun persistLocked() {

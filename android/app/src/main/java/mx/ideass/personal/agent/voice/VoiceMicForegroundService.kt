@@ -19,8 +19,9 @@ import mx.ideass.personal.agent.service.AgentService
 
 /**
  * FGS efímero tipo [ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE] mientras
- * dura una [VoiceSession]. Convive con [AgentService] (specialUse); no lo
- * sustituye. Se libera al terminar la sesión de voz.
+ * dura una [VoiceSession]. Es el ancla de proceso/mic cuando la ventana VIS
+ * desaparece (pantalla apagada); no sustituye a [AgentService] (specialUse).
+ * Se libera solo al colgar o [VoiceSession.stop], no al hide del VIS.
  */
 class VoiceMicForegroundService : Service() {
 

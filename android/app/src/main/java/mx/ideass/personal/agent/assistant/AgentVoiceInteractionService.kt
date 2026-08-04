@@ -6,7 +6,7 @@ import android.util.Log
 
 /**
  * Servicio de interacción de voz del sistema. HyperOS lo valida para
- * ROLE_ASSISTANT; la sesión real se cablea en piezas posteriores.
+ * ROLE_ASSISTANT; la sesión UI vive en [AgentVoiceInteractionSession].
  */
 class AgentVoiceInteractionService : VoiceInteractionService() {
 
@@ -27,6 +27,16 @@ class AgentVoiceInteractionService : VoiceInteractionService() {
     override fun onShutdown() {
         instance = null
         super.onShutdown()
+    }
+
+    /**
+     * Gesto / affordance desde el keyguard. Abrimos la sesión VIS (ventana
+     * con FLAG_SHOW_WHEN_LOCKED, sin dismiss del bloqueo) — no una Activity
+     * aparte que pida huella/PIN.
+     */
+    override fun onLaunchVoiceAssistFromKeyguard() {
+        Log.d(TAG, "AgentVIS: onLaunchVoiceAssistFromKeyguard")
+        requestShow()
     }
 
     fun requestShow() {
