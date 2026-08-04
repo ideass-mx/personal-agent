@@ -190,7 +190,8 @@ class VoiceSession @Inject constructor(
 
     private fun hangUpLocked(reason: HangReason) {
         if (!sessionActive && streakSessionKey == null) {
-            performStop(closeEarcon = CloseEarcon.None, notifyEnded = false)
+            // Sesión ya muerta: aún así notificar a la VIS para hide() (Terminar / cascarón).
+            performStop(closeEarcon = CloseEarcon.None, notifyEnded = true)
             return
         }
         Log.i(TAG, "hangUp reason=$reason titlesOnHang=$titlesOnHang")
@@ -212,7 +213,9 @@ class VoiceSession @Inject constructor(
     }
 
     /**
-     * Titulado fuera del camino crítico: captura valores y lanza async.
+     * Titulado fuera del camino crítico: captura valores y lanza en
+     * [Dispatchers.Default] (nunca bloquea hide/UI; el await de idle/respuesta
+     * puede tardar hasta [VoiceTurnPolicy.REPLY_TIMEOUT_MS]).
      * Si la app muere antes de completar, queda el provisional (aceptable).
      */
     private fun scheduleStreakTitle(
@@ -226,7 +229,8 @@ class VoiceSession @Inject constructor(
         pendingTitleProvisionalName = provisional
         val prompt = context.getString(R.string.voice_streak_title_prompt)
         val first = firstUtterance
-        scope.launch {
+        // Default: fuera del Main; el await de idle/respuesta no contiende con hide.
+        scope.launch(Dispatchers.Default) {
             try {
                 voiceStreakTitle.applyAfterHang(
                     sessionKey = key,
@@ -249,8 +253,11 @@ class VoiceSession @Inject constructor(
     }
 
     /**
-     * Orden crítico para earcons de cierre: STT/TTS off → earcon (SCO vivo) →
-     * delay → liberar SCO. Nunca al revés.
+     * Cierre: UI libre de inmediato; earcon con SCO vivo; cleanup de audio diferido.
+     *
+     * Orden ([VoiceHangClosePolicy]): wake → stop escucha → Idle → sessionEnded
+     * (hide) → earcon → (hold) → SCO/mic. El titulado ya se disparó async en
+     * [scheduleStreakTitle] y no forma parte de este camino.
      */
     private fun performStop(closeEarcon: CloseEarcon, notifyEnded: Boolean) {
         cancelSilenceTimeout()
@@ -294,10 +301,17 @@ class VoiceSession @Inject constructor(
         // STT/TTS fuera antes del earcon; SCO sigue activo para que se oiga en buds.
         destroyStt()
         tts?.stop()
+        // Idle ya: Terminar no debe verse congelado mientras suena el earcon.
+        setState(VoiceState.Idle)
+        _ui.value = VoiceSessionUi(state = VoiceState.Idle)
 
         when (closeEarcon) {
             CloseEarcon.None -> finishCleanup(notifyEnded = notifyEnded)
             CloseEarcon.Timeout, CloseEarcon.Manual -> {
+                // hide inmediato: no encadenar sessionEnded al hold SCO / titulado.
+                if (notifyEnded && VoiceHangClosePolicy.notifyUiBeforeAudioCleanup()) {
+                    _sessionEnded.tryEmit(Unit)
+                }
                 val playedMs = when (closeEarcon) {
                     CloseEarcon.Timeout -> earcons.playTimeout()
                     CloseEarcon.Manual -> earcons.playCloseManual()
@@ -309,7 +323,8 @@ class VoiceSession @Inject constructor(
                 )
                 val runnable = Runnable {
                     pendingCloseRunnable = null
-                    finishCleanup(notifyEnded = notifyEnded)
+                    // Ya notificamos arriba si apply; no re-emitir (buffer 0).
+                    finishCleanup(notifyEnded = false)
                 }
                 pendingCloseRunnable = runnable
                 mainHandler.postDelayed(runnable, holdMs)
@@ -355,15 +370,22 @@ class VoiceSession @Inject constructor(
                         failFatalEarcon(errorCopy.ui(VoiceErrorKind.TtsUnavailable))
                         return
                     }
-                    val startDecision = VoiceTurnPolicy.afterSessionStart(
-                        connected = chatConnection.isConnected(),
-                        sttAvailable = sttAvailable,
-                    )
-                    if (startDecision is VoiceTurnDecision.AudibleError) {
-                        announceErrorAndClose(startDecision.kind)
-                        return
+                    // Reconexión bajo demanda: socket muerto + red viva → margen corto.
+                    hubJob?.cancel()
+                    hubJob = scope.launch {
+                        if (!sessionActive) return@launch
+                        val online = VoiceConnectionGate.ensureConnected(chatConnection)
+                        if (!sessionActive) return@launch
+                        val startDecision = VoiceTurnPolicy.afterSessionStart(
+                            connected = online,
+                            sttAvailable = sttAvailable,
+                        )
+                        if (startDecision is VoiceTurnDecision.AudibleError) {
+                            announceErrorAndClose(startDecision.kind)
+                            return@launch
+                        }
+                        bindTargetThenListen(bindPlan)
                     }
-                    bindTargetThenListen(bindPlan)
                 }
 
                 override fun onDone() {
@@ -393,37 +415,38 @@ class VoiceSession @Inject constructor(
         )
     }
 
-    private fun bindTargetThenListen(bindPlan: VoiceBindPlan) {
-        hubJob?.cancel()
-        hubJob = scope.launch {
-            if (!sessionActive) return@launch
-            when (bindPlan) {
-                is VoiceBindPlan.Invalid -> {
-                    announceErrorAndClose(VoiceErrorKind.StreakUnavailable)
+    private suspend fun bindTargetThenListen(bindPlan: VoiceBindPlan) {
+        if (!sessionActive) return
+        when (bindPlan) {
+            is VoiceBindPlan.Invalid -> {
+                announceErrorAndClose(VoiceErrorKind.StreakUnavailable)
+            }
+            is VoiceBindPlan.UseExisting -> {
+                streakSessionKey = bindPlan.sessionKey
+                streakProvisionalName = null
+                titlesOnHang = false
+                enterListening()
+            }
+            is VoiceBindPlan.CreateStreak -> {
+                if (!chatConnection.isConnected()) {
+                    VoiceConnectionGate.ensureConnected(chatConnection)
                 }
-                is VoiceBindPlan.UseExisting -> {
-                    streakSessionKey = bindPlan.sessionKey
-                    streakProvisionalName = null
-                    titlesOnHang = false
-                    enterListening()
-                }
-                is VoiceBindPlan.CreateStreak -> {
-                    val opened = voiceStreak.open()
-                    if (!sessionActive) return@launch
-                    if (opened == null) {
-                        val kind = if (!chatConnection.isConnected()) {
-                            VoiceErrorKind.NoNetwork
-                        } else {
-                            VoiceErrorKind.StreakUnavailable
-                        }
-                        announceErrorAndClose(kind)
-                        return@launch
+                if (!sessionActive) return
+                val opened = voiceStreak.open()
+                if (!sessionActive) return
+                if (opened == null) {
+                    val kind = if (!chatConnection.isConnected()) {
+                        VoiceErrorKind.NoNetwork
+                    } else {
+                        VoiceErrorKind.StreakUnavailable
                     }
-                    streakSessionKey = opened.session.sessionKey
-                    streakProvisionalName = opened.provisionalName
-                    titlesOnHang = VoiceOriginPolicy.titlesOnHang(bindPlan)
-                    enterListening()
+                    announceErrorAndClose(kind)
+                    return
                 }
+                streakSessionKey = opened.session.sessionKey
+                streakProvisionalName = opened.provisionalName
+                titlesOnHang = VoiceOriginPolicy.titlesOnHang(bindPlan)
+                enterListening()
             }
         }
     }

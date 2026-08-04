@@ -149,7 +149,15 @@ class AgentService : Service() {
         scope.launch {
             while (true) {
                 delay(HEARTBEAT_INTERVAL_MS)
-                Log.i(PA_TAG, "service vivo, estado=${chatConnection.connectionState.value}")
+                val state = chatConnection.connectionState.value
+                val online = chatConnection.isConnected()
+                Log.i(PA_TAG, "service vivo, estado=$state connected=$online")
+                // Watchdog barato: Conectado en UI pero flag caído, o Error
+                // transport sin progreso → fuerza ciclo (el tick v4 vive en GatewayClient).
+                if (state is ConnectionState.Conectado && !online) {
+                    Log.w(TAG, "watchdog: estado Conectado pero socket caído — reconnectNow")
+                    chatConnection.reconnectNow()
+                }
             }
         }
     }
@@ -166,7 +174,8 @@ class AgentService : Service() {
             }
 
             override fun onAvailable(network: Network) {
-                if (!networkWasLost) return
+                val shouldReconnect = networkWasLost || !chatConnection.isConnected()
+                if (!shouldReconnect) return
                 networkWasLost = false
                 Log.i(TAG, "Red disponible — reconexión inmediata")
                 chatConnection.reconnectNow()
@@ -176,14 +185,16 @@ class AgentService : Service() {
                 network: Network,
                 networkCapabilities: NetworkCapabilities,
             ) {
-                if (!networkWasLost) return
-                if (networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                    networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                if (!networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) ||
+                    !networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
                 ) {
-                    networkWasLost = false
-                    Log.i(TAG, "Red validada — reconexión inmediata")
-                    chatConnection.reconnectNow()
+                    return
                 }
+                val shouldReconnect = networkWasLost || !chatConnection.isConnected()
+                if (!shouldReconnect) return
+                networkWasLost = false
+                Log.i(TAG, "Red validada — reconexión inmediata")
+                chatConnection.reconnectNow()
             }
         }
         networkCallback = callback

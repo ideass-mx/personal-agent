@@ -183,23 +183,32 @@ class HubClient @Inject constructor(
     private suspend fun runSessionLoop(config: HubConfig) {
         var attempt = 0
         while (true) {
-            authenticated.set(false)
-            if (forceReconnect.getAndSet(false)) {
-                attempt = 0
-            }
-            if (attempt > 0) {
-                val delayMs = backoffMs(attempt)
-                val seconds = ((delayMs + 999) / 1000).toInt().coerceAtLeast(1)
-                Log.i(PA_TAG, "inicio de reintento de reconexión #$attempt (espera ${seconds}s)")
-                awaitBackoff(seconds)
+            try {
+                authenticated.set(false)
                 if (forceReconnect.getAndSet(false)) {
                     attempt = 0
                 }
-            } else {
-                _connectionState.value = ConnectionState.Reconectando(0)
+                if (attempt > 0) {
+                    val delayMs = backoffMs(attempt)
+                    val seconds = ((delayMs + 999) / 1000).toInt().coerceAtLeast(1)
+                    Log.i(PA_TAG, "inicio de reintento de reconexión #$attempt (espera ${seconds}s)")
+                    awaitBackoff(seconds)
+                    if (forceReconnect.getAndSet(false)) {
+                        attempt = 0
+                    }
+                } else {
+                    _connectionState.value = ConnectionState.Reconectando(0)
+                }
+                openAndAwaitClose(config)
+                attempt += 1
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                Log.e(TAG, "excepción en bucle de sesión (reintento): ${t.javaClass.simpleName}: ${t.message}")
+                authenticated.set(false)
+                attempt += 1
+                delay(1_000)
             }
-            openAndAwaitClose(config)
-            attempt += 1
         }
     }
 
@@ -217,7 +226,7 @@ class HubClient @Inject constructor(
     }
 
     private suspend fun openAndAwaitClose(config: HubConfig) {
-        val closed = Channel<Unit>(Channel.RENDEZVOUS)
+        val closed = Channel<Unit>(capacity = 1)
         val deviceId = preferences.getOrCreateDeviceId()
         val request = Request.Builder().url(normalizeWsUrl(config.address)).build()
 

@@ -139,7 +139,7 @@ probar en el 15T (o equivalente):
 
 1. Teléfono **bloqueado**, buds puestos → triple toque (o gesto de
    asistente). La ventana debe aparecer **sobre el lockscreen** sin pedir
-   huella/PIN.
+   huella/PIN, a **pantalla completa opaca** (ocluye el keyguard).
 2. Conversar **>1 minuto** sin tocar nada: la pantalla **no** debe apagarse
    por el timeout de 15 s del sistema.
 3. **Durante la racha** (ventana aún visible), comprobar que el lock está
@@ -151,8 +151,10 @@ probar en el 15T (o equivalente):
 4. (Opcional) Apaga con el botón de bloqueo **sin colgar** → audio sigue;
    el wake lock de pantalla se libera al hide (correcto); al colgar, sin
    residual (paso 6).
-5. Di «gracias» → earcon de cierre. La pantalla debe volver al timeout
-   normal (apagarse sola a los ~15 s configurados).
+5. Di «gracias» **o toca Terminar** → earcon + ventana fuera de inmediato
+   (<1 s); el título puede llegar poco después. La pantalla vuelve al
+   timeout normal (apagarse sola a los ~15 s). Al colgar desde lockscreen,
+   la huella del keyguard debe reaparecer.
 6. Tras colgar: el mismo `grep -i voz-pantalla` **sin** lock activo held, y
    `adb shell dumpsys power | grep -i wake` sin `Agente:voz-pantalla` held.
 7. Caso desbloqueado: invocar con el teléfono abierto → keep-screen-on como
@@ -165,6 +167,15 @@ probar en el 15T (o equivalente):
 
 Si la racha muere al apagarse la pantalla, revisa primero las exenciones de
 la §2 (mismas que Fase 1; no hay permiso HyperOS nuevo para este fix).
+
+### Limitación conocida: huella (UDFPS) sobre la ventana
+
+En HyperOS, las ventanas del sensor de huella (`gxzw_*`) las dibuja Xiaomi
+**por encima de cualquier app**, incluida la sesión VIS opaca. La oclusión
+del keyguard (fondo / UI de bloqueo) funciona; la afordancia de huella puede
+seguir visible encima. **No seguir iterando** contra esto: no hay flag de
+ventana de app que lo retire de forma fiable. Alternativas de producto
+(fuera de alcance): Activity assistant / oclusión nativa del keyguard.
 
 ## 7. Notas
 

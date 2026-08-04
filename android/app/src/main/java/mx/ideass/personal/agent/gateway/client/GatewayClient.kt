@@ -1,14 +1,16 @@
 package mx.ideass.personal.agent.gateway.client
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,10 +25,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import mx.ideass.personal.agent.gateway.auth.DeviceIdentityStore
 import mx.ideass.personal.agent.gateway.auth.DeviceTokenStore
@@ -60,6 +60,7 @@ import mx.ideass.personal.agent.gateway.transport.GatewaySocket
 import mx.ideass.personal.agent.network.ChatInbound
 import mx.ideass.personal.agent.network.ConnectionState
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
@@ -137,6 +138,7 @@ class GatewayClient @Inject constructor(
         forceReconnect.set(true)
         countdownJob?.cancel()
         countdownJob = null
+        Log.i(TAG, "reconnectNow: forzando ciclo")
         tearDownSocket()
     }
 
@@ -298,27 +300,50 @@ class GatewayClient @Inject constructor(
     private suspend fun runSessionLoop(config: GatewayConfig) {
         var attempt = 0
         while (true) {
-            connected.set(false)
-            if (forceReconnect.getAndSet(false)) {
-                attempt = 0
-            }
-            if (attempt > 0) {
-                val delayMs = backoffMs(attempt)
-                val seconds = ((delayMs + 999) / 1000).toInt().coerceAtLeast(1)
-                awaitBackoff(seconds)
+            try {
+                connected.set(false)
                 if (forceReconnect.getAndSet(false)) {
                     attempt = 0
                 }
-            } else {
-                _connectionState.value = ConnectionState.Reconectando(0)
+                if (attempt > 0) {
+                    val delayMs = backoffMs(attempt)
+                    val seconds = ((delayMs + 999) / 1000).toInt().coerceAtLeast(1)
+                    Log.i(TAG, "reconnect attempt=$attempt wait=${seconds}s")
+                    awaitBackoff(seconds)
+                    if (forceReconnect.getAndSet(false)) {
+                        attempt = 0
+                    }
+                } else {
+                    _connectionState.value = ConnectionState.Reconectando(0)
+                }
+                val closed = openAndAwaitClose(config)
+                when (closed) {
+                    CloseReason.PAIRING -> {
+                        _connectionState.value = ConnectionState.Emparejando
+                        Log.i(TAG, "closed: pairing — reintento en 5s")
+                        delay(5_000)
+                    }
+                    CloseReason.AUTH_TERMINAL -> {
+                        Log.w(TAG, "closed: auth terminal — bucle detenido")
+                        return
+                    }
+                    CloseReason.TRANSPORT -> {
+                        Log.i(TAG, "closed: transport — reintento")
+                    }
+                }
+                attempt += 1
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                Log.e(TAG, "excepción en bucle de sesión (reintento): ${t.javaClass.simpleName}: ${t.message}")
+                connected.set(false)
+                _connectionState.value = ConnectionState.Error(
+                    message = t.message?.take(120) ?: "error de sesión",
+                    code = null,
+                )
+                attempt += 1
+                delay(1_000)
             }
-            val closed = openAndAwaitClose(config)
-            if (closed == CloseReason.PAIRING) {
-                _connectionState.value = ConnectionState.Emparejando
-                // Reintento lento mientras esperan aprobación.
-                delay(5_000)
-            }
-            attempt += 1
         }
     }
 
@@ -336,7 +361,8 @@ class GatewayClient @Inject constructor(
     }
 
     private suspend fun openAndAwaitClose(config: GatewayConfig): CloseReason {
-        val closed = Channel<CloseReason>(Channel.RENDEZVOUS)
+        // Buffer 1: evita perder Closed/Failed si llega antes de receive() (carrera RENDEZVOUS).
+        val closed = Channel<CloseReason>(capacity = 1)
         val pendingRpc = PendingRpc()
         val eventBus = GatewayEventBus()
         val socket = GatewaySocket(
@@ -357,9 +383,15 @@ class GatewayClient @Inject constructor(
         )
         handshake = hs
 
+        val lastTickElapsed = AtomicLong(SystemClock.elapsedRealtime())
+        var tickWatchJob: Job? = null
+
         eventsJob?.cancel()
         eventsJob = scope.launch {
             eventBus.events.collect { event ->
+                if (event is GatewayBusEvent.Tick) {
+                    lastTickElapsed.set(SystemClock.elapsedRealtime())
+                }
                 handleBusEvent(event)
             }
         }
@@ -368,10 +400,17 @@ class GatewayClient @Inject constructor(
         val watchJob = scope.launch {
             socket.state.collect { state ->
                 when (state) {
-                    is mx.ideass.personal.agent.gateway.transport.SocketState.Closed,
-                    is mx.ideass.personal.agent.gateway.transport.SocketState.Failed,
-                    -> {
+                    is mx.ideass.personal.agent.gateway.transport.SocketState.Closed -> {
                         connected.set(false)
+                        Log.i(
+                            TAG,
+                            "socket closed: code=${state.code} reason=${state.reason} remote=${state.remote}",
+                        )
+                        closed.trySend(CloseReason.TRANSPORT)
+                    }
+                    is mx.ideass.personal.agent.gateway.transport.SocketState.Failed -> {
+                        connected.set(false)
+                        Log.i(TAG, "socket failed: ${state.message}")
                         closed.trySend(CloseReason.TRANSPORT)
                     }
                     else -> Unit
@@ -387,11 +426,41 @@ class GatewayClient @Inject constructor(
             gatewaySession = hs.openSession()
             connected.set(true)
             _connectionState.value = ConnectionState.Conectado
+            Log.i(TAG, "conectado tickIntervalMs=${hello.policy.tickIntervalMs}")
+            lastTickElapsed.set(SystemClock.elapsedRealtime())
+            val tickIntervalMs = hello.policy.tickIntervalMs
+                .takeIf { it > 0 }
+                ?: GatewayTickWatchdog.DEFAULT_TICK_INTERVAL_MS
+            tickWatchJob = scope.launch {
+                val interval = GatewayTickWatchdog.effectiveIntervalMs(tickIntervalMs)
+                while (true) {
+                    delay(interval)
+                    if (!connected.get()) return@launch
+                    if (GatewayTickWatchdog.shouldTimeout(
+                            nowElapsedMs = SystemClock.elapsedRealtime(),
+                            lastTickElapsedMs = lastTickElapsed.get(),
+                            tickIntervalMs = tickIntervalMs,
+                        )
+                    ) {
+                        Log.w(TAG, "tick timeout — cerrando code=${GatewaySocket.CODE_TICK_TIMEOUT}")
+                        socket.close(
+                            GatewaySocket.CODE_TICK_TIMEOUT,
+                            GatewayTickWatchdog.CLOSE_REASON,
+                        )
+                        return@launch
+                    }
+                }
+            }
             flushPending(active)
             closed.receive()
             return CloseReason.TRANSPORT
         } catch (e: GatewayRpcException) {
             val code = readDetailCode(e)
+            if (GatewayReconnectPolicy.isTerminalAuth(code)) {
+                emitConnectError(code, e.message)
+                Log.w(TAG, "auth terminal code=$code")
+                return CloseReason.AUTH_TERMINAL
+            }
             return if (code == ConnectErrorCodes.PAIRING_REQUIRED) {
                 CloseReason.PAIRING
             } else {
@@ -406,6 +475,7 @@ class GatewayClient @Inject constructor(
             return CloseReason.TRANSPORT
         } finally {
             connected.set(false)
+            tickWatchJob?.cancel()
             watchJob.cancel()
             eventsJob?.cancel()
             eventsJob = null
@@ -568,7 +638,7 @@ class GatewayClient @Inject constructor(
         val preferredSessionKey: String?,
     )
 
-    private enum class CloseReason { TRANSPORT, PAIRING }
+    private enum class CloseReason { TRANSPORT, PAIRING, AUTH_TERMINAL }
 
     private fun extractText(message: JsonElement?): String? = JsonMessageText.extract(message)
 

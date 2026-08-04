@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#101214</color>
+    <!-- Misma base que AppColors.background: ventana VIS opaca sobre keyguard. -->
+    <color name="voice_session_background">#101214</color>
 </resources>

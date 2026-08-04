@@ -109,6 +109,8 @@ class GatewaySocket(
         const val CODE_NORMAL: Int = 1000
         const val CODE_PROTOCOL_ERROR: Int = 1008
         const val CODE_GOING_AWAY: Int = 1001
+        /** Contrato v4: silencio de ticks → forzar reconexión. */
+        const val CODE_TICK_TIMEOUT: Int = 4000
 
         fun createDefaultClient(pingIntervalSeconds: Long): OkHttpClient =
             OkHttpClient.Builder()

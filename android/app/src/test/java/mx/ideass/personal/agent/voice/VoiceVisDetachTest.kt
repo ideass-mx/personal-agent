@@ -83,6 +83,28 @@ class VoiceVisDetachTest {
     }
 
     @Test
+    fun spuriousHide_ignoredWithinGraceWhileVoiceActive() {
+        assertTrue(
+            VoiceVisSessionPolicy.shouldIgnoreSpuriousHide(
+                ageMsSinceShow = 200L,
+                voiceActive = true,
+            ),
+        )
+        assertFalse(
+            VoiceVisSessionPolicy.shouldIgnoreSpuriousHide(
+                ageMsSinceShow = 200L,
+                voiceActive = false,
+            ),
+        )
+        assertFalse(
+            VoiceVisSessionPolicy.shouldIgnoreSpuriousHide(
+                ageMsSinceShow = VoiceVisSessionPolicy.SPURIOUS_HIDE_GRACE_MS,
+                voiceActive = true,
+            ),
+        )
+    }
+
+    @Test
     fun hangUp_releasesKeepScreenOn() {
         assertFalse(
             VoiceVisSessionPolicy.shouldKeepScreenOn(windowVisible = true, voiceActive = false),
@@ -93,6 +115,12 @@ class VoiceVisDetachTest {
     fun keyguard_showWhenLocked_withoutDismiss() {
         assertTrue(VoiceVisSessionPolicy.shouldShowWhenLocked())
         assertFalse(VoiceVisSessionPolicy.shouldDismissKeyguard())
+    }
+
+    @Test
+    fun keyguard_occludesVisually_opaqueFullscreen() {
+        assertTrue(VoiceVisSessionPolicy.shouldOccludeKeyguardVisually())
+        assertFalse(VoiceVisSessionPolicy.sessionWindowIsTranslucent())
     }
 
     // --- Wake lock de pantalla: racha ∧ ventana; no turnos ---

@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Agente" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#101214</item>
-        <item name="android:navigationBarColor">#101214</item>
-        <item name="android:windowBackground">#101214</item>
+        <item name="android:statusBarColor">@color/voice_session_background</item>
+        <item name="android:navigationBarColor">@color/voice_session_background</item>
+        <item name="android:windowBackground">@color/voice_session_background</item>
         <item name="android:colorPrimary">#5DCAA5</item>
+    </style>
+
+    <!--
+      Sustituye Theme_DeviceDefault_VoiceInteractionSession (suele ser translúcido).
+      Pantalla completa opaca para ocluir el keyguard / afordancia UDFPS.
+    -->
+    <style name="Theme.Agente.VoiceSession" parent="Theme.Agente">
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowBackground">@color/voice_session_background</item>
+        <item name="android:colorBackground">@color/voice_session_background</item>
+        <item name="android:statusBarColor">@color/voice_session_background</item>
+        <item name="android:navigationBarColor">@color/voice_session_background</item>
     </style>
 </resources>
