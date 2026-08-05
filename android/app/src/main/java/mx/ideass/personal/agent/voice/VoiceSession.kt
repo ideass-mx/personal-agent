@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -20,12 +21,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import mx.ideass.personal.agent.R
+import mx.ideass.personal.agent.app.AppPreferences
 import mx.ideass.personal.agent.chat.ChatStore
 import mx.ideass.personal.agent.chat.VoiceStyleWire
 import mx.ideass.personal.agent.network.ChatConnection
 import mx.ideass.personal.agent.network.ChatInbound
 import mx.ideass.personal.agent.voice.audio.BluetoothScoController
 import mx.ideass.personal.agent.voice.audio.VoiceEarcons
+import mx.ideass.personal.agent.voice.audio.VoicePlaybackRoutePolicy
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -57,6 +60,8 @@ class VoiceSession @Inject constructor(
     private val bluetoothSco: BluetoothScoController,
     private val earcons: VoiceEarcons,
     private val screenWake: VoiceScreenWakeController,
+    private val preferences: AppPreferences,
+    private val installedVoices: InstalledVoices,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -83,19 +88,29 @@ class VoiceSession @Inject constructor(
     val state: StateFlow<VoiceState> = _state.asStateFlow()
 
     /**
-     * Emite cuando la sesión se cierra sola (timeout/toggle/error); la
+     * Emite cuando la sesión se cierra (timeout/comando/UI/toggle/error); la
      * [VoiceLockscreenActivity] debe finish().
-     * Sin buffer: un ended sin colector no debe envenenar la siguiente invocación
-     * (finish prematuro ~ms después del show).
+     * Buffer 1 + DROP_OLDEST: [tryEmit] desde el hilo main no debe perder el
+     * evento (con capacity 0 fallaba y la UI quedaba en Idle «En pausa»).
+     * La Activity también observa [sessionActiveFlow] como cinturón.
      */
-    private val _sessionEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 0)
+    private val _sessionEnded = MutableSharedFlow<Unit>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
     val sessionEnded: SharedFlow<Unit> = _sessionEnded.asSharedFlow()
 
     private var stt: SpeechRecognizerEngine? = null
-    private var tts: TtsEngine? = null
+    private var tts: AgentTtsEngine? = null
     private var ttsReady = false
     private var sttAvailable = false
     private var sessionActive = false
+    private val _sessionActiveFlow = MutableStateFlow(false)
+    /**
+     * Racha/ciclo de voz vivo. [VoiceLockscreenActivity] observa el paso a
+     * false para finish() (comandos de cierre = mismo camino que Terminar).
+     */
+    val sessionActiveFlow: StateFlow<Boolean> = _sessionActiveFlow.asStateFlow()
     /** sessionKey destino de esta invocación de voz (racha o conversación abierta). */
     private var streakSessionKey: String? = null
     /** Nombre provisional solo en rachas (null = no titular al colgar). */
@@ -135,7 +150,7 @@ class VoiceSession @Inject constructor(
             pendingTitleSessionKey = null
             pendingTitleProvisionalName = null
             firstUserUtterance = null
-            sessionActive = true
+            setSessionActive(true)
             // Pantalla: bit de racha (la Activity ya marcó superficie visible).
             // Una sola adquisición; Listening/Thinking/Speaking no lo tocan.
             screenWake.setStreakActive(true)
@@ -288,12 +303,12 @@ class VoiceSession @Inject constructor(
                 _ui.value = VoiceSessionUi(state = VoiceState.Idle)
             }
             if (notifyEnded) {
-                _sessionEnded.tryEmit(Unit)
+                emitSessionEnded()
             }
             return
         }
 
-        sessionActive = false
+        setSessionActive(false)
         // Liberar pantalla al colgar (no esperar al earcon ni a hide de la VIS).
         screenWake.setStreakActive(false)
         restartToken += 1
@@ -311,7 +326,7 @@ class VoiceSession @Inject constructor(
             CloseEarcon.Timeout, CloseEarcon.Manual -> {
                 // hide inmediato: no encadenar sessionEnded al hold SCO / titulado.
                 if (notifyEnded && VoiceHangClosePolicy.notifyUiBeforeAudioCleanup()) {
-                    _sessionEnded.tryEmit(Unit)
+                    emitSessionEnded()
                 }
                 val playedMs = when (closeEarcon) {
                     CloseEarcon.Timeout -> earcons.playTimeout()
@@ -348,7 +363,7 @@ class VoiceSession @Inject constructor(
         _ui.value = VoiceSessionUi(state = VoiceState.Idle)
         Log.i(TAG, "VoiceSession: sesion cerrada limpia")
         if (notifyEnded) {
-            _sessionEnded.tryEmit(Unit)
+            emitSessionEnded()
         }
     }
 
@@ -357,64 +372,166 @@ class VoiceSession @Inject constructor(
         pendingCloseRunnable = null
     }
 
+    /**
+     * Espera al evento de conexión (no a un reloj fijo). Earcon de «pensando»
+     * solo si hace falta reconectar, para que la espera no se sienta muerta.
+     */
+    private suspend fun ensureHubConnected(): Boolean {
+        val timeoutMs = context.resources
+            .getInteger(R.integer.voice_connection_gate_timeout_ms)
+            .toLong()
+        return VoiceConnectionGate.ensureConnected(
+            connection = chatConnection,
+            timeoutMs = timeoutMs,
+            onWaiting = { earcons.playThinking() },
+        )
+    }
+
     private fun prepareTts(bindPlan: VoiceBindPlan) {
         tts?.destroy()
         ttsReady = false
         closingAfterAnnounce = false
+        scope.launch {
+            if (!sessionActive) return@launch
+            val activeId = preferences.getActiveNeuralVoiceId()
+            val neuralModel = installedVoices.resolveForPlayback(activeId)
+                ?: NeuralVoicesStore.resolveActiveOrAnyInstalled(context)
+            val enginePackage = preferences.getTtsEnginePackage()
+            val voiceName = preferences.getTtsVoiceName()
+            if (!sessionActive) return@launch
+
+            val sessionListener = createTtsListener(bindPlan)
+
+            if (neuralModel != null) {
+                Log.i(
+                    TAG,
+                    "TTS: intentando Sherpa voice=${neuralModel.id} " +
+                        "active=${activeId ?: "(auto)"}",
+                )
+                tts = SherpaTtsEngine(
+                    context = context,
+                    model = neuralModel,
+                    routeProvider = {
+                        VoicePlaybackRoutePolicy.resolve(bluetoothSco.isScoConnected)
+                    },
+                    listener = object : AgentTtsEngine.Listener {
+                        override fun onReady(available: Boolean) {
+                            if (!sessionActive) return
+                            when (SherpaTtsInitPolicy.onInitResult(available)) {
+                                SherpaInitOutcome.Ready -> {
+                                    sessionListener.onReady(true)
+                                    return
+                                }
+                                SherpaInitOutcome.FallbackAndroid -> {
+                                    Log.w(
+                                        TAG,
+                                        "TTS: Sherpa no disponible (runtime/modelo) → fallback Android",
+                                    )
+                                    bindAndroidTts(
+                                        enginePackage = enginePackage,
+                                        voiceName = voiceName,
+                                        listener = sessionListener,
+                                    )
+                                }
+                            }
+                        }
+
+                        override fun onDone() = sessionListener.onDone()
+
+                        override fun onError(message: String) = sessionListener.onError(message)
+                    },
+                )
+            } else {
+                Log.i(TAG, "TTS: sin modelo neuronal → Android TTS")
+                bindAndroidTts(
+                    enginePackage = enginePackage,
+                    voiceName = voiceName,
+                    listener = sessionListener,
+                )
+            }
+        }
+    }
+
+    private fun bindAndroidTts(
+        enginePackage: String?,
+        voiceName: String?,
+        listener: AgentTtsEngine.Listener,
+    ) {
+        if (!sessionActive) return
+        tts?.destroy()
+        ttsReady = false
+        Log.i(
+            TAG,
+            "TTS prefs: engine=${enginePackage ?: "(sistema)"} voice=${voiceName ?: "(locale)"}",
+        )
         tts = TtsEngine(
             context = context,
-            listener = object : TtsEngine.Listener {
-                override fun onReady(available: Boolean) {
-                    if (!sessionActive) return
-                    ttsReady = available
-                    if (!available) {
-                        failFatalEarcon(errorCopy.ui(VoiceErrorKind.TtsUnavailable))
-                        return
-                    }
-                    // Reconexión bajo demanda: socket muerto + red viva → margen corto.
-                    hubJob?.cancel()
-                    hubJob = scope.launch {
-                        if (!sessionActive) return@launch
-                        val online = VoiceConnectionGate.ensureConnected(chatConnection)
-                        if (!sessionActive) return@launch
-                        val startDecision = VoiceTurnPolicy.afterSessionStart(
-                            connected = online,
-                            sttAvailable = sttAvailable,
-                        )
-                        if (startDecision is VoiceTurnDecision.AudibleError) {
-                            announceErrorAndClose(startDecision.kind)
-                            return@launch
-                        }
-                        bindTargetThenListen(bindPlan)
-                    }
-                }
-
-                override fun onDone() {
-                    if (closingAfterAnnounce) {
-                        closingAfterAnnounce = false
-                        finishCleanupAfterAnnounce()
-                        return
-                    }
-                    if (!sessionActive) return
-                    if (_state.value !is VoiceState.Speaking) return
-                    enterListening()
-                }
-
-                override fun onError(message: String) {
-                    if (closingAfterAnnounce) {
-                        closingAfterAnnounce = false
-                        finishCleanupAfterAnnounce()
-                        return
-                    }
-                    if (!sessionActive) return
-                    Log.w(TAG, message)
-                    if (_state.value is VoiceState.Speaking) {
-                        enterListening()
-                    }
-                }
+            preferredEnginePackage = enginePackage,
+            preferredVoiceName = voiceName,
+            routeProvider = {
+                VoicePlaybackRoutePolicy.resolve(bluetoothSco.isScoConnected)
             },
+            listener = listener,
         )
     }
+
+    private fun createTtsListener(bindPlan: VoiceBindPlan): AgentTtsEngine.Listener =
+        object : AgentTtsEngine.Listener {
+            override fun onReady(available: Boolean) {
+                if (!sessionActive) return
+                ttsReady = available
+                if (!available) {
+                    failFatalEarcon(errorCopy.ui(VoiceErrorKind.TtsUnavailable))
+                    return
+                }
+                // Un solo guardián de red: el gate. Nada de isConnected() → offline.
+                hubJob?.cancel()
+                hubJob = scope.launch {
+                    if (!sessionActive) return@launch
+                    Log.i(TAG, "conexión: esperando gate…")
+                    val gateOk = ensureHubConnected()
+                    if (!sessionActive) return@launch
+                    if (!gateOk) {
+                        Log.w(TAG, "conexión: gate falló → anuncio offline")
+                        announceErrorAndClose(VoiceErrorKind.NoNetwork)
+                        return@launch
+                    }
+                    Log.i(TAG, "conexión: gate ok")
+                    val startDecision = VoiceTurnPolicy.afterSessionStart(
+                        sttAvailable = sttAvailable,
+                    )
+                    if (startDecision is VoiceTurnDecision.AudibleError) {
+                        announceErrorAndClose(startDecision.kind)
+                        return@launch
+                    }
+                    bindTargetThenListen(bindPlan)
+                }
+            }
+
+            override fun onDone() {
+                if (closingAfterAnnounce) {
+                    closingAfterAnnounce = false
+                    finishCleanupAfterAnnounce()
+                    return
+                }
+                if (!sessionActive) return
+                if (_state.value !is VoiceState.Speaking) return
+                enterListening()
+            }
+
+            override fun onError(message: String) {
+                if (closingAfterAnnounce) {
+                    closingAfterAnnounce = false
+                    finishCleanupAfterAnnounce()
+                    return
+                }
+                if (!sessionActive) return
+                Log.w(TAG, message)
+                if (_state.value is VoiceState.Speaking) {
+                    enterListening()
+                }
+            }
+        }
 
     private suspend fun bindTargetThenListen(bindPlan: VoiceBindPlan) {
         if (!sessionActive) return
@@ -429,19 +546,16 @@ class VoiceSession @Inject constructor(
                 enterListening()
             }
             is VoiceBindPlan.CreateStreak -> {
-                if (!chatConnection.isConnected()) {
-                    VoiceConnectionGate.ensureConnected(chatConnection)
-                }
-                if (!sessionActive) return
+                // Gate ya resolvió arriba; open() no decide offline por su cuenta.
                 val opened = voiceStreak.open()
                 if (!sessionActive) return
-                if (opened == null) {
-                    val kind = if (!chatConnection.isConnected()) {
-                        VoiceErrorKind.NoNetwork
-                    } else {
-                        VoiceErrorKind.StreakUnavailable
-                    }
-                    announceErrorAndClose(kind)
+                val error = VoiceConnectionStartPolicy.errorAfterGate(
+                    gateOk = true,
+                    streakOpened = opened != null,
+                    createStreak = true,
+                )
+                if (error != null || opened == null) {
+                    announceErrorAndClose(error ?: VoiceErrorKind.StreakUnavailable)
                     return
                 }
                 streakSessionKey = opened.session.sessionKey
@@ -756,7 +870,7 @@ class VoiceSession @Inject constructor(
     }
 
     private fun finishCleanupAfterAnnounce() {
-        sessionActive = false
+        setSessionActive(false)
         screenWake.setStreakActive(false)
         restartToken += 1
         hubJob?.cancel()
@@ -776,7 +890,7 @@ class VoiceSession @Inject constructor(
             it.copy(state = VoiceState.Idle)
         }
         Log.i(TAG, "VoiceSession: sesion cerrada tras anuncio")
-        _sessionEnded.tryEmit(Unit)
+        emitSessionEnded()
     }
 
     private fun failFatalEarcon(message: String) {
@@ -784,7 +898,7 @@ class VoiceSession @Inject constructor(
         silenceStartedAtElapsed = 0L
         cancelPendingClose()
         closingAfterAnnounce = false
-        sessionActive = false
+        setSessionActive(false)
         screenWake.setStreakActive(false)
         restartToken += 1
         hubJob?.cancel()
@@ -813,7 +927,7 @@ class VoiceSession @Inject constructor(
                 )
             }
             Log.i(TAG, "VoiceSession: sesion cerrada limpia")
-            _sessionEnded.tryEmit(Unit)
+            emitSessionEnded()
         }
         pendingCloseRunnable = runnable
         mainHandler.postDelayed(runnable, holdMs)
@@ -896,6 +1010,16 @@ class VoiceSession @Inject constructor(
         if (next !is VoiceState.Listening) {
             cancelSilenceTimeout()
         }
+    }
+
+    private fun setSessionActive(active: Boolean) {
+        sessionActive = active
+        _sessionActiveFlow.value = active
+    }
+
+    /** Notifica cierre de superficie; buffer 1 evita perder el evento en Main. */
+    private fun emitSessionEnded() {
+        _sessionEnded.tryEmit(Unit)
     }
 
     private enum class CloseEarcon {

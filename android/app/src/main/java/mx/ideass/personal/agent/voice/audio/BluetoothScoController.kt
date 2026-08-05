@@ -46,6 +46,12 @@ class BluetoothScoController @Inject constructor(
     private var reconnectRunnable: Runnable? = null
 
     /**
+     * True si el broadcast reportó SCO CONNECTED en esta sesión.
+     * TTS/earcons lo usan para elegir [VoicePlaybackRoute.Sco] vs Media.
+     */
+    val isScoConnected: Boolean get() = scoConnected
+
+    /**
      * Abre el canal una vez. [onReady] en el hilo principal al recibir
      * CONNECTED por broadcast, o tras timeout / sin BT.
      */

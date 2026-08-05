@@ -8,7 +8,9 @@ import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.voice.audio.VoiceAudioPath
+import mx.ideass.personal.agent.voice.audio.VoicePlaybackRoute
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -20,84 +22,53 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
 
 /**
- * TTS del sistema → WAV → resample a 16 kHz → [AudioTrack] por el path SCO.
+ * TTS → WAV → [AudioTrack] según ruta activa.
+ *
+ * - SCO: resample a 16 kHz + USAGE_VOICE_COMMUNICATION.
+ * - Media (altavoz/A2DP): rate del WAV + USAGE_ASSISTANT|MEDIA.
  *
  * [TextToSpeech.speak] abre un AudioTrack interno a ~48 kHz y fuerza
  * createOrUpdatePatch contra el sink SCO (16 kHz), cortando ~1 s.
  * Aquí controlamos el sample rate de reproducción.
+ *
+ * Motor/voz: preferencias opcionales; si fallan, cae al default del sistema.
+ * Fallback de [SherpaTtsEngine] cuando no hay modelo neuronal o falla el init.
  */
 class TtsEngine(
     context: Context,
-    private val listener: Listener,
-) {
-    interface Listener {
-        fun onReady(available: Boolean)
-        fun onDone()
-        fun onError(message: String)
-    }
+    private val listener: AgentTtsEngine.Listener,
+    preferredEnginePackage: String? = null,
+    preferredVoiceName: String? = null,
+    private val routeProvider: () -> VoicePlaybackRoute = { VoicePlaybackRoute.Media },
+) : AgentTtsEngine {
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
     private val playExecutor = Executors.newSingleThreadExecutor()
     private var tts: TextToSpeech? = null
     private var ready = false
+    private val requestedEnginePackage = preferredEnginePackage?.trim()?.takeIf { it.isNotEmpty() }
+    private val requestedVoiceName = preferredVoiceName?.trim()?.takeIf { it.isNotEmpty() }
+    /** Package con el que pedimos el bind actual (null = constructor de 2 args). */
+    private var boundEnginePackage: String? = null
+    private var usingSystemFallback = false
+    private var synthesizeFallbackTried = false
     @Volatile private var currentUtteranceId: String? = null
+    @Volatile private var pendingSpeakText: String? = null
     private var playbackTrack: AudioTrack? = null
     private val playGeneration = AtomicInteger(0)
     private val cacheFile = File(appContext.cacheDir, "tts_sco_utterance.wav")
+    private val mediaUsage: Int = VoiceAudioPath.mediaUsageFromConfig(
+        appContext.getString(R.string.voice_playback_media_usage),
+    )
 
     init {
-        tts = TextToSpeech(appContext) { status ->
-            mainHandler.post {
-                if (status != TextToSpeech.SUCCESS) {
-                    ready = false
-                    listener.onReady(false)
-                    return@post
-                }
-                val engine = tts ?: run {
-                    listener.onReady(false)
-                    return@post
-                }
-                val locale = preferredLocale(engine)
-                val result = engine.setLanguage(locale)
-                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    Log.w(TAG, "Idioma $locale no soportado por TTS")
-                    ready = false
-                    listener.onReady(false)
-                    return@post
-                }
-                engine.setAudioAttributes(VoiceAudioPath.attributes())
-                engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) = Unit
-
-                    override fun onDone(utteranceId: String?) {
-                        if (utteranceId == null || utteranceId != currentUtteranceId) return
-                        playExecutor.execute { playSynthesizedFile(utteranceId) }
-                    }
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onError(utteranceId: String?) {
-                        mainHandler.post {
-                            listener.onError("Error al hablar la respuesta.")
-                        }
-                    }
-
-                    override fun onError(utteranceId: String?, errorCode: Int) {
-                        mainHandler.post {
-                            listener.onError("Error al hablar la respuesta.")
-                        }
-                    }
-                })
-                ready = true
-                Log.i(TAG, "TTS: sample rate = ${VoiceAudioPath.SAMPLE_RATE_HZ} (playback SCO)")
-                listener.onReady(true)
-            }
-        }
+        bindEngine(requestedEnginePackage, isFallback = false)
     }
 
-    val isReady: Boolean get() = ready
+    override val isReady: Boolean get() = ready
 
-    fun speak(text: String) {
+    override fun speak(text: String) {
         mainHandler.post {
             val engine = tts
             if (engine == null || !ready) {
@@ -107,52 +78,226 @@ class TtsEngine(
             stopPlayback()
             val id = UUID.randomUUID().toString()
             currentUtteranceId = id
+            pendingSpeakText = text
             runCatching { cacheFile.delete() }
             val result = engine.synthesizeToFile(text, Bundle(), cacheFile, id)
             if (result != TextToSpeech.SUCCESS) {
-                listener.onError("No se pudo iniciar la síntesis de voz.")
+                Log.w(TAG, "TTS: synthesizeToFile rechazado result=$result")
+                maybeFallbackAndRetrySpeak(text)
             }
         }
     }
 
-    fun stop() {
+    override fun stop() {
         mainHandler.post {
             currentUtteranceId = null
+            pendingSpeakText = null
             runCatching { tts?.stop() }
             stopPlayback()
         }
     }
 
-    fun destroy() {
+    override fun destroy() {
         mainHandler.post {
             currentUtteranceId = null
-            val engine = tts
-            tts = null
+            pendingSpeakText = null
             ready = false
             stopPlayback()
-            if (engine != null) {
-                runCatching { engine.stop() }
-                runCatching { engine.shutdown() }
-            }
+            shutdownEngine()
             playExecutor.shutdownNow()
             runCatching { cacheFile.delete() }
         }
     }
 
-    private fun playSynthesizedFile(utteranceId: String) {
-        if (utteranceId != currentUtteranceId) return
-        val wav = runCatching { readWavPcm(cacheFile) }.getOrElse {
-            Log.w(TAG, "No se pudo leer WAV TTS: ${it.message}")
-            mainHandler.post { listener.onError("Error al hablar la respuesta.") }
+    private fun bindEngine(enginePackage: String?, isFallback: Boolean) {
+        shutdownEngine()
+        ready = false
+        usingSystemFallback = isFallback || enginePackage.isNullOrBlank()
+        boundEnginePackage = enginePackage?.takeIf { it.isNotEmpty() }
+        val callback = TextToSpeech.OnInitListener { status ->
+            mainHandler.post { onEngineInit(status) }
+        }
+        tts = if (!enginePackage.isNullOrBlank()) {
+            Log.i(TAG, "TTS: bind engine=$enginePackage fallback=$isFallback")
+            TextToSpeech(appContext, callback, enginePackage)
+        } else {
+            Log.i(TAG, "TTS: bind motor del sistema fallback=$isFallback")
+            TextToSpeech(appContext, callback)
+        }
+    }
+
+    private fun onEngineInit(status: Int) {
+        val engine = tts
+        if (engine == null) {
+            listener.onReady(false)
             return
         }
-        Log.i(TAG, "TTS: engine sample rate = ${wav.sampleRateHz}")
-        val pcm16k = resampleToScoMono(wav.pcm, wav.sampleRateHz, wav.channels)
-        Log.i(TAG, "TTS: sample rate = ${VoiceAudioPath.SAMPLE_RATE_HZ}")
+        if (status != TextToSpeech.SUCCESS) {
+            Log.w(
+                TAG,
+                "TTS: onInit status=$status requested=${requestedEnginePackage ?: "(sistema)"} " +
+                    "bound=${boundEnginePackage ?: "(sistema)"}",
+            )
+            if (!usingSystemFallback && !requestedEnginePackage.isNullOrBlank()) {
+                Log.w(TAG, "TTS: fallback → motor del sistema (init falló)")
+                bindEngine(null, isFallback = true)
+                return
+            }
+            ready = false
+            listener.onReady(false)
+            return
+        }
+
+        val voiceApplied = applyPreferredVoice(engine)
+        if (!voiceApplied) {
+            val locale = preferredLocale(engine)
+            val result = engine.setLanguage(locale)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.w(TAG, "Idioma $locale no soportado por TTS")
+                if (!usingSystemFallback && !requestedEnginePackage.isNullOrBlank()) {
+                    Log.w(TAG, "TTS: fallback → motor del sistema (idioma no soportado)")
+                    bindEngine(null, isFallback = true)
+                    return
+                }
+                ready = false
+                listener.onReady(false)
+                return
+            }
+        }
+
+        // Atributos del sintetizador interno: se reevalúan al reproducir el WAV.
+        engine.setAudioAttributes(
+            VoiceAudioPath.attributes(routeProvider(), mediaUsage),
+        )
+        engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) = Unit
+
+            override fun onDone(utteranceId: String?) {
+                if (utteranceId == null || utteranceId != currentUtteranceId) return
+                playExecutor.execute { playSynthesizedFile(utteranceId) }
+            }
+
+            @Deprecated("Deprecated in Java")
+            override fun onError(utteranceId: String?) {
+                mainHandler.post { onSynthesizeError() }
+            }
+
+            override fun onError(utteranceId: String?, errorCode: Int) {
+                Log.w(TAG, "TTS: onError utterance errorCode=$errorCode")
+                mainHandler.post { onSynthesizeError() }
+            }
+        })
+
+        ready = true
+        logBoundEngine(engine)
+        val pending = pendingSpeakText
+        if (pending != null && synthesizeFallbackTried) {
+            // Reintento tras fallback de síntesis.
+            speak(pending)
+        } else {
+            listener.onReady(true)
+        }
+    }
+
+    private fun applyPreferredVoice(engine: TextToSpeech): Boolean {
+        val voices = runCatching { engine.voices }.getOrNull().orEmpty()
+        if (voices.isEmpty()) {
+            Log.i(TAG, "TTS: getVoices() vacío; usando setLanguage")
+            return false
+        }
+        val byName = voices.associateBy { it.name }
+        val localeTags = voices.associate { it.name to it.locale.toLanguageTag() }
+        val resolve = TtsVoicePolicy.resolveVoiceName(
+            availableNames = byName.keys,
+            preferredName = requestedVoiceName,
+            localeTagsByName = localeTags,
+        )
+        if (resolve.fellBack) {
+            Log.w(
+                TAG,
+                "TTS: voz preferida ausente name=$requestedVoiceName → " +
+                    (resolve.voiceName ?: "setLanguage"),
+            )
+        }
+        val name = resolve.voiceName ?: return false
+        val voice = byName[name] ?: return false
+        val ok = engine.setVoice(voice) == TextToSpeech.SUCCESS
+        if (!ok) {
+            Log.w(TAG, "TTS: setVoice falló name=$name")
+        }
+        return ok
+    }
+
+    private fun logBoundEngine(engine: TextToSpeech) {
+        val systemDefault = runCatching { engine.defaultEngine }.getOrNull()
+        val voice = runCatching { engine.voice }.getOrNull()
+        Log.i(
+            TAG,
+            "TTS bind OK: requested=${requestedEnginePackage ?: "(sistema)"} " +
+                "bound=${boundEnginePackage ?: "(sistema)"} " +
+                "systemDefault=$systemDefault " +
+                "fallback=$usingSystemFallback " +
+                "voice=${voice?.name} locale=${voice?.locale?.toLanguageTag()} " +
+                "routeProvider=dynamic",
+        )
+    }
+
+    private fun onSynthesizeError() {
+        val text = pendingSpeakText
+        if (text != null && maybeFallbackAndRetrySpeak(text)) return
+        listener.onError("Error al hablar la respuesta.")
+    }
+
+    /** @return true si se inició un rebind/reintento. */
+    private fun maybeFallbackAndRetrySpeak(text: String): Boolean {
+        if (synthesizeFallbackTried || usingSystemFallback) {
+            pendingSpeakText = null
+            listener.onError("No se pudo iniciar la síntesis de voz.")
+            return false
+        }
+        synthesizeFallbackTried = true
+        pendingSpeakText = text
+        ready = false
+        Log.w(TAG, "TTS: fallback → motor del sistema (síntesis falló)")
+        bindEngine(null, isFallback = true)
+        return true
+    }
+
+    private fun shutdownEngine() {
+        val engine = tts
+        tts = null
+        if (engine != null) {
+            runCatching { engine.stop() }
+            runCatching { engine.shutdown() }
+        }
+    }
+
+    private fun playSynthesizedFile(utteranceId: String) {
+        if (utteranceId != currentUtteranceId) return
+        val retryText = pendingSpeakText
+        val wav = runCatching { readWavPcm(cacheFile) }.getOrElse {
+            Log.w(TAG, "No se pudo leer WAV TTS: ${it.message}")
+            mainHandler.post {
+                pendingSpeakText = retryText
+                onSynthesizeError()
+            }
+            return
+        }
+        pendingSpeakText = null
+        val route = routeProvider()
+        Log.i(TAG, "TTS: engine sample rate = ${wav.sampleRateHz} route=$route")
+        val mono = toMono(wav.pcm, wav.channels)
+        val playRate = VoiceAudioPath.playSampleRateHz(route, wav.sampleRateHz)
+        val pcm = if (VoiceAudioPath.needsResample(route, wav.sampleRateHz)) {
+            resampleToScoMono(mono, wav.sampleRateHz, channels = 1)
+        } else {
+            mono
+        }
+        Log.i(TAG, "TTS: playback sample rate = $playRate")
         if (utteranceId != currentUtteranceId) return
 
         val gen = playGeneration.incrementAndGet()
-        val track = runCatching { createScoTrack(pcm16k.size) }.getOrElse {
+        val track = runCatching { createPlaybackTrack(pcm.size, playRate, route) }.getOrElse {
             Log.w(TAG, "AudioTrack no disponible: ${it.message}")
             mainHandler.post { listener.onError("Error al hablar la respuesta.") }
             return
@@ -162,7 +307,7 @@ class TtsEngine(
             playbackTrack = track
         }
 
-        val written = track.write(pcm16k, 0, pcm16k.size)
+        val written = track.write(pcm, 0, pcm.size)
         if (written < 0) {
             Log.w(TAG, "AudioTrack write falló: $written")
             synchronized(this) { releaseTrack(track); if (playbackTrack === track) playbackTrack = null }
@@ -176,7 +321,7 @@ class TtsEngine(
             return
         }
 
-        val durationMs = pcm16k.size * 1000L / VoiceAudioPath.SAMPLE_RATE_HZ
+        val durationMs = pcm.size * 1000L / playRate.coerceAtLeast(1)
         mainHandler.postDelayed({
             if (utteranceId != currentUtteranceId) return@postDelayed
             if (gen != playGeneration.get()) return@postDelayed
@@ -185,12 +330,18 @@ class TtsEngine(
         }, durationMs + PLAYBACK_SLACK_MS)
     }
 
-    private fun createScoTrack(pcmShorts: Int): AudioTrack {
+    private fun createPlaybackTrack(
+        pcmShorts: Int,
+        sampleRateHz: Int,
+        route: VoicePlaybackRoute,
+    ): AudioTrack {
         val bytes = pcmShorts * 2
         return AudioTrack.Builder()
-            .setAudioAttributes(VoiceAudioPath.attributes())
-            .setAudioFormat(VoiceAudioPath.pcmMonoFormat())
-            .setBufferSizeInBytes(bytes.coerceAtLeast(VoiceAudioPath.minBufferBytes()))
+            .setAudioAttributes(VoiceAudioPath.attributes(route, mediaUsage))
+            .setAudioFormat(VoiceAudioPath.pcmMonoFormat(sampleRateHz))
+            .setBufferSizeInBytes(
+                bytes.coerceAtLeast(VoiceAudioPath.minBufferBytes(sampleRateHz)),
+            )
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
             .also { it.setVolume(1f) }
@@ -213,12 +364,7 @@ class TtsEngine(
     }
 
     private fun preferredLocale(engine: TextToSpeech): Locale {
-        val candidates = listOf(
-            Locale.forLanguageTag("es-MX"),
-            Locale.forLanguageTag("es-ES"),
-            Locale("es"),
-        )
-        for (locale in candidates) {
+        for (locale in TtsVoicePolicy.preferredLocales()) {
             val avail = engine.isLanguageAvailable(locale)
             if (avail >= TextToSpeech.LANG_AVAILABLE) return locale
         }
@@ -284,19 +430,20 @@ class TtsEngine(
     }
 
     /** Mono 16 kHz para el sink SCO. 48 kHz → decimación exacta ×3. */
-    private fun resampleToScoMono(pcm: ShortArray, srcRate: Int, channels: Int): ShortArray {
-        val mono = if (channels <= 1) {
-            pcm
-        } else {
-            val frames = pcm.size / channels
-            ShortArray(frames) { i ->
-                var sum = 0
-                for (c in 0 until channels) {
-                    sum += pcm[i * channels + c].toInt()
-                }
-                (sum / channels).toShort()
+    private fun toMono(pcm: ShortArray, channels: Int): ShortArray {
+        if (channels <= 1) return pcm
+        val frames = pcm.size / channels
+        return ShortArray(frames) { i ->
+            var sum = 0
+            for (c in 0 until channels) {
+                sum += pcm[i * channels + c].toInt()
             }
+            (sum / channels).toShort()
         }
+    }
+
+    private fun resampleToScoMono(pcm: ShortArray, srcRate: Int, channels: Int): ShortArray {
+        val mono = toMono(pcm, channels)
         if (srcRate == VoiceAudioPath.SAMPLE_RATE_HZ || srcRate <= 0) return mono
 
         if (srcRate % VoiceAudioPath.SAMPLE_RATE_HZ == 0) {

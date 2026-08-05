@@ -32,7 +32,8 @@ import mx.ideass.personal.agent.app.AppTheme
  *
  * El audio/ciclo vive en [VoiceSession]; esta Activity solo monta la UI,
  * gobierna keep-screen-on / wake de pantalla (bit «ventana») y cierra con
- * Terminar o [VoiceSession.sessionEnded].
+ * Terminar, comando de voz o [VoiceSession.sessionEnded] — mismo
+ * [closeSurface] (nunca Idle «En pausa» pegado).
  *
  * [VoiceOrigin.InConversation] no usa esta Activity.
  */
@@ -63,7 +64,7 @@ class VoiceLockscreenActivity : ComponentActivity() {
                         ui = ui,
                         onEnd = {
                             voiceSession.hangUp(HangReason.Ui)
-                            finish()
+                            closeSurface()
                         },
                     )
                 }
@@ -78,9 +79,22 @@ class VoiceLockscreenActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                voiceSession.sessionEnded.collect {
-                    Log.d(TAG, "sessionEnded → finish")
-                    finish()
+                // Comando de voz / silencio / reinvocación: misma finish que Terminar.
+                // No usar solo sessionEnded (buffer podía perder el evento → Idle «En pausa»).
+                var sawActive = false
+                voiceSession.sessionActiveFlow.collect { active ->
+                    if (active) {
+                        sawActive = true
+                        syncKeepScreenOn(voiceActive = true)
+                    } else if (
+                        VoiceHangClosePolicy.shouldFinishSurface(
+                            sawSessionActive = sawActive,
+                            sessionActive = false,
+                        )
+                    ) {
+                        Log.d(TAG, "sessionActiveFlow → closeSurface")
+                        closeSurface()
+                    }
                 }
             }
         }
@@ -124,6 +138,31 @@ class VoiceLockscreenActivity : ComponentActivity() {
         if (voiceSession.isSessionActive) {
             Log.d(TAG, "onNewIntent con racha activa → hangUp reinvocation")
             voiceSession.closeByReinvocation()
+        }
+    }
+
+    /**
+     * Cierra la superficie liberando holds de pantalla (wake + keep-screen-on +
+     * turnScreenOn) para que el keyguard pueda apagar por timeout — sin dejar
+     * `Agente:voz-pantalla` residual. No toca el bloqueo (sigue pidiendo huella).
+     */
+    private fun closeSurface() {
+        if (isFinishing) return
+        if (VoiceHangClosePolicy.releaseScreenHoldsBeforeFinish()) {
+            releaseScreenHolds()
+        }
+        Log.d(TAG, "closeSurface screenWake=${screenWake.isHeld}")
+        finish()
+    }
+
+    private fun releaseScreenHolds() {
+        screenWake.forceRelease()
+        window.decorView.keepScreenOn = false
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        @Suppress("DEPRECATION")
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTurnScreenOn(false)
         }
     }
 

@@ -10,6 +10,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
+import mx.ideass.personal.agent.R
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.PI
@@ -21,16 +22,20 @@ import kotlin.math.sin
  * envolvente suave (attack ~10 ms, release ~80 ms) y notas de la escala
  * pentatónica de Do mayor.
  *
- * Mismo path que el TTS: [VoiceAudioPath] (16 kHz, USAGE_VOICE_COMMUNICATION)
- * para no forzar createOrUpdatePatch al alternar earcon ↔ voz.
+ * Atributos según [VoicePlaybackRoutePolicy]: SCO → VOICE_COMMUNICATION;
+ * altavoz → ASSISTANT/MEDIA. Sample rate fijo 16 kHz (síntesis local).
  */
 @Singleton
 class VoiceEarcons @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val bluetoothSco: BluetoothScoController,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var track: AudioTrack? = null
     private var generation = 0
+    private val mediaUsage: Int = VoiceAudioPath.mediaUsageFromConfig(
+        context.getString(R.string.voice_playback_media_usage),
+    )
 
     /** Dos notas ascendentes Mi→Sol: listo para escuchar. */
     fun playListening(): Long {
@@ -115,7 +120,8 @@ class VoiceEarcons @Inject constructor(
             return 0L
         }
         track = created
-        Log.i(TAG, "Earcon: sample rate = ${VoiceAudioPath.SAMPLE_RATE_HZ}")
+        val route = VoicePlaybackRoutePolicy.resolve(bluetoothSco.isScoConnected)
+        Log.i(TAG, "Earcon: route=$route sample rate = ${VoiceAudioPath.SAMPLE_RATE_HZ}")
         val written = created.write(pcm, 0, pcm.size)
         if (written < 0) {
             Log.w(TAG, "AudioTrack write falló: $written")
@@ -137,8 +143,9 @@ class VoiceEarcons @Inject constructor(
 
     private fun createTrack(pcmShorts: Int): AudioTrack {
         val bytes = pcmShorts * 2
+        val route = VoicePlaybackRoutePolicy.resolve(bluetoothSco.isScoConnected)
         return AudioTrack.Builder()
-            .setAudioAttributes(VoiceAudioPath.attributes())
+            .setAudioAttributes(VoiceAudioPath.attributes(route, mediaUsage))
             .setAudioFormat(VoiceAudioPath.pcmMonoFormat())
             .setBufferSizeInBytes(bytes.coerceAtLeast(VoiceAudioPath.minBufferBytes()))
             .setTransferMode(AudioTrack.MODE_STATIC)

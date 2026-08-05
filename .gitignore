@@ -30,6 +30,10 @@ captures/
 *.aab
 .kotlin/
 
+# sherpa-onnx: AAR y modelos de prueba (scripts/fetch-sherpa-cp1.sh)
+android/app/libs/*.aar
+android/.neural-voices/
+
 # .NET (agent-windows)
 bin/
 obj/

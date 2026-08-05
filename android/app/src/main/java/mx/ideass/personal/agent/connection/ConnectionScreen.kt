@@ -63,6 +63,8 @@ import mx.ideass.personal.agent.app.AppRadii
 import mx.ideass.personal.agent.app.ConnectionBackend
 import mx.ideass.personal.agent.network.ConnectionState
 import mx.ideass.personal.agent.service.ConnectionHealth
+import mx.ideass.personal.agent.voice.NeuralVoiceSettingsSection
+import mx.ideass.personal.agent.voice.TtsSettingsSection
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -292,6 +294,12 @@ fun ConnectionScreen(
             Spacer(modifier = Modifier.height(8.dp))
             ConnectionHealthSection(health = health)
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        NeuralVoiceSettingsSection()
+
+        Spacer(modifier = Modifier.height(8.dp))
+        TtsSettingsSection()
 
         Spacer(modifier = Modifier.height(16.dp))
         Text(

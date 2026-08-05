@@ -21,25 +21,26 @@ class VoiceConnectionGateTest {
             VoiceConnectionGate.awaitConnected(
                 state = state,
                 isConnected = { true },
-                timeoutMs = 4_000L,
+                timeoutMs = VoiceConnectionGate.SAFETY_CEILING_MS,
             ),
         )
     }
 
     @Test
-    fun awaitConnected_reachesConectadoWithinMargin() = runTest {
+    fun awaitConnected_reachesConectadoWithinCeiling() = runTest {
         val state = MutableStateFlow<ConnectionState>(ConnectionState.Reconectando(3))
         var online = false
         val job = launch {
             val ok = VoiceConnectionGate.awaitConnected(
                 state = state,
                 isConnected = { online },
-                timeoutMs = 4_000L,
+                timeoutMs = VoiceConnectionGate.SAFETY_CEILING_MS,
             )
             assertTrue(ok)
         }
         runCurrent()
-        advanceTimeBy(500)
+        // Caso real Tailscale frío: hello-ok ~4,2 s (> antiguo margen fijo de 4 s).
+        advanceTimeBy(4_200)
         online = true
         state.value = ConnectionState.Conectado
         runCurrent()
@@ -47,35 +48,86 @@ class VoiceConnectionGateTest {
     }
 
     @Test
-    fun awaitConnected_errorBeforeTimeout_fails() = runTest {
+    fun awaitConnected_errorBeforeCeiling_failsWithoutWaitingFullCeiling() = runTest {
         val state = MutableStateFlow<ConnectionState>(ConnectionState.Reconectando(2))
         val job = launch {
             val ok = VoiceConnectionGate.awaitConnected(
                 state = state,
                 isConnected = { false },
-                timeoutMs = 4_000L,
+                timeoutMs = VoiceConnectionGate.SAFETY_CEILING_MS,
             )
             assertFalse(ok)
         }
         runCurrent()
-        state.value = ConnectionState.Error("auth", "AUTH_SCOPE_MISMATCH")
+        advanceTimeBy(200)
+        state.value = ConnectionState.Error("sin red", "NETWORK_UNREACHABLE")
         runCurrent()
         job.join()
     }
 
     @Test
-    fun awaitConnected_timeoutWithoutConnect_fails() = runTest {
+    fun awaitConnected_hangUntilCeiling_fails() = runTest {
         val state = MutableStateFlow<ConnectionState>(ConnectionState.Reconectando(5))
         val job = launch {
             val ok = VoiceConnectionGate.awaitConnected(
                 state = state,
                 isConnected = { false },
-                timeoutMs = 4_000L,
+                timeoutMs = VoiceConnectionGate.SAFETY_CEILING_MS,
             )
             assertFalse(ok)
         }
         runCurrent()
-        advanceTimeBy(4_001)
+        advanceTimeBy(VoiceConnectionGate.SAFETY_CEILING_MS + 1)
+        runCurrent()
+        job.join()
+    }
+
+    @Test
+    fun awaitConnected_skipsStaleConectadoUntilFreshHelloOk() = runTest {
+        // Tras reconnectNow el StateFlow puede seguir en Conectado residual.
+        val state = MutableStateFlow<ConnectionState>(ConnectionState.Conectado)
+        var online = false
+        val job = launch {
+            val ok = VoiceConnectionGate.awaitConnected(
+                state = state,
+                isConnected = { online },
+                timeoutMs = VoiceConnectionGate.SAFETY_CEILING_MS,
+                skipStaleTerminal = true,
+            )
+            assertTrue(ok)
+        }
+        runCurrent()
+        advanceTimeBy(100)
+        state.value = ConnectionState.Reconectando(0)
+        runCurrent()
+        advanceTimeBy(4_200)
+        online = true
+        state.value = ConnectionState.Conectado
+        runCurrent()
+        job.join()
+    }
+
+    @Test
+    fun awaitConnected_skipsStaleErrorUntilReconnectResolves() = runTest {
+        val state = MutableStateFlow<ConnectionState>(
+            ConnectionState.Error("previo", "AUTH_TOKEN_MISMATCH"),
+        )
+        var online = false
+        val job = launch {
+            val ok = VoiceConnectionGate.awaitConnected(
+                state = state,
+                isConnected = { online },
+                timeoutMs = VoiceConnectionGate.SAFETY_CEILING_MS,
+                skipStaleTerminal = true,
+            )
+            assertTrue(ok)
+        }
+        runCurrent()
+        state.value = ConnectionState.Reconectando(0)
+        runCurrent()
+        advanceTimeBy(500)
+        online = true
+        state.value = ConnectionState.Conectado
         runCurrent()
         job.join()
     }

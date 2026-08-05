@@ -1,0 +1,93 @@
+{
+  "voices": [
+    {
+      "id": "vits-piper-es_MX-claude-high",
+      "displayName": "Claude · México",
+      "engine": "piper",
+      "language": "es-MX",
+      "gender": "male",
+      "sampleRate": 22050,
+      "sizeBytes": 67207890,
+      "sizeMB": 67,
+      "recommended": true,
+      "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-es_MX-claude-high.tar.bz2",
+      "sha256": "ec33fb689c248fe64810aab564cba97babf0f506672cfd404928d46e751a4721",
+      "archiveRoot": "vits-piper-es_MX-claude-high",
+      "onnxFile": "es_MX-claude-high.onnx",
+      "speakerId": 0,
+      "requiredFiles": [
+        "es_MX-claude-high.onnx",
+        "tokens.txt",
+        "espeak-ng-data/phontab"
+      ]
+    },
+    {
+      "id": "vits-piper-es_MX-ald-medium",
+      "displayName": "Ald · México",
+      "engine": "piper",
+      "language": "es-MX",
+      "gender": "male",
+      "sampleRate": 22050,
+      "sizeBytes": 67196497,
+      "sizeMB": 67,
+      "recommended": false,
+      "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-es_MX-ald-medium.tar.bz2",
+      "sha256": "c60cf7bc853eb01a875fba0756523fecf9d9f46c763b19785d223fc981fb4fb6",
+      "archiveRoot": "vits-piper-es_MX-ald-medium",
+      "onnxFile": "es_MX-ald-medium.onnx",
+      "speakerId": 0,
+      "requiredFiles": [
+        "es_MX-ald-medium.onnx",
+        "tokens.txt",
+        "espeak-ng-data/phontab"
+      ]
+    },
+    {
+      "id": "vits-piper-es_ES-davefx-medium",
+      "displayName": "DaveFX · España",
+      "engine": "piper",
+      "language": "es-ES",
+      "gender": "male",
+      "sampleRate": 22050,
+      "sizeBytes": 67184952,
+      "sizeMB": 67,
+      "recommended": false,
+      "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-es_ES-davefx-medium.tar.bz2",
+      "sha256": "a3f6beb54a9cb893279f72978a22f807a4d9fc9c7848157b524d5cc7b7f58b22",
+      "archiveRoot": "vits-piper-es_ES-davefx-medium",
+      "onnxFile": "es_ES-davefx-medium.onnx",
+      "speakerId": 0,
+      "requiredFiles": [
+        "es_ES-davefx-medium.onnx",
+        "tokens.txt",
+        "espeak-ng-data/phontab"
+      ]
+    },
+    {
+      "id": "kokoro-multi-lang-v1_0",
+      "displayName": "Kokoro multilingüe",
+      "engine": "kokoro",
+      "language": "multi",
+      "gender": null,
+      "sampleRate": 24000,
+      "sizeBytes": 349418188,
+      "sizeMB": 349,
+      "recommended": false,
+      "downloadUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2",
+      "sha256": "c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046",
+      "archiveRoot": "kokoro-multi-lang-v1_0",
+      "onnxFile": "model.onnx",
+      "voicesFile": "voices.bin",
+      "lexiconFiles": ["lexicon-us-en.txt", "lexicon-zh.txt"],
+      "speakerId": 0,
+      "requiredFiles": [
+        "model.onnx",
+        "tokens.txt",
+        "voices.bin",
+        "espeak-ng-data/phontab",
+        "lexicon-us-en.txt",
+        "lexicon-zh.txt"
+      ]
+    }
+  ]
+}

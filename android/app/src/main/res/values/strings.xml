@@ -66,6 +66,53 @@
     <string name="session_quick_display_name">Rápidas</string>
     <string name="session_quick_id">rapidas</string>
 
+    <!-- Ajustes voces neuronales (sherpa-onnx) -->
+    <string name="neural_voice_settings_title">Voz</string>
+    <string name="neural_voice_settings_subtitle">Voces neuronales offline. Descarga la que quieras, escucha una muestra y actívala para las rachas. Sin voz instalada se usa el TTS de Android.</string>
+    <string name="neural_voice_catalog_empty">El catálogo de voces está vacío.</string>
+    <string name="neural_voice_meta_line">%1$s · %2$s · ~%3$d MB</string>
+    <string name="neural_voice_recommended_badge">Recomendada</string>
+    <string name="neural_voice_status_not_installed">No descargada</string>
+    <string name="neural_voice_status_downloading">Descargando</string>
+    <string name="neural_voice_status_extracting">Instalando…</string>
+    <string name="neural_voice_status_failed">Error</string>
+    <string name="neural_voice_status_installed">Instalada</string>
+    <string name="neural_voice_status_active">Activa</string>
+    <string name="neural_voice_progress_pct">%1$d%%</string>
+    <string name="neural_voice_download">Descargar</string>
+    <string name="neural_voice_cancel">Cancelar</string>
+    <string name="neural_voice_activate">Activar</string>
+    <string name="neural_voice_preview">Escuchar</string>
+    <string name="neural_voice_delete">Borrar</string>
+    <string name="neural_voice_refresh">Actualizar lista</string>
+    <string name="neural_voice_download_ok">Voz instalada.</string>
+    <string name="neural_voice_download_failed">No se pudo descargar la voz.</string>
+    <string name="neural_voice_activated">Voz activada. Se usará en la próxima racha.</string>
+    <string name="neural_voice_deleted">Voz eliminada.</string>
+    <string name="neural_voice_not_installed">Esa voz no está instalada.</string>
+    <string name="neural_voice_sample_phrase">Hola, soy el agente. Así suena esta voz neuronal.</string>
+    <string name="neural_voice_sample_failed">No se pudo reproducir la muestra.</string>
+
+    <!-- Ajustes TTS Android (fallback) -->
+    <string name="tts_settings_title">Fallback Android TTS</string>
+    <string name="tts_settings_subtitle">Solo si no hay voz neuronal instalada, o si sherpa falla. En HyperOS conviene elegir el motor explícitamente.</string>
+    <string name="tts_settings_engine_label">Motor de síntesis</string>
+    <string name="tts_settings_engine_system">Predeterminado del sistema</string>
+    <string name="tts_settings_engines_empty">No se encontraron motores TTS instalados.</string>
+    <string name="tts_settings_engine_saved">Motor guardado.</string>
+    <string name="tts_settings_engine_system_saved">Usando el motor predeterminado del sistema.</string>
+    <string name="tts_settings_voice_label">Voz</string>
+    <string name="tts_settings_voice_auto_action">Automática</string>
+    <string name="tts_settings_voice_auto">Voz automática según el idioma.</string>
+    <string name="tts_settings_voice_saved">Voz guardada.</string>
+    <string name="tts_settings_voice_missing">La voz guardada ya no está disponible; se usará la automática del motor.</string>
+    <string name="tts_settings_voice_es_mx_badge">Español México</string>
+    <string name="tts_settings_voices_empty">Este motor no expone voces (o aún no terminó de inicializar).</string>
+    <string name="tts_settings_preview">Probar</string>
+    <string name="tts_settings_sample_phrase">Hola, soy el agente. Así suena esta voz.</string>
+    <string name="tts_settings_sample_failed">No se pudo reproducir la muestra.</string>
+    <string name="tts_settings_refresh">Actualizar motores y voces</string>
+
     <!-- Lista de sesiones / borrado -->
     <string name="sessions_title">Sesiones</string>
     <string name="sessions_subtitle">Toca una para cambiar · mantén pulsado para seleccionar</string>

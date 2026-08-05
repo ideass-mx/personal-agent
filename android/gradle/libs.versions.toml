@@ -15,6 +15,7 @@ coreKtx = "1.15.0"
 junit = "4.13.2"
 bcprov = "1.84"
 securityCrypto = "1.1.0"
+commons = "1.27.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -40,6 +41,7 @@ hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", ve
 junit = { module = "junit:junit", version.ref = "junit" }
 bcprov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcprov" }
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
+commons-compress = { module = "org.apache.commons:commons-compress", version.ref = "commons" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

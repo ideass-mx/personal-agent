@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Techo de seguridad del VoiceConnectionGate al invocar racha con socket caído.
+      La decisión normal es por evento (Conectado / Error); este valor solo evita
+      cuelgues indefinidos (Tailscale Serve frío puede superar 4 s).
+    -->
+    <integer name="voice_connection_gate_timeout_ms">12000</integer>
+</resources>

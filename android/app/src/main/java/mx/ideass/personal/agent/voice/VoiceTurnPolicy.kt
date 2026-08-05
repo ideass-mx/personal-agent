@@ -64,12 +64,13 @@ object VoiceTurnPolicy {
         return VoiceTurnDecision.Send(trimmed)
     }
 
-    fun afterSessionStart(connected: Boolean, sttAvailable: Boolean): VoiceTurnDecision? {
+    /**
+     * Tras el gate de conexión. La red **no** se decide aquí: offline solo lo
+     * declara [VoiceConnectionGate.ensureConnected] al rendirse.
+     */
+    fun afterSessionStart(sttAvailable: Boolean): VoiceTurnDecision? {
         if (!sttAvailable) {
             return VoiceTurnDecision.AudibleError(VoiceErrorKind.SttUnavailable)
-        }
-        if (!connected) {
-            return VoiceTurnDecision.AudibleError(VoiceErrorKind.NoNetwork)
         }
         return null
     }

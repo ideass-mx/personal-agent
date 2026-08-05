@@ -113,6 +113,17 @@ class VoiceVisDetachTest {
     }
 
     @Test
+    fun hangUp_finishesLockscreenSurface_notIdlePause() {
+        assertTrue(
+            VoiceHangClosePolicy.shouldFinishSurface(
+                sawSessionActive = true,
+                sessionActive = false,
+            ),
+        )
+        assertTrue(VoiceHangClosePolicy.releaseScreenHoldsBeforeFinish())
+    }
+
+    @Test
     fun keyguard_showWhenLocked_withoutDismiss() {
         assertTrue(VoiceVisSessionPolicy.shouldShowWhenLocked())
         assertFalse(VoiceVisSessionPolicy.shouldDismissKeyguard())

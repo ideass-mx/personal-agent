@@ -39,11 +39,11 @@ class VoiceStreak @Inject constructor(
     }
 
     /**
-     * Crea la sesión de la racha. Requiere Gateway conectado.
+     * Crea la sesión de la racha. El caller debe haber pasado por
+     * [VoiceConnectionGate.ensureConnected]; aquí no se anuncia offline.
      * Nunca inventa sessionKey local. Nunca activa la sesión en la UI.
      */
     suspend fun open(): Opened? {
-        if (!gatewayClient.isConnected()) return null
         val activeBefore = sessionProvider.activeSession.value
         val name = provisionalName()
         val created = gatewayClient.createNamedSession(name, activate = false) ?: return null

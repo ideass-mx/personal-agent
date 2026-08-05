@@ -117,21 +117,8 @@ class VoiceTurnPolicyTest {
     }
 
     @Test
-    fun afterSessionStart_noNetwork_beforeListening() {
-        val decision = VoiceTurnPolicy.afterSessionStart(
-            connected = false,
-            sttAvailable = true,
-        )
-        assertEquals(
-            VoiceTurnDecision.AudibleError(VoiceErrorKind.NoNetwork),
-            decision,
-        )
-    }
-
-    @Test
     fun afterSessionStart_sttMissing_beforeListening() {
         val decision = VoiceTurnPolicy.afterSessionStart(
-            connected = true,
             sttAvailable = false,
         )
         assertTrue(decision is VoiceTurnDecision.AudibleError)
@@ -145,7 +132,6 @@ class VoiceTurnPolicyTest {
     fun afterSessionStart_ok_returnsNull() {
         assertNull(
             VoiceTurnPolicy.afterSessionStart(
-                connected = true,
                 sttAvailable = true,
             ),
         )

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Parámetros de síntesis neuronal (sherpa-onnx). Marca blanca. -->
+    <integer name="sherpa_tts_num_threads">2</integer>
+    <item name="sherpa_tts_default_speed" format="float" type="dimen">1.0</item>
+    <item name="sherpa_tts_silence_scale" format="float" type="dimen">0.2</item>
+    <!-- Pico objetivo post-síntesis (~−1 dBFS). Piper sale ~0.42 (−7.5 dBFS). -->
+    <item name="sherpa_tts_peak_target" format="float" type="dimen">0.89125</item>
+    <!-- Tope de ganancia (evita amplificar ruido en frases casi mudas). -->
+    <item name="sherpa_tts_max_gain" format="float" type="dimen">4.0</item>
+</resources>

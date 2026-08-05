@@ -79,6 +79,34 @@ class VoiceHangClosePolicyTest {
     }
 
     @Test
+    fun voiceHangCommand_finishesSurfaceSameAsUi() {
+        // Tras ver racha activa, pasar a inactiva → finish (gracias = Terminar).
+        assertTrue(
+            VoiceHangClosePolicy.shouldFinishSurface(
+                sawSessionActive = true,
+                sessionActive = false,
+            ),
+        )
+        assertFalse(
+            VoiceHangClosePolicy.shouldFinishSurface(
+                sawSessionActive = false,
+                sessionActive = false,
+            ),
+        )
+        assertFalse(
+            VoiceHangClosePolicy.shouldFinishSurface(
+                sawSessionActive = true,
+                sessionActive = true,
+            ),
+        )
+    }
+
+    @Test
+    fun lockscreenClose_releasesScreenHoldsBeforeFinish() {
+        assertTrue(VoiceHangClosePolicy.releaseScreenHoldsBeforeFinish())
+    }
+
+    @Test
     fun delayedInFlightReply_titleWaitsButClosePathDoesNot() = runBlocking {
         val provider = primedProvider()
         val key = registerStreak(provider, "Conversación de voz — 10:00")

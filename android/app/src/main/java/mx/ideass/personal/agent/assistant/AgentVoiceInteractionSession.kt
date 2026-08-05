@@ -64,7 +64,7 @@ class AgentVoiceInteractionSession(
             VoiceVisSessionPolicy.ShowAction.HangUpByReinvocation -> {
                 Log.d(TAG, "reinvocación → hangUp")
                 voiceSession.closeByReinvocation()
-                // La Activity se cierra sola vía sessionEnded; ocultar VIS.
+                // La Activity se cierra sola al pasar sessionActive→false; ocultar VIS.
                 hide()
             }
             VoiceVisSessionPolicy.ShowAction.Start -> {

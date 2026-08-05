@@ -9,3 +9,7 @@ captures/
 *.ap_
 *.aab
 .DS_Store
+
+# sherpa-onnx runtime / voces de prueba (ver scripts/fetch-sherpa-cp1.sh)
+app/libs/*.aar
+.neural-voices/

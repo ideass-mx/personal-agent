@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Uso AudioAttributes en ruta no-SCO (altavoz / A2DP):
+      "assistant" → USAGE_ASSISTANT (default, STREAM_MUSIC)
+      "media" → USAGE_MEDIA (STREAM_MUSIC)
+      La ruta SCO siempre usa USAGE_VOICE_COMMUNICATION.
+    -->
+    <string name="voice_playback_media_usage" translatable="false">assistant</string>
+</resources>

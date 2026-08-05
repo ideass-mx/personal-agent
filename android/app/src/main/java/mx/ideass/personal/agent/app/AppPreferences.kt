@@ -48,6 +48,12 @@ class AppPreferences @Inject constructor(
         val GatewaySessionKey = stringPreferencesKey("gateway_session_key")
         /** LEGADO: sessionKey de la sesión «Rápidas» (ya no usada por voz). */
         val QuickSessionKey = stringPreferencesKey("quick_session_key")
+        /** Package del motor TTS; ausente/vacío = default del sistema. */
+        val TtsEnginePackage = stringPreferencesKey("tts_engine_package")
+        /** Name de [android.speech.tts.Voice]; ausente/vacío = locale del motor. */
+        val TtsVoiceName = stringPreferencesKey("tts_voice_name")
+        /** Id del catálogo neuronal activo (`voice_catalog.json`). */
+        val ActiveNeuralVoiceId = stringPreferencesKey("active_voice_id")
     }
 
     val hubConfig: Flow<HubConfig?> = context.dataStore.data.map { prefs ->
@@ -199,5 +205,56 @@ class AppPreferences @Inject constructor(
             prefs[Keys.DeviceId] = created
         }
         return created
+    }
+
+    val ttsEnginePackage: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.TtsEnginePackage]?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    val ttsVoiceName: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.TtsVoiceName]?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    suspend fun getTtsEnginePackage(): String? = ttsEnginePackage.first()
+
+    suspend fun getTtsVoiceName(): String? = ttsVoiceName.first()
+
+    suspend fun saveTtsEnginePackage(packageName: String?) {
+        context.dataStore.edit { prefs ->
+            val value = packageName?.trim().orEmpty()
+            if (value.isEmpty()) {
+                prefs.remove(Keys.TtsEnginePackage)
+            } else {
+                prefs[Keys.TtsEnginePackage] = value
+            }
+        }
+    }
+
+    suspend fun saveTtsVoiceName(voiceName: String?) {
+        context.dataStore.edit { prefs ->
+            val value = voiceName?.trim().orEmpty()
+            if (value.isEmpty()) {
+                prefs.remove(Keys.TtsVoiceName)
+            } else {
+                prefs[Keys.TtsVoiceName] = value
+            }
+        }
+    }
+
+    val activeNeuralVoiceId: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[Keys.ActiveNeuralVoiceId]?.trim()?.takeIf { it.isNotEmpty() }
+    }
+
+    suspend fun getActiveNeuralVoiceId(): String? = activeNeuralVoiceId.first()
+
+    suspend fun saveActiveNeuralVoiceId(voiceId: String?) {
+        context.dataStore.edit { prefs ->
+            val value = voiceId?.trim().orEmpty()
+            if (value.isEmpty()) {
+                prefs.remove(Keys.ActiveNeuralVoiceId)
+            } else {
+                prefs[Keys.ActiveNeuralVoiceId] = value
+            }
+        }
     }
 }

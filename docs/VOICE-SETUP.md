@@ -28,7 +28,10 @@ renombra; la voz continúa la `sessionKey` activa y el historial se pinta ahí.
 
 «¿Está listo el reporte?» **no** cuelga (solo coincidencia exacta del comando).
 
-**Sin red al invocar el asistente:** aviso audible y no se crea sesión.
+**Sin conexión al invocar el asistente:** un solo guardián
+(`VoiceConnectionGate`, techo ~12 s en `voice_connection_gate_timeout_ms`)
+espera `hello-ok` o fallo real (earcon de «pensando» si reconecta). Offline
+solo cuando el gate se rinde — no por un chequeo paralelo de socket.
 
 La sesión legado **Rápidas** ya no recibe tráfico de voz; si existía, queda
 como una sesión más en la lista.
@@ -152,9 +155,12 @@ probar en el 15T (o equivalente):
    el wake lock de pantalla se libera al hide (correcto); al colgar, sin
    residual (paso 6).
 5. Di «gracias» **o toca Terminar** → earcon + ventana fuera de inmediato
-   (<1 s); el título puede llegar poco después. La pantalla vuelve al
-   timeout normal (apagarse sola a los ~15 s). Al colgar desde lockscreen,
-   la huella del keyguard debe reaparecer.
+   (<1 s; mismo hangUp — no debe quedar «En pausa»); el título puede llegar
+   poco después. Al colgar se libera `Agente:voz-pantalla` y
+   keep-screen-on / turnScreenOn; sin APIs privilegiadas de «apagar pantalla»
+   el keyguard puede tardar el timeout normal (~15 s) en apagar, pero **no**
+   debe quedar ningún wake lock residual. Al colgar desde lockscreen, la
+   huella del keyguard debe reaparecer.
 6. Tras colgar: el mismo `grep -i voz-pantalla` **sin** lock activo held, y
    `adb shell dumpsys power | grep -i wake` sin `Agente:voz-pantalla` held.
 7. Caso desbloqueado: invocar con el teléfono abierto → keep-screen-on como
@@ -233,3 +239,128 @@ short edges, `PixelFormat.OPAQUE`.
   `voice_style_instruction` o `voice_streak_title_prompt`, añade el valor
   anterior a su `*_history` en recursos o las sesiones viejas volverán a
   mostrarlos.
+
+## 8. Motor y voz TTS (VoxSherpa / HyperOS)
+
+En Ajustes de la app (pantalla de conexión) → **Voz del agente**:
+
+1. Elige el motor **explícitamente** (p. ej. VoxSherpa). En HyperOS el
+   «TTS por defecto» de Ajustes del sistema **no siempre** es el que recibe
+   la app al bind sin package.
+2. Elige una voz (prioriza es-MX) y usa **Probar** antes de guardar.
+3. En una racha, el logcat (`TtsEngine`) debe mostrar
+   `TTS bind OK: … bound=<paquete VoxSherpa> voice=…`.
+
+Preferencias: `tts_engine_package`, `tts_voice_name`. Si el motor/voz falla,
+cae al default del sistema (log `TTS: fallback → motor del sistema`).
+
+### Calidad SCO vs A2DP (límite actual — sin cambio de perfil)
+
+La racha abre **un solo canal SCO** (`BluetoothScoController`) en
+`MODE_IN_COMMUNICATION` y reproduce TTS/earcons a **16 kHz mono**
+(`VoiceAudioPath` / `USAGE_VOICE_COMMUNICATION`) porque:
+
+- SCO es el perfil de **comunicación**: micrófono + auricular a la vez.
+- A2DP es el perfil de **media** (alta calidad); en la práctica **no**
+  permite captura de micrófono simultánea en buds clásicos.
+- Alternar A2DP (playback) ↔ SCO (escucha) en cada turno implica
+  reconectar el perfil Bluetooth: latencia típica de cientos de ms a
+  varios segundos, cortes audibles y riesgo de pelear con el
+  `AudioDeviceBroker` — incompatible con half-duplex fluido.
+
+**Conclusión:** con buds en racha, el techo de calidad es **telefónico
+(SCO)**. Una voz neuronal mejora el timbre, pero el remuestreo a 16 kHz +
+SCO sigue limitando. No se reestructura el enrutamiento A2DP sin un
+prototipo medido en dispositivo. Mejora menor posible (sin cambiar
+perfil): evitar remuestreo a 16 kHz cuando la salida **no** sea SCO
+(altavoz del teléfono); queda pendiente de visto bueno.
+
+## 9. Voces neuronales (sherpa-onnx) — CP1
+
+Runtime **sherpa-onnx 1.13.4** embebido en el APK (solo `arm64-v8a`).
+El AAR aporta `libonnxruntime.so` + `libsherpa-onnx-jni.so` (y c/cxx-api).
+Empaquetado reforzado: `extractSherpaJniLibs` copia esas `.so` arm64 a
+`jniLibs` del build (doble vía AAR + jniLibs) + `keepDebugSymbols` +
+`useLegacyPackaging` + carga `onnxruntime` → `sherpa-onnx-jni` en
+`SherpaNativeLibs`. AGP no debe strippear `libonnxruntime.so`; si lo altera,
+aparece `UnsatisfiedLinkError: couldn't find "libonnxruntime.so"`. Tras
+`assembleDebug`, `verifySherpaNativeLibsInApk` exige ambos `.so` en el APK
+con el mismo hash que el AAR.
+
+**No** usar `com.microsoft.onnxruntime:onnxruntime-android` junto al AAR:
+Maven 1.27.0 trae otro `libonnxruntime.so` (≠ el custom del AAR sherpa;
+~28 MB vs ~21 MB). Un `pickFirst` podría sustituir el runtime y romper el JNI.
+
+### Estado packaging / criterio de corte (2026-08-04)
+
+- `unzip -l` del APK debug debe listar
+  `lib/arm64-v8a/libonnxruntime.so` **y**
+  `lib/arm64-v8a/libsherpa-onnx-jni.so`.
+- Si tras reinstalar ese APK «Escuchar» sigue en `UnsatisfiedLinkError` (o el
+  `.so` no aparece en el APK), **no más rondas de packaging**: abandonar
+  sherpa-onnx on-device y usar **ElevenLabs** (canal Talk ya funcional).
+  Fallback Android TTS sigue cubriendo el fallo para no crashear.
+
+Los modelos **no** van en el APK: se colocan a mano en
+`files/neural_voices/<id>/` (el descargador llega en CP3).
+
+Preparación en el host:
+
+```bash
+cd android
+./scripts/fetch-sherpa-cp1.sh          # AAR + modelo Piper es-MX
+./scripts/fetch-sherpa-cp1.sh --verify # + síntesis de humo con binario Linux
+```
+
+Modelo de prueba: `vits-piper-es_MX-claude-high` (22 050 Hz, **no cuantizado**).
+Las variantes `-int8`/`-fp16` no se usan: el AAR integrado no las carga
+de forma fiable. En dispositivo (run-as / root según ROM):
+
+```bash
+adb push android/.neural-voices/vits-piper-es_MX-claude-high \
+  /data/data/mx.ideass.personal.agent/files/neural_voices/vits-piper-es_MX-claude-high
+```
+
+CP1 expone `SherpaOfflineSynthesizer` (`OfflineTts.generateWithCallback`).
+
+### CP2 — rachas con Sherpa
+
+`VoiceSession` usa `SherpaTtsEngine` si hay un modelo en
+`files/neural_voices/` (prioriza `active_voice_id` / recomendada);
+si no hay modelo o el init falla → **fallback** al TTS de Android
+(`TtsEngine`), sin quedar mudo.
+
+Playback: streaming `AudioTrack` MODE_STREAM a **16 kHz** (`VoiceAudioPath`)
+para coexistir con SCO/earcons (techo buds). Logcat: `SherpaTtsEngine` /
+`TTS: intentando Sherpa` / `fallback Android`.
+
+### CP3 — catálogo, descarga e instalación
+
+- Catálogo curado: `assets/voice_catalog.json` (Piper es-MX/es-ES + Kokoro;
+  solo variantes **no cuantizadas** hasta confirmar soporte int8 del AAR).
+- `VoiceDownloader`: descarga reanudable (Range), SHA-256, extracción
+  `.tar.bz2`, progreso en `statuses`. Parciales en
+  `files/neural_voices/.partial/`.
+- `InstalledVoices`: registro `installed.json`, borrar, reconciliar disco.
+- Preferencia `active_voice_id` (DataStore). Al instalar, si no hay activa
+  (o la voz es la recomendada) se activa sola.
+
+Tras extraer se exige integridad por motor (Piper: `.onnx` + `tokens.txt` +
+`espeak-ng-data/phontab`; Kokoro: además `voices.bin` y lexicons). Una carpeta
+a medias **no** se marca instalada; **Descargar** otra vez la borra y reinstala
+el `.tar.bz2` completo.
+
+La UI de ajustes llega en CP4; hasta entonces se puede instalar con
+`VoiceDownloader.download(id)` (p. ej. desde un debug hook) o seguir
+usando `adb push` / `fetch-sherpa-cp1.sh`.
+
+### CP4 — UI de ajustes «Voz»
+
+En la pantalla de conexión, sección **Voz**:
+
+- Lista del catálogo (nombre, idioma, motor, tamaño, estado).
+- Acciones: **Descargar** (barra de progreso), **Cancelar**, **Activar**,
+  **Escuchar** (muestra con la voz instalada), **Borrar**.
+- La voz **Activa** se usa en la siguiente racha.
+- Debajo queda **Fallback Android TTS** (motor/voz del sistema).
+
