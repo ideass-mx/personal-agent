@@ -342,23 +342,18 @@ para coexistir con SCO/earcons (techo buds). Logcat: `SherpaTtsEngine` /
 
 ### CP3 — catálogo, descarga e instalación
 
-- Catálogo curado: `assets/voice_catalog.json` (Piper es-MX/es-ES + Kokoro;
-  solo variantes **no cuantizadas** hasta confirmar soporte int8 del AAR).
-- `VoiceDownloader`: descarga reanudable (Range), SHA-256, extracción
-  `.tar.bz2`, progreso en `statuses`. Parciales en
-  `files/neural_voices/.partial/`.
+- Catálogo curado: `assets/voice_catalog.json` (Piper es-MX/es-ES + **Kokoro ES
+  Dora/Alex** sobre el paquete compartido `kokoro-multi-lang-v1_0`;
+  solo variantes **no cuantizadas**).
+- `VoiceDownloader` + `packageId`: una descarga sirve a varias voces
+  (Dora sid=28, Alex sid=29).
 - `InstalledVoices`: registro `installed.json`, borrar, reconciliar disco.
-- Preferencia `active_voice_id` (DataStore). Al instalar, si no hay activa
-  (o la voz es la recomendada) se activa sola.
+- Preferencia `active_voice_id` (DataStore) = id de voz (modelo + sid).
 
 Tras extraer se exige integridad por motor (Piper: `.onnx` + `tokens.txt` +
 `espeak-ng-data/phontab`; Kokoro: además `voices.bin` y lexicons). Una carpeta
 a medias **no** se marca instalada; **Descargar** otra vez la borra y reinstala
 el `.tar.bz2` completo.
-
-La UI de ajustes llega en CP4; hasta entonces se puede instalar con
-`VoiceDownloader.download(id)` (p. ej. desde un debug hook) o seguir
-usando `adb push` / `fetch-sherpa-cp1.sh`.
 
 ### CP4 — UI de ajustes «Voz»
 
@@ -366,7 +361,8 @@ En la pantalla de conexión, sección **Voz**:
 
 - Lista del catálogo (nombre, idioma, motor, tamaño, estado).
 - Acciones: **Descargar** (barra de progreso), **Cancelar**, **Activar**,
-  **Escuchar** (muestra con la voz instalada), **Borrar**.
+  **Escuchar** (muestra con la voz/sid instalada), **Borrar** (paquete entero
+  si es Kokoro compartido).
 - La voz **Activa** se usa en la siguiente racha.
 - Debajo queda **Fallback Android TTS** (motor/voz del sistema).
 
