@@ -65,4 +65,52 @@ class NeuralVoiceSettingsPolicyTest {
         assertNull(rows[1].progressFraction)
         assertTrue(rows[0].kind == NeuralVoiceRowKind.Failed)
     }
+
+    @Test
+    fun buildRows_sharedPackage_marksBothSpeakersInstalled() {
+        val catalog = listOf(
+            entry("kokoro-es-dora", engine = "kokoro").copy(
+                packageId = "kokoro-multi-lang-v1_0",
+                speakerId = 28,
+                archiveRoot = "kokoro-multi-lang-v1_0",
+            ),
+            entry("kokoro-es-alex", engine = "kokoro").copy(
+                packageId = "kokoro-multi-lang-v1_0",
+                speakerId = 29,
+                archiveRoot = "kokoro-multi-lang-v1_0",
+            ),
+        )
+        val rows = NeuralVoiceSettingsPolicy.buildRows(
+            catalog = catalog,
+            installedById = mapOf("kokoro-multi-lang-v1_0" to 349_000_000L),
+            activeVoiceId = "kokoro-es-alex",
+            downloadStatuses = emptyMap(),
+        )
+        assertEquals(NeuralVoiceRowKind.Installed, rows[0].kind)
+        assertEquals(NeuralVoiceRowKind.Active, rows[1].kind)
+        assertEquals(349_000_000L, rows[0].bytesOnDisk)
+        assertEquals(349_000_000L, rows[1].bytesOnDisk)
+    }
+
+    @Test
+    fun buildRows_sharedPackage_downloadStatusPropagates() {
+        val catalog = listOf(
+            entry("kokoro-es-dora", engine = "kokoro").copy(
+                packageId = "kokoro-multi-lang-v1_0",
+            ),
+            entry("kokoro-es-alex", engine = "kokoro").copy(
+                packageId = "kokoro-multi-lang-v1_0",
+            ),
+        )
+        val rows = NeuralVoiceSettingsPolicy.buildRows(
+            catalog = catalog,
+            installedById = emptyMap(),
+            activeVoiceId = null,
+            downloadStatuses = mapOf(
+                "kokoro-multi-lang-v1_0" to VoiceDownloadStatus.Downloading(10, 100),
+            ),
+        )
+        assertEquals(NeuralVoiceRowKind.Downloading, rows[0].kind)
+        assertEquals(NeuralVoiceRowKind.Downloading, rows[1].kind)
+    }
 }

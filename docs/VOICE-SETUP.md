@@ -319,9 +319,15 @@ de forma fiable. En dispositivo (run-as / root según ROM):
 ```bash
 adb push android/.neural-voices/vits-piper-es_MX-claude-high \
   /data/data/mx.ideass.personal.agent/files/neural_voices/vits-piper-es_MX-claude-high
+
+# Kokoro multi-lang v1_0 (~349 MB; Dora sid=28, Alex sid=29)
+adb push android/.neural-voices/kokoro-multi-lang-v1_0 \
+  /data/data/mx.ideass.personal.agent/files/neural_voices/kokoro-multi-lang-v1_0
 ```
 
-CP1 expone `SherpaOfflineSynthesizer` (`OfflineTts.generateWithCallback`).
+Después, en ajustes: **Kokoro ES · Dora** / **Alex** (misma descarga). Preview usa el
+`speakerId` de cada una. CP1 expone `SherpaOfflineSynthesizer`
+(`OfflineTts.generateWithCallback`).
 
 ### CP2 — rachas con Sherpa
 

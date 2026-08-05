@@ -11,7 +11,7 @@ import java.io.File
 class VoiceCatalogParseTest {
 
     @Test
-    fun parseCuratedCatalog_hasPiperAndKokoro() {
+    fun parseCuratedCatalog_hasPiperAndKokoroSpeakers() {
         val json = """
             {
               "voices": [
@@ -32,19 +32,21 @@ class VoiceCatalogParseTest {
                   "speakerId": 0
                 },
                 {
-                  "id": "kokoro-multi-lang-v1_0",
-                  "displayName": "Kokoro",
+                  "id": "kokoro-es-dora",
+                  "displayName": "Kokoro ES · Dora",
                   "engine": "kokoro",
-                  "language": "multi",
+                  "language": "es",
+                  "gender": "female",
                   "sampleRate": 24000,
                   "sizeBytes": 349418188,
                   "downloadUrl": "https://example.com/k.tar.bz2",
                   "sha256": "def",
                   "archiveRoot": "kokoro-multi-lang-v1_0",
+                  "packageId": "kokoro-multi-lang-v1_0",
                   "onnxFile": "model.onnx",
                   "voicesFile": "voices.bin",
                   "lexiconFiles": ["lexicon-us-en.txt", "lexicon-zh.txt"],
-                  "speakerId": 0
+                  "speakerId": 28
                 }
               ]
             }
@@ -55,13 +57,50 @@ class VoiceCatalogParseTest {
         val piper = voices.first { it.engine == "piper" }
         assertTrue(piper.recommended)
         assertEquals(NeuralVoiceEngine.Piper, piper.engineType())
-        assertFalse(piper.id.contains("int8"))
-        assertFalse(piper.downloadUrl.contains("int8"))
         val kokoro = voices.first { it.engine == "kokoro" }
         assertEquals(NeuralVoiceEngine.Kokoro, kokoro.engineType())
-        assertEquals("model.onnx", kokoro.onnxFile)
+        assertEquals("kokoro-multi-lang-v1_0", kokoro.installId())
+        assertEquals(28, kokoro.speakerId)
         assertEquals("voices.bin", kokoro.voicesFile)
-        assertEquals(2, kokoro.lexiconFiles.size)
+    }
+
+    @Test
+    fun assetCatalog_kokoroEsSpeakersShareV1_0Package() {
+        val voices = VoiceCatalog.parse(
+            File("src/main/assets/voice_catalog.json").readText(),
+        )
+        val kokoro = voices.filter { it.engine == "kokoro" }
+        assertEquals(2, kokoro.size)
+        val dora = kokoro.first { it.id == "kokoro-es-dora" }
+        val alex = kokoro.first { it.id == "kokoro-es-alex" }
+        assertEquals(28, dora.speakerId)
+        assertEquals(29, alex.speakerId)
+        assertEquals("female", dora.gender)
+        assertEquals("male", alex.gender)
+        assertEquals(dora.installId(), alex.installId())
+        assertEquals("kokoro-multi-lang-v1_0", dora.packageId)
+        assertTrue(dora.downloadUrl.endsWith("kokoro-multi-lang-v1_0.tar.bz2"))
+        assertEquals(
+            "c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046",
+            dora.sha256,
+        )
+        assertFalse(dora.downloadUrl.contains("int8"))
+        assertEquals(2, VoiceCatalog.siblings(voices, dora).size)
+    }
+
+    @Test
+    fun resolveEntry_legacyPackageIdsMapToDora() {
+        val entries = VoiceCatalog.parse(
+            File("src/main/assets/voice_catalog.json").readText(),
+        )
+        assertEquals(
+            "kokoro-es-dora",
+            VoiceCatalog.resolveEntry(entries, "kokoro-multi-lang-v1_0")!!.id,
+        )
+        assertEquals(
+            "kokoro-es-dora",
+            VoiceCatalog.resolveEntry(entries, "kokoro-multi-lang-v1_1")!!.id,
+        )
     }
 
     @Test
@@ -78,7 +117,6 @@ class VoiceCatalogParseTest {
         assertFalse(claude.id.contains("int8"))
         assertTrue(claude.recommended)
         assertEquals(67, claude.sizeMB)
-        // Ninguna entrada del catálogo debe ser cuantizada por defecto.
         for (v in voices) {
             assertFalse("Catálogo no debe listar int8: ${v.id}", v.id.contains("int8"))
             assertFalse(v.downloadUrl.contains("int8"))

@@ -10,6 +10,9 @@ data class VoiceCatalogFile(
 /**
  * Entrada del catálogo curado (marca blanca). Un tar.bz2 de sherpa-onnx
  * por voz; Piper = un ONNX; Kokoro = modelo + voices.bin + lexicons.
+ *
+ * Varias entradas pueden compartir [packageId] (misma descarga/carpeta) y
+ * diferir solo en [speakerId] (p. ej. Dora/Alex sobre el mismo Kokoro).
  */
 @Serializable
 data class VoiceCatalogEntry(
@@ -30,11 +33,19 @@ data class VoiceCatalogEntry(
     val lexiconFiles: List<String> = emptyList(),
     val speakerId: Int = 0,
     /**
+     * Id de paquete en disco (`neural_voices/<packageId>/`). Si es null,
+     * coincide con [id]. Voces multi-speaker (Kokoro) comparten el mismo.
+     */
+    val packageId: String? = null,
+    /**
      * Ficheros relativos al root de la voz que deben existir tras extraer.
      * Vacío = defaults por [engine] ([VoiceInstallValidator]).
      */
     val requiredFiles: List<String> = emptyList(),
 ) {
+    /** Carpeta / clave de descarga compartida. */
+    fun installId(): String = packageId?.takeIf { it.isNotBlank() } ?: id
+
     fun engineType(): NeuralVoiceEngine = when (engine.lowercase()) {
         "kokoro" -> NeuralVoiceEngine.Kokoro
         else -> NeuralVoiceEngine.Piper

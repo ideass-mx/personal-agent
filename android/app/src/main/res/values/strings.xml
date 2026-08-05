@@ -85,10 +85,10 @@
     <string name="neural_voice_preview">Escuchar</string>
     <string name="neural_voice_delete">Borrar</string>
     <string name="neural_voice_refresh">Actualizar lista</string>
-    <string name="neural_voice_download_ok">Voz instalada.</string>
+    <string name="neural_voice_download_ok">Voz instalada. Si es Kokoro, Dora y Alex quedan disponibles con la misma descarga.</string>
     <string name="neural_voice_download_failed">No se pudo descargar la voz.</string>
     <string name="neural_voice_activated">Voz activada. Se usará en la próxima racha.</string>
-    <string name="neural_voice_deleted">Voz eliminada.</string>
+    <string name="neural_voice_deleted">Paquete de voz eliminado.</string>
     <string name="neural_voice_not_installed">Esa voz no está instalada.</string>
     <string name="neural_voice_sample_phrase">Hola, soy el agente. Así suena esta voz neuronal.</string>
     <string name="neural_voice_sample_failed">No se pudo reproducir la muestra.</string>

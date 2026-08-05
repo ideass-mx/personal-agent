@@ -65,53 +65,71 @@ class VoiceDownloader @Inject constructor(
         _statuses.value[voiceId] ?: VoiceDownloadStatus.Idle
 
     fun cancel(voiceId: String) {
-        cancelFlags[voiceId]?.set(true)
+        val entry = catalog.get(voiceId) ?: catalog.resolveEntry(voiceId)
+        val keys = if (entry != null) statusKeysFor(entry) else listOf(voiceId)
+        for (key in keys) cancelFlags[key]?.set(true)
     }
 
-    /** Borra una voz instalada; si era la activa, elige otra o limpia la preferencia. */
+    /** Borra el paquete; si la activa era hermana, elige otra o limpia la preferencia. */
     suspend fun delete(voiceId: String) {
+        val entry = catalog.get(voiceId) ?: catalog.resolveEntry(voiceId)
+        val siblingIds = if (entry != null) {
+            VoiceCatalog.siblings(catalog.entries, entry).map { it.id }.toSet()
+        } else {
+            setOf(voiceId)
+        }
         installedVoices.delete(voiceId)
         val active = preferences.getActiveNeuralVoiceId()
-        if (active == voiceId) {
+        if (active != null && (active == voiceId || active in siblingIds)) {
             preferences.saveActiveNeuralVoiceId(
-                installedVoices.listInstalled().firstOrNull()?.id,
+                installedVoices.listInstalled().firstOrNull()?.id?.let { pkgId ->
+                    catalog.entries.firstOrNull { it.installId() == pkgId }?.id ?: pkgId
+                },
             )
         }
-        setStatus(voiceId, VoiceDownloadStatus.Idle)
+        if (entry != null) {
+            setStatusFor(statusKeysFor(entry), VoiceDownloadStatus.Idle)
+        } else {
+            setStatus(voiceId, VoiceDownloadStatus.Idle)
+        }
     }
 
     suspend fun download(voiceId: String): Result<Unit> = withContext(Dispatchers.IO) {
         mutex.withLock {
             val entry = catalog.get(voiceId)
+                ?: catalog.resolveEntry(voiceId)
                 ?: return@withLock Result.failure(
                     IllegalArgumentException("Voz desconocida: $voiceId"),
                 )
-            val finalDir = installedVoices.voiceDir(voiceId)
+            val installId = entry.installId()
+            val statusKeys = statusKeysFor(entry)
+            val finalDir = installedVoices.voiceDir(installId)
             // Completa → no re-descargar. Incompleta/rota → borrar y bajar de nuevo.
             if (VoiceInstallValidator.isComplete(entry, finalDir)) {
-                installedVoices.markInstalled(voiceId)
-                setStatus(voiceId, VoiceDownloadStatus.Idle)
+                installedVoices.markInstalled(entry.id)
+                setStatusFor(statusKeys, VoiceDownloadStatus.Idle)
                 return@withLock Result.success(Unit)
             }
             if (finalDir.exists()) {
-                Log.w(TAG, "Reinstalando voz incompleta: $voiceId")
+                Log.w(TAG, "Reinstalando paquete incompleto: $installId (voz=${entry.id})")
             }
-            installedVoices.delete(voiceId)
-            // Por si quedó la variante cuantizada rota del mismo modelo.
+            installedVoices.delete(entry.id)
             installedVoices.purgeAbandonedQuantizedInstalls()
             val cancel = AtomicBoolean(false)
-            cancelFlags[voiceId] = cancel
+            cancelFlags[installId] = cancel
+            for (key in statusKeys) cancelFlags[key] = cancel
             try {
                 val result = downloadLocked(entry, cancel)
                 if (result.isSuccess) {
                     val active = preferences.getActiveNeuralVoiceId()
                     if (active.isNullOrBlank() || entry.recommended) {
-                        preferences.saveActiveNeuralVoiceId(voiceId)
+                        preferences.saveActiveNeuralVoiceId(entry.id)
                     }
                 }
                 result
             } finally {
-                cancelFlags.remove(voiceId)
+                cancelFlags.remove(installId)
+                for (key in statusKeys) cancelFlags.remove(key)
             }
         }
     }
@@ -121,21 +139,23 @@ class VoiceDownloader @Inject constructor(
         cancel: AtomicBoolean,
     ): Result<Unit> {
         val voiceId = entry.id
+        val installId = entry.installId()
+        val statusKeys = statusKeysFor(entry)
         val partialRoot = installedVoices.partialDir().also { it.mkdirs() }
-        val archiveFile = File(partialRoot, "$voiceId.tar.bz2")
-        val extractDir = File(partialRoot, voiceId)
-        val finalDir = installedVoices.voiceDir(voiceId)
+        val archiveFile = File(partialRoot, "$installId.tar.bz2")
+        val extractDir = File(partialRoot, installId)
+        val finalDir = installedVoices.voiceDir(installId)
 
         try {
-            if (cancel.get()) return cancelled(voiceId)
+            if (cancel.get()) return cancelled(statusKeys)
 
-            downloadArchive(entry, archiveFile, cancel)
-            if (cancel.get()) return cancelled(voiceId)
+            downloadArchive(entry, archiveFile, cancel, statusKeys)
+            if (cancel.get()) return cancelled(statusKeys)
 
-            setStatus(voiceId, VoiceDownloadStatus.Extracting)
+            setStatusFor(statusKeys, VoiceDownloadStatus.Extracting)
             if (!FileSha256.matches(archiveFile, entry.sha256)) {
                 archiveFile.delete()
-                fail(voiceId, "Checksum incorrecto; descarga corrupta.")
+                fail(statusKeys, "Checksum incorrecto; descarga corrupta.")
                 return Result.failure(IOException("sha256 mismatch"))
             }
 
@@ -148,16 +168,16 @@ class VoiceDownloader @Inject constructor(
             )
             if (cancel.get()) {
                 extractDir.deleteRecursively()
-                return cancelled(voiceId)
+                return cancelled(statusKeys)
             }
 
             val missing = VoiceInstallValidator.missingRelativePaths(entry, extractDir)
             if (missing.isNotEmpty()) {
-                Log.w(TAG, "Modelo incompleto tras extraer ($voiceId): $missing")
+                Log.w(TAG, "Modelo incompleto tras extraer ($installId): $missing")
                 extractDir.deleteRecursively()
                 archiveFile.delete()
                 fail(
-                    voiceId,
+                    statusKeys,
                     "Faltan ficheros del modelo (p. ej. espeak-ng-data). Reintenta la descarga.",
                 )
                 return Result.failure(IOException("incomplete model: $missing"))
@@ -167,7 +187,7 @@ class VoiceDownloader @Inject constructor(
             if (model == null) {
                 extractDir.deleteRecursively()
                 archiveFile.delete()
-                fail(voiceId, "El archivo no contiene un modelo usable.")
+                fail(statusKeys, "El archivo no contiene un modelo usable.")
                 return Result.failure(IOException("incomplete model"))
             }
 
@@ -180,17 +200,17 @@ class VoiceDownloader @Inject constructor(
             archiveFile.delete()
 
             installedVoices.markInstalled(voiceId)
-            setStatus(voiceId, VoiceDownloadStatus.Idle)
-            Log.i(TAG, "Voz instalada: $voiceId")
+            setStatusFor(statusKeys, VoiceDownloadStatus.Idle)
+            Log.i(TAG, "Paquete instalado: $installId (voz=$voiceId sid=${entry.speakerId})")
             return Result.success(Unit)
         } catch (t: Throwable) {
             if (cancel.get()) {
                 cleanupPartial(archiveFile, extractDir)
-                return cancelled(voiceId)
+                return cancelled(statusKeys)
             }
-            Log.w(TAG, "Descarga fallida ($voiceId): ${t.message}")
+            Log.w(TAG, "Descarga fallida ($installId): ${t.message}")
             cleanupPartial(archiveFile, extractDir)
-            fail(voiceId, t.message ?: "Error al descargar la voz.")
+            fail(statusKeys, t.message ?: "Error al descargar la voz.")
             return Result.failure(t)
         }
     }
@@ -199,6 +219,7 @@ class VoiceDownloader @Inject constructor(
         entry: VoiceCatalogEntry,
         archiveFile: File,
         cancel: AtomicBoolean,
+        statusKeys: List<String>,
     ) {
         val expectedTotal = entry.sizeBytes.takeIf { it > 0L }
         var existing = if (archiveFile.isFile) archiveFile.length() else 0L
@@ -207,8 +228,8 @@ class VoiceDownloader @Inject constructor(
             existing = 0L
         }
 
-        setStatus(
-            entry.id,
+        setStatusFor(
+            statusKeys,
             VoiceDownloadStatus.Downloading(existing, expectedTotal),
         )
 
@@ -252,8 +273,8 @@ class VoiceDownloader @Inject constructor(
                         if (n < 0) break
                         raf.write(buffer, 0, n)
                         downloaded += n
-                        setStatus(
-                            entry.id,
+                        setStatusFor(
+                            statusKeys,
                             VoiceDownloadStatus.Downloading(downloaded, total ?: expectedTotal),
                         )
                     }
@@ -267,17 +288,28 @@ class VoiceDownloader @Inject constructor(
         if (archive.isFile && archive.length() == 0L) archive.delete()
     }
 
-    private fun cancelled(voiceId: String): Result<Unit> {
-        setStatus(voiceId, VoiceDownloadStatus.Idle)
+    private fun cancelled(statusKeys: List<String>): Result<Unit> {
+        setStatusFor(statusKeys, VoiceDownloadStatus.Idle)
         return Result.failure(IOException("cancelled"))
     }
 
-    private fun fail(voiceId: String, message: String) {
-        setStatus(voiceId, VoiceDownloadStatus.Failed(message))
+    private fun fail(statusKeys: List<String>, message: String) {
+        setStatusFor(statusKeys, VoiceDownloadStatus.Failed(message))
+    }
+
+    private fun statusKeysFor(entry: VoiceCatalogEntry): List<String> {
+        val siblings = VoiceCatalog.siblings(catalog.entries, entry)
+        return (siblings.map { it.id } + entry.installId()).distinct()
     }
 
     private fun setStatus(voiceId: String, status: VoiceDownloadStatus) {
         _statuses.update { it + (voiceId to status) }
+    }
+
+    private fun setStatusFor(keys: List<String>, status: VoiceDownloadStatus) {
+        _statuses.update { current ->
+            current + keys.associateWith { status }
+        }
     }
 
     companion object {

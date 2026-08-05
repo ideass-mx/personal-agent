@@ -72,18 +72,20 @@ class NeuralVoiceFromCatalogTest {
         File(root, "espeak-ng-data/phontab").writeBytes(byteArrayOf(1))
         File(root, "lexicon-us-en.txt").writeText("a")
         val entry = VoiceCatalogEntry(
-            id = "kokoro-multi-lang-v1_0",
+            id = "kokoro-es-dora",
             displayName = "Kokoro",
             engine = "kokoro",
-            language = "multi",
+            language = "es",
             sampleRate = 24000,
             sizeBytes = 100,
             downloadUrl = "https://example.com/k",
             sha256 = "bb",
             archiveRoot = "kokoro-multi-lang-v1_0",
+            packageId = "kokoro-multi-lang-v1_0",
             onnxFile = "model.onnx",
             voicesFile = "voices.bin",
             lexiconFiles = listOf("lexicon-us-en.txt"),
+            speakerId = 28,
         )
         assertNull(NeuralVoiceModel.fromCatalogEntry(entry, root))
         File(root, "voices.bin").writeBytes(byteArrayOf(2))
@@ -91,5 +93,36 @@ class NeuralVoiceFromCatalogTest {
         assertNotNull(model)
         assertEquals(NeuralVoiceEngine.Kokoro, model!!.engine)
         assertTrue(model.lexiconPaths.contains("lexicon-us-en.txt"))
+    }
+
+    @Test
+    fun fromCatalogEntry_kokoroSpeakerIdIsPreserved() {
+        val root = tmp.newFolder("kokoro-sid")
+        File(root, "model.onnx").writeBytes(byteArrayOf(1))
+        File(root, "tokens.txt").writeText("t")
+        File(root, "espeak-ng-data").mkdirs()
+        File(root, "espeak-ng-data/phontab").writeBytes(byteArrayOf(1))
+        File(root, "voices.bin").writeBytes(byteArrayOf(2))
+        File(root, "lexicon-us-en.txt").writeText("a")
+        val entry = VoiceCatalogEntry(
+            id = "kokoro-es-dora",
+            displayName = "Dora",
+            engine = "kokoro",
+            language = "es",
+            sampleRate = 24000,
+            sizeBytes = 100,
+            downloadUrl = "https://example.com/k",
+            sha256 = "bb",
+            archiveRoot = "kokoro-multi-lang-v1_0",
+            packageId = "kokoro-multi-lang-v1_0",
+            onnxFile = "model.onnx",
+            voicesFile = "voices.bin",
+            lexiconFiles = listOf("lexicon-us-en.txt"),
+            speakerId = 28,
+        )
+        val model = NeuralVoiceModel.fromCatalogEntry(entry, root)
+        assertNotNull(model)
+        assertEquals(28, model!!.defaultSpeakerId)
+        assertEquals("kokoro-es-dora", model.id)
     }
 }

@@ -76,9 +76,16 @@ class InstalledVoices @Inject constructor(
     /**
      * Carpeta base real para una entrada de catálogo (nunca asumir solo
      * `voiceDir(id)` si en disco hay sufijo u otro nombre usable).
+     * Usa [VoiceCatalogEntry.installId] para paquetes multi-speaker.
      */
-    fun resolveVoiceBaseDir(entry: VoiceCatalogEntry): File? =
-        NeuralVoicesStore.resolveVoiceBaseDir(
+    fun resolveVoiceBaseDir(entry: VoiceCatalogEntry): File? {
+        val installId = entry.installId()
+        return NeuralVoicesStore.resolveVoiceBaseDir(
+            voicesRoot = rootDir(),
+            voiceId = installId,
+            archiveRoot = entry.archiveRoot,
+            onnxFile = entry.onnxFile,
+        ) ?: NeuralVoicesStore.resolveVoiceBaseDir(
             voicesRoot = rootDir(),
             voiceId = entry.id,
             archiveRoot = entry.archiveRoot,
@@ -89,6 +96,7 @@ class InstalledVoices @Inject constructor(
             archiveRoot = entry.archiveRoot,
             onnxFile = entry.onnxFile,
         )
+    }
 
     /**
      * Voz para la racha: [activeVoiceId] si está instalada; si no, recomendada
@@ -107,14 +115,20 @@ class InstalledVoices @Inject constructor(
 
     fun markInstalled(voiceId: String) {
         val entry = catalog.resolveEntry(voiceId)
-        val canonicalId = entry?.id ?: voiceId
-        val model = resolveModel(canonicalId) ?: return
+        val installId = entry?.installId() ?: voiceId
+        val model = resolveModel(entry?.id ?: voiceId) ?: return
         val bytes = directorySize(model.rootDir)
         val now = System.currentTimeMillis()
-        val records = readRecords().filterNot { it.id == canonicalId }.toMutableList()
+        val siblingIds = if (entry != null) {
+            VoiceCatalog.siblings(catalog.entries, entry).map { it.id }.toSet() + installId
+        } else {
+            setOf(installId, voiceId)
+        }
+        val records = readRecords().filterNot { it.id in siblingIds || it.id == installId }
+            .toMutableList()
         records.add(
             InstalledVoiceRecord(
-                id = canonicalId,
+                id = installId,
                 installedAtEpochMs = now,
                 bytesOnDisk = bytes,
             ),
@@ -123,26 +137,39 @@ class InstalledVoices @Inject constructor(
         reconcile()
     }
 
-    /** Borra el modelo del disco y del registro. @return true si había algo que borrar. */
+    /** Borra el paquete del disco y del registro (todas las voces hermanas). */
     fun delete(voiceId: String): Boolean {
         val entry = catalog.resolveEntry(voiceId)
-        val canonicalId = entry?.id ?: voiceId
+        val installId = entry?.installId() ?: voiceId
+        val siblingIds = if (entry != null) {
+            VoiceCatalog.siblings(catalog.entries, entry).map { it.id }.toSet()
+        } else {
+            setOf(voiceId)
+        }
         val toDelete = LinkedHashSet<File>()
-        toDelete.add(voiceDir(canonicalId))
+        toDelete.add(voiceDir(installId))
         toDelete.add(voiceDir(voiceId))
         entry?.let { resolveVoiceBaseDir(it)?.let { dir -> toDelete.add(dir) } }
+        for (sid in siblingIds) {
+            toDelete.add(voiceDir(sid))
+        }
+        NeuralVoicesStore.resolveVoiceBaseDir(rootDir(), installId)?.let { toDelete.add(it) }
         NeuralVoicesStore.resolveVoiceBaseDir(rootDir(), voiceId)?.let { toDelete.add(it) }
 
         val existed = toDelete.any { it.exists() } ||
-            readRecords().any { it.id == canonicalId || it.id == voiceId }
+            readRecords().any { it.id == installId || it.id in siblingIds || it.id == voiceId }
         for (dir in toDelete) {
             if (dir.exists()) dir.deleteRecursively()
         }
-        File(partialDir(), "$canonicalId.tar.bz2").delete()
+        File(partialDir(), "$installId.tar.bz2").delete()
         File(partialDir(), "$voiceId.tar.bz2").delete()
-        File(partialDir(), canonicalId).deleteRecursively()
+        File(partialDir(), installId).deleteRecursively()
         File(partialDir(), voiceId).deleteRecursively()
-        writeRecords(readRecords().filterNot { it.id == canonicalId || it.id == voiceId })
+        writeRecords(
+            readRecords().filterNot {
+                it.id == installId || it.id == voiceId || it.id in siblingIds
+            },
+        )
         reconcile()
         return existed
     }
@@ -165,10 +192,11 @@ class InstalledVoices @Inject constructor(
             if (model == null) {
                 byId.remove(dir.name)
                 entry?.id?.let { byId.remove(it) }
+                entry?.installId()?.let { byId.remove(it) }
                 Log.w(TAG, "Voz incompleta ignorada (falta espeak u otros): ${dir.name}")
                 continue
             }
-            val recordId = entry?.id ?: dir.name
+            val recordId = entry?.installId() ?: dir.name
             if (!byId.containsKey(recordId)) {
                 byId[recordId] = InstalledVoiceRecord(
                     id = recordId,
@@ -181,6 +209,11 @@ class InstalledVoices @Inject constructor(
             }
             if (recordId != dir.name) {
                 byId.remove(dir.name)
+            }
+            entry?.let { e ->
+                for (sib in VoiceCatalog.siblings(catalog.entries, e)) {
+                    if (sib.id != recordId) byId.remove(sib.id)
+                }
             }
         }
 
@@ -202,6 +235,8 @@ class InstalledVoices @Inject constructor(
 
     private fun catalogEntryForDir(dir: File): VoiceCatalogEntry? {
         catalog.resolveEntry(dir.name)?.let { return it }
+        catalog.entries.firstOrNull { it.installId() == dir.name }?.let { return it }
+        catalog.entries.firstOrNull { it.archiveRoot == dir.name }?.let { return it }
         return catalog.entries.firstOrNull { entry ->
             VoiceContentRoot.findNamedFile(dir, entry.onnxFile) != null
         }

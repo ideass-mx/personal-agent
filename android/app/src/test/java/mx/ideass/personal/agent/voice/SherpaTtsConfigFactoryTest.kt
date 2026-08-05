@@ -59,7 +59,7 @@ class SherpaTtsConfigFactoryTest {
         val voices = File(root, "voices.bin").apply { writeBytes(byteArrayOf(9)) }
         val lex = File(root, "lexicon-us-en.txt").apply { writeText("x") }
         val model = NeuralVoiceModel(
-            id = "kokoro-multi-lang-v1_0",
+            id = "kokoro-multi-lang-v1_1",
             engine = NeuralVoiceEngine.Kokoro,
             rootDir = root,
             modelFile = onnx,

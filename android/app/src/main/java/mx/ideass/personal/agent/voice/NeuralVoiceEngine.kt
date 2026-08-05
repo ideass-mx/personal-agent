@@ -1,7 +1,7 @@
 package mx.ideass.personal.agent.voice
 
 /**
- * Motor de un modelo neuronal del catálogo (CP1: Piper; Kokoro en CP4).
+ * Motor de un modelo neuronal del catálogo (Piper VITS; Kokoro multi-lang).
  */
 enum class NeuralVoiceEngine {
     Piper,

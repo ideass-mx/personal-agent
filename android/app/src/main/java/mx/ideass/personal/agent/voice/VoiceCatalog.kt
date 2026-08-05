@@ -52,11 +52,25 @@ class VoiceCatalog @Inject constructor(
             if (id.isBlank()) return null
             entries.firstOrNull { it.id == id }?.let { return it }
             entries.firstOrNull { it.archiveRoot == id }?.let { return it }
+            entries.firstOrNull { it.installId() == id }?.let { return it }
+            // Stubs antiguos del catálogo (paquete bare / v1_1) → Dora ES.
+            if (id == "kokoro-multi-lang-v1_0" ||
+                id == "kokoro-multi-lang-v1_1" ||
+                id == "kokoro-multi-lang"
+            ) {
+                entries.firstOrNull { it.id == "kokoro-es-dora" }?.let { return it }
+            }
             entries.firstOrNull { it.id.startsWith("$id-") || it.id.startsWith("${id}_") }
                 ?.let { return it }
             entries.firstOrNull { id.startsWith("${it.id}-") || id.startsWith("${it.id}_") }
                 ?.let { return it }
             return null
+        }
+
+        /** Todas las voces del catálogo que comparten el mismo paquete de disco. */
+        fun siblings(entries: List<VoiceCatalogEntry>, entry: VoiceCatalogEntry): List<VoiceCatalogEntry> {
+            val pkg = entry.installId()
+            return entries.filter { it.installId() == pkg }
         }
     }
 }
