@@ -68,7 +68,7 @@
 
     <!-- Ajustes voces neuronales (sherpa-onnx) -->
     <string name="neural_voice_settings_title">Voz</string>
-    <string name="neural_voice_settings_subtitle">Voces neuronales offline. Descarga la que quieras, escucha una muestra y actívala para las rachas. Sin voz instalada se usa el TTS de Android.</string>
+    <string name="neural_voice_settings_subtitle">Voces neuronales offline. Descarga la que quieras, escucha una muestra y actívala para las rachas.</string>
     <string name="neural_voice_catalog_empty">El catálogo de voces está vacío.</string>
     <string name="neural_voice_meta_line">%1$s · %2$s · ~%3$d MB</string>
     <string name="neural_voice_recommended_badge">Recomendada</string>
@@ -85,33 +85,19 @@
     <string name="neural_voice_preview">Escuchar</string>
     <string name="neural_voice_delete">Borrar</string>
     <string name="neural_voice_refresh">Actualizar lista</string>
-    <string name="neural_voice_download_ok">Voz instalada. Si es Kokoro, Dora y Alex quedan disponibles con la misma descarga.</string>
+    <string name="neural_voice_download_ok">Voz instalada. Kokoro y Supertonic comparten una sola descarga por paquete (todas sus voces).</string>
     <string name="neural_voice_download_failed">No se pudo descargar la voz.</string>
     <string name="neural_voice_activated">Voz activada. Se usará en la próxima racha.</string>
+    <string name="neural_voice_preparing">Preparando voz (cargando modelo)…</string>
+    <string name="neural_voice_prepare_failed">No se pudo cargar el modelo de la voz.</string>
     <string name="neural_voice_deleted">Paquete de voz eliminado.</string>
     <string name="neural_voice_not_installed">Esa voz no está instalada.</string>
     <string name="neural_voice_sample_phrase">Hola, soy el agente. Así suena esta voz neuronal.</string>
     <string name="neural_voice_sample_failed">No se pudo reproducir la muestra.</string>
-
-    <!-- Ajustes TTS Android (fallback) -->
-    <string name="tts_settings_title">Fallback Android TTS</string>
-    <string name="tts_settings_subtitle">Solo si no hay voz neuronal instalada, o si sherpa falla. En HyperOS conviene elegir el motor explícitamente.</string>
-    <string name="tts_settings_engine_label">Motor de síntesis</string>
-    <string name="tts_settings_engine_system">Predeterminado del sistema</string>
-    <string name="tts_settings_engines_empty">No se encontraron motores TTS instalados.</string>
-    <string name="tts_settings_engine_saved">Motor guardado.</string>
-    <string name="tts_settings_engine_system_saved">Usando el motor predeterminado del sistema.</string>
-    <string name="tts_settings_voice_label">Voz</string>
-    <string name="tts_settings_voice_auto_action">Automática</string>
-    <string name="tts_settings_voice_auto">Voz automática según el idioma.</string>
-    <string name="tts_settings_voice_saved">Voz guardada.</string>
-    <string name="tts_settings_voice_missing">La voz guardada ya no está disponible; se usará la automática del motor.</string>
-    <string name="tts_settings_voice_es_mx_badge">Español México</string>
-    <string name="tts_settings_voices_empty">Este motor no expone voces (o aún no terminó de inicializar).</string>
-    <string name="tts_settings_preview">Probar</string>
-    <string name="tts_settings_sample_phrase">Hola, soy el agente. Así suena esta voz.</string>
-    <string name="tts_settings_sample_failed">No se pudo reproducir la muestra.</string>
-    <string name="tts_settings_refresh">Actualizar motores y voces</string>
+    <string name="neural_voice_speaker_label">Speaker</string>
+    <string name="neural_voice_lang_label">Idioma</string>
+    <string name="neural_voice_supertonic_hint">Una descarga · elige speaker e idioma</string>
+    <string name="neural_voice_kokoro_hint">Una descarga · elige idioma y voz</string>
 
     <!-- Lista de sesiones / borrado -->
     <string name="sessions_title">Sesiones</string>

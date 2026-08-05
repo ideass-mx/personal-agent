@@ -9,10 +9,11 @@ data class VoiceCatalogFile(
 
 /**
  * Entrada del catálogo curado (marca blanca). Un tar.bz2 de sherpa-onnx
- * por voz; Piper = un ONNX; Kokoro = modelo + voices.bin + lexicons.
+ * por voz; Piper = un ONNX; Kokoro = modelo + voices.bin + lexicons;
+ * Supertonic = 7 ficheros (4 ONNX + tts.json + unicode_indexer + voice.bin).
  *
  * Varias entradas pueden compartir [packageId] (misma descarga/carpeta) y
- * diferir solo en [speakerId] (p. ej. Dora/Alex sobre el mismo Kokoro).
+ * diferir solo en [speakerId] / idioma (Kokoro: 53 sids; Supertonic: F1–M5 × lang).
  */
 @Serializable
 data class VoiceCatalogEntry(
@@ -34,7 +35,8 @@ data class VoiceCatalogEntry(
     val speakerId: Int = 0,
     /**
      * Id de paquete en disco (`neural_voices/<packageId>/`). Si es null,
-     * coincide con [id]. Voces multi-speaker (Kokoro) comparten el mismo.
+     * coincide con [id]. Voces multi-speaker (Kokoro / Supertonic) comparten
+     * el mismo.
      */
     val packageId: String? = null,
     /**
@@ -48,6 +50,7 @@ data class VoiceCatalogEntry(
 
     fun engineType(): NeuralVoiceEngine = when (engine.lowercase()) {
         "kokoro" -> NeuralVoiceEngine.Kokoro
+        "supertonic" -> NeuralVoiceEngine.Supertonic
         else -> NeuralVoiceEngine.Piper
     }
 }

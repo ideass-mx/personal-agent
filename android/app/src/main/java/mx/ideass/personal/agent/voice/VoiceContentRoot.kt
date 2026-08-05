@@ -45,6 +45,35 @@ object VoiceContentRoot {
     }
 
     /**
+     * Raíz de un paquete Supertonic (sin espeak): directorio que contiene
+     * `tts.json` y los ONNX del layout de 7 ficheros.
+     */
+    fun discoverSupertonic(
+        installDir: File,
+        archiveRootHint: String? = null,
+    ): File? {
+        if (!installDir.isDirectory) return null
+        val hint = archiveRootHint?.trim()?.trimEnd('/')
+        if (!hint.isNullOrEmpty()) {
+            val nested = File(installDir, hint)
+            if (VoiceInstallValidator.isSupertonicDirComplete(nested)) {
+                return nested.canonicalFile
+            }
+        }
+        if (VoiceInstallValidator.isSupertonicDirComplete(installDir)) {
+            return installDir.canonicalFile
+        }
+        val children = installDir.listFiles { f -> f.isDirectory }.orEmpty()
+        if (children.size == 1 && VoiceInstallValidator.isSupertonicDirComplete(children[0])) {
+            return children[0].canonicalFile
+        }
+        val ttsJson = findNamedFile(installDir, NeuralVoiceModel.SUPERTONIC_TTS_JSON)
+            ?: return null
+        val parent = ttsJson.parentFile?.canonicalFile ?: return null
+        return parent.takeIf { VoiceInstallValidator.isSupertonicDirComplete(it) }
+    }
+
+    /**
      * Carpeta que contiene `phontab` (dataDir para OfflineTts).
      * Busca el fichero `phontab` bajo [searchRoot]; no asume el nombre
      * `espeak-ng-data` salvo como pista de orden de búsqueda.

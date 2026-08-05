@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.AppPreferences
 import javax.inject.Inject
@@ -36,6 +38,8 @@ class NeuralVoiceSettingsViewModel @Inject constructor(
     private val _previewing = MutableStateFlow<String?>(null)
     private val _statusMessage = MutableStateFlow<String?>(null)
     private val _statusWarn = MutableStateFlow(false)
+    /** Borrador speaker×idioma por packageId (Kokoro / Supertonic). */
+    private val _draftByPackage = MutableStateFlow<Map<String, String>>(emptyMap())
 
     private val _ui = MutableStateFlow(NeuralVoiceSettingsUi())
     val ui: StateFlow<NeuralVoiceSettingsUi> = _ui.asStateFlow()
@@ -53,22 +57,27 @@ class NeuralVoiceSettingsViewModel @Inject constructor(
                 _previewing,
                 _statusMessage,
             ) { installed, activeId, statuses, previewing, message ->
-                val installedById = installed.associate { it.id to it.bytesOnDisk }
-                NeuralVoiceSettingsUi(
-                    rows = NeuralVoiceSettingsPolicy.buildRows(
-                        catalog = catalog.entries,
-                        installedById = installedById,
-                        activeVoiceId = activeId,
-                        downloadStatuses = statuses,
-                    ),
-                    activeVoiceId = activeId,
-                    previewingVoiceId = previewing,
-                    statusMessage = message,
-                    statusWarn = _statusWarn.value,
-                )
-            }.collect { state ->
-                _ui.value = state.copy(statusWarn = _statusWarn.value)
+                UiParts(installed, activeId, statuses, previewing, message)
             }
+                .combine(_draftByPackage) { parts, drafts ->
+                    val installedById = parts.installed.associate { it.id to it.bytesOnDisk }
+                    NeuralVoiceSettingsUi(
+                        rows = NeuralVoiceSettingsPolicy.buildRows(
+                            catalog = catalog.entries,
+                            installedById = installedById,
+                            activeVoiceId = parts.activeId,
+                            downloadStatuses = parts.statuses,
+                            draftVoiceIdByPackage = drafts,
+                        ),
+                        activeVoiceId = parts.activeId,
+                        previewingVoiceId = parts.previewing,
+                        statusMessage = parts.message,
+                        statusWarn = _statusWarn.value,
+                    )
+                }
+                .collect { state ->
+                    _ui.value = state.copy(statusWarn = _statusWarn.value)
+                }
         }
         viewModelScope.launch {
             _statusWarn.collect { warn ->
@@ -76,6 +85,14 @@ class NeuralVoiceSettingsViewModel @Inject constructor(
             }
         }
     }
+
+    private data class UiParts(
+        val installed: List<InstalledVoice>,
+        val activeId: String?,
+        val statuses: Map<String, VoiceDownloadStatus>,
+        val previewing: String?,
+        val message: String?,
+    )
 
     fun download(voiceId: String) {
         if (downloadJobs[voiceId]?.isActive == true) return
@@ -110,6 +127,23 @@ class NeuralVoiceSettingsViewModel @Inject constructor(
                 return@launch
             }
             preferences.saveActiveNeuralVoiceId(voiceId)
+            val model = installedVoices.resolveModel(voiceId)
+            if (model != null) {
+                setStatus(context.getString(R.string.neural_voice_preparing), warn = false)
+                val numThreads = context.resources.getInteger(R.integer.sherpa_tts_num_threads)
+                val silenceScale = context.resources.getFloat(R.dimen.sherpa_tts_silence_scale)
+                val ok = withContext(Dispatchers.IO) {
+                    SherpaOfflineTtsCache.warm(
+                        model = model,
+                        numThreads = numThreads,
+                        silenceScale = silenceScale,
+                    )
+                }
+                if (!ok) {
+                    setStatus(context.getString(R.string.neural_voice_prepare_failed), warn = true)
+                    return@launch
+                }
+            }
             setStatus(context.getString(R.string.neural_voice_activated), warn = false)
         }
     }
@@ -141,6 +175,30 @@ class NeuralVoiceSettingsViewModel @Inject constructor(
                 setStatus(context.getString(R.string.neural_voice_sample_failed), warn = true)
             }
         }
+    }
+
+    /**
+     * Cambia la voz seleccionada de un paquete multi-speaker
+     * (solo afecta preview/activar; no descarga de nuevo).
+     */
+    fun selectGroupedVoice(packageId: String, voiceId: String) {
+        _draftByPackage.update { it + (packageId to voiceId) }
+    }
+
+    fun selectSupertonicCombo(packageId: String, lang: String, sid: Int) {
+        val entry = SupertonicVoices.findEntry(catalog.entries, lang, sid) ?: return
+        selectGroupedVoice(packageId, entry.id)
+    }
+
+    /**
+     * Kokoro: el idioma filtra speakers (va embebido en el sid). Si el sid
+     * no pertenece al idioma, cae a la primera voz de ese idioma.
+     */
+    fun selectKokoroCombo(packageId: String, lang: String, sid: Int) {
+        val entry = KokoroVoices.findEntry(catalog.entries, lang, sid)
+            ?: KokoroVoices.firstEntryForLang(catalog.entries, lang)
+            ?: return
+        selectGroupedVoice(packageId, entry.id)
     }
 
     fun refresh() {

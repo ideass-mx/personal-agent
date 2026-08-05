@@ -128,6 +128,55 @@ class NeuralVoiceModelTest {
         assertFalse(File(install, "espeak-ng-data/phontab").exists())
     }
 
+    @Test
+    fun resolveSupertonic_requiresSevenFiles() {
+        val root = tmp.newFolder("super")
+        assertNull(NeuralVoiceModel.resolveSupertonic("id", root))
+
+        File(root, "duration_predictor.int8.onnx").writeBytes(byteArrayOf(1))
+        File(root, "text_encoder.int8.onnx").writeBytes(byteArrayOf(2))
+        File(root, "vector_estimator.int8.onnx").writeBytes(byteArrayOf(3))
+        File(root, "vocoder.int8.onnx").writeBytes(byteArrayOf(4))
+        File(root, "tts.json").writeText("{}")
+        File(root, "unicode_indexer.bin").writeBytes(byteArrayOf(5))
+        assertNull(NeuralVoiceModel.resolveSupertonic("id", root))
+
+        File(root, "voice.bin").writeBytes(byteArrayOf(6))
+        val model = NeuralVoiceModel.resolveSupertonic(
+            id = "supertonic-v3-es-f1",
+            rootDir = root,
+            speakerId = 0,
+            language = "es",
+        )
+        assertNotNull(model)
+        assertEquals(NeuralVoiceEngine.Supertonic, model!!.engine)
+        assertEquals("es", model.language)
+        assertEquals(0, model.defaultSpeakerId)
+        assertTrue(model.isComplete())
+        assertEquals("duration_predictor.int8.onnx", model.durationPredictorFile!!.name)
+        assertEquals("voice.bin", model.voicesFile!!.name)
+    }
+
+    @Test
+    fun resolveSupertonic_fixtureIfPresent() {
+        val relative = ".neural-voices/sherpa-onnx-supertonic-3-tts-int8-2026-05-11"
+        val candidates = listOf(
+            File(relative),
+            File("..", relative),
+            File("../..", "android/$relative"),
+        ).map { it.canonicalFile }
+        val fixture = candidates.firstOrNull { it.isDirectory } ?: return
+        val model = NeuralVoiceModel.resolveSupertonic(
+            id = "supertonic-v3-es-f1",
+            rootDir = fixture,
+            language = "es",
+        )
+        assertNotNull("Fixture incompleta en ${fixture.absolutePath}", model)
+        assertTrue(model!!.isComplete())
+        assertTrue(model.durationPredictorFile!!.length() > 100_000L)
+        assertEquals(44_100, model.sampleRateHz)
+    }
+
     private fun writeEspeak(root: File) {
         File(root, "espeak-ng-data").mkdirs()
         File(root, "espeak-ng-data/phontab").writeBytes(byteArrayOf(1))

@@ -320,13 +320,14 @@ de forma fiable. En dispositivo (run-as / root según ROM):
 adb push android/.neural-voices/vits-piper-es_MX-claude-high \
   /data/data/mx.ideass.personal.agent/files/neural_voices/vits-piper-es_MX-claude-high
 
-# Kokoro multi-lang v1_0 (~349 MB; Dora sid=28, Alex sid=29)
+# Kokoro multi-lang v1_0 (~349 MB; 53 speakers, idioma embebido en el sid)
 adb push android/.neural-voices/kokoro-multi-lang-v1_0 \
   /data/data/mx.ideass.personal.agent/files/neural_voices/kokoro-multi-lang-v1_0
 ```
 
-Después, en ajustes: **Kokoro ES · Dora** / **Alex** (misma descarga). Preview usa el
-`speakerId` de cada una. CP1 expone `SherpaOfflineSynthesizer`
+Después, en ajustes: tarjeta **Kokoro** con selector de idioma y voz
+(p. ej. «Kokoro — Dora · Español»; sid 28/29 = Dora/Alex ES). Preview usa el
+`speakerId` de la voz elegida. CP1 expone `SherpaOfflineSynthesizer`
 (`OfflineTts.generateWithCallback`).
 
 ### CP2 — rachas con Sherpa
@@ -342,18 +343,20 @@ para coexistir con SCO/earcons (techo buds). Logcat: `SherpaTtsEngine` /
 
 ### CP3 — catálogo, descarga e instalación
 
-- Catálogo curado: `assets/voice_catalog.json` (Piper es-MX/es-ES + **Kokoro ES
-  Dora/Alex** sobre el paquete compartido `kokoro-multi-lang-v1_0`;
-  solo variantes **no cuantizadas**).
+- Catálogo curado: `assets/voice_catalog.json` (Piper es-MX/es-ES + **Kokoro
+  multi-lang v1_0** con 53 speakers sobre el paquete compartido
+  `kokoro-multi-lang-v1_0` + **Supertonic V3 int8** F1–M5 · Español sobre
+  `sherpa-onnx-supertonic-3-tts-int8-2026-05-11`; Piper/Kokoro solo no
+  cuantizados; Supertonic solo existe como int8).
 - `VoiceDownloader` + `packageId`: una descarga sirve a varias voces
-  (Dora sid=28, Alex sid=29).
+  (Kokoro sid 0–52; Supertonic sid 0–9 × idioma).
 - `InstalledVoices`: registro `installed.json`, borrar, reconciliar disco.
-- Preferencia `active_voice_id` (DataStore) = id de voz (modelo + sid).
+- Preferencia `active_voice_id` (DataStore) = id de voz (modelo + sid [+ lang]).
 
 Tras extraer se exige integridad por motor (Piper: `.onnx` + `tokens.txt` +
-`espeak-ng-data/phontab`; Kokoro: además `voices.bin` y lexicons). Una carpeta
-a medias **no** se marca instalada; **Descargar** otra vez la borra y reinstala
-el `.tar.bz2` completo.
+`espeak-ng-data/phontab`; Kokoro: además `voices.bin` y lexicons; Supertonic: 7
+ficheros sin espeak). Una carpeta a medias **no** se marca instalada; **Descargar**
+otra vez la borra y reinstala el `.tar.bz2` completo.
 
 ### CP4 — UI de ajustes «Voz»
 
@@ -362,7 +365,14 @@ En la pantalla de conexión, sección **Voz**:
 - Lista del catálogo (nombre, idioma, motor, tamaño, estado).
 - Acciones: **Descargar** (barra de progreso), **Cancelar**, **Activar**,
   **Escuchar** (muestra con la voz/sid instalada), **Borrar** (paquete entero
-  si es Kokoro compartido).
+  si es Kokoro/Supertonic compartido).
+- **Kokoro**: una sola tarjeta con selectores de idioma (filtra) y voz
+  (speaker con idioma embebido; sin `extra["lang"]`). Presentación
+  «Kokoro — Dora · Español».
+- **Supertonic**: una sola tarjeta con selectores de speaker (F1–M5) e idioma
+  (Español; más idiomas se añaden al catálogo). Presentación
+  «Supertonic — M1 · Español».
 - La voz **Activa** se usa en la siguiente racha.
-- Debajo queda **Fallback Android TTS** (motor/voz del sistema).
+- El TTS de Android no aparece en la UI: solo actúa como fallback interno
+  automático si no hay voz neuronal o si sherpa falla.
 

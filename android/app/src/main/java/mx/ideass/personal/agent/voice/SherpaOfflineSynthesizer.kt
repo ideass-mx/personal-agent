@@ -1,13 +1,17 @@
 package mx.ideass.personal.agent.voice
 
 import android.util.Log
+import com.k2fsa.sherpa.onnx.GenerationConfig
 import com.k2fsa.sherpa.onnx.OfflineTts
 import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import kotlin.jvm.functions.Function1
 
 /**
- * Carga un [NeuralVoiceModel] en [OfflineTts] y sintetiza con
- * [OfflineTts.generateWithCallback] (streaming por chunks).
+ * Carga un [NeuralVoiceModel] en [OfflineTts] y sintetiza.
+ *
+ * Piper/Kokoro: [OfflineTts.generateWithCallback] (streaming por chunks).
+ * Supertonic: [OfflineTts.generateWithConfigAndCallback] con `extra["lang"]`
+ * (idioma aparte del sid).
  *
  * Debe usarse fuera del hilo principal. Fallos del runtime nativo
  * (JNI / Error) se atrapan y se reportan como null o excepción controlada
@@ -15,16 +19,26 @@ import kotlin.jvm.functions.Function1
  */
 class SherpaOfflineSynthesizer private constructor(
     private val model: NeuralVoiceModel,
-    private val tts: OfflineTts,
+    private val tts: OfflineTts?,
+    private val testStub: Boolean = false,
 ) : AutoCloseable {
 
-    val sampleRateHz: Int get() = tts.sampleRate().takeIf { it > 0 } ?: model.sampleRateHz
+    val sampleRateHz: Int
+        get() = if (testStub) {
+            model.sampleRateHz
+        } else {
+            tts!!.sampleRate().takeIf { it > 0 } ?: model.sampleRateHz
+        }
 
-    val numSpeakers: Int get() = tts.numSpeakers()
+    val numSpeakers: Int get() = if (testStub) 1 else tts!!.numSpeakers()
 
     /**
      * Sintetiza [text]. [onChunk] recibe cada bloque float PCM; devolver false
      * cancela la generación restante.
+     *
+     * [language] solo aplica a Supertonic (`extra["lang"]`); si es null se usa
+     * el del modelo con el que se creó el sintetizador. Permite reutilizar un
+     * OfflineTts cacheado al cambiar de idioma/speaker del mismo paquete.
      *
      * @throws SherpaRuntimeException si el runtime nativo falla (no crash).
      */
@@ -32,20 +46,40 @@ class SherpaOfflineSynthesizer private constructor(
         text: String,
         sid: Int = model.defaultSpeakerId,
         speed: Float = 1.0f,
+        language: String? = null,
         onChunk: ((FloatArray) -> Boolean)? = null,
     ): SherpaSynthResult {
         require(text.isNotBlank()) { "Texto vacío" }
+        if (testStub) {
+            error("createTestStub no sintetiza; solo para tests de cache")
+        }
         return try {
             val accumulator = SherpaSynthChunkAccumulator()
-            val audio = tts.generateWithCallback(
-                text = text,
-                sid = sid,
-                speed = speed,
-                callback = jniChunkCallback(onChunk, accumulator),
-            )
+            val callback = jniChunkCallback(onChunk, accumulator)
+            val audio = when (model.engine) {
+                NeuralVoiceEngine.Supertonic -> {
+                    val lang = (language ?: model.language).ifBlank { "es" }
+                    val gen = GenerationConfig(
+                        sid = sid,
+                        speed = speed,
+                        extra = mapOf("lang" to lang),
+                    )
+                    tts!!.generateWithConfigAndCallback(
+                        text = text,
+                        config = gen,
+                        callback = callback,
+                    )
+                }
+                NeuralVoiceEngine.Piper, NeuralVoiceEngine.Kokoro ->
+                    tts!!.generateWithCallback(
+                        text = text,
+                        sid = sid,
+                        speed = speed,
+                        callback = callback,
+                    )
+            }
             val rate = audio.sampleRate.takeIf { it > 0 } ?: sampleRateHz
-            // generateWithCallback también devuelve el audio completo; preferimos
-            // lo acumulado por callback para validar el path de streaming.
+            // Preferimos lo acumulado por callback para validar el path de streaming.
             val fromCallback = accumulator.build(rate)
             if (fromCallback.samples.isNotEmpty()) {
                 fromCallback
@@ -72,7 +106,8 @@ class SherpaOfflineSynthesizer private constructor(
     }
 
     override fun close() {
-        runCatching { tts.release() }
+        if (testStub) return
+        runCatching { tts?.release() }
             .onFailure { Log.w(TAG, "Error liberando OfflineTts", it) }
     }
 
@@ -87,6 +122,10 @@ class SherpaOfflineSynthesizer private constructor(
         internal var createOfflineTts: (OfflineTtsConfig) -> OfflineTts = { config ->
             OfflineTts(assetManager = null, config = config)
         }
+
+        /** Stub JVM sin OfflineTts (solo tests de [SherpaOfflineTtsCache]). */
+        internal fun createTestStub(model: NeuralVoiceModel): SherpaOfflineSynthesizer =
+            SherpaOfflineSynthesizer(model = model, tts = null, testStub = true)
 
         /**
          * Callback JNI-compatible para [OfflineTts.generateWithCallback].
@@ -115,9 +154,9 @@ class SherpaOfflineSynthesizer private constructor(
         }
 
         /**
-         * Crea el sintetizador solo si model/tokens/dataDir existen en disco
-         * y OfflineTts carga sin lanzar. Si falla (rutas, JNI, modelo
-         * incompatible), loguea y devuelve null → fallback Android TTS.
+         * Crea el sintetizador solo si el layout es válido y OfflineTts carga
+         * sin lanzar. Si falla (rutas, JNI, modelo incompatible), loguea y
+         * devuelve null → fallback Android TTS.
          */
         fun createOrNull(
             model: NeuralVoiceModel,
@@ -125,13 +164,20 @@ class SherpaOfflineSynthesizer private constructor(
             silenceScale: Float = 0.2f,
             debug: Boolean = false,
         ): SherpaOfflineSynthesizer? {
-            if (!VoiceContentRoot.assertRuntimePaths(
-                    model.modelFile,
-                    model.tokensFile,
-                    model.dataDir,
-                    searchRoot = model.rootDir,
-                )
-            ) {
+            if (model.engine != NeuralVoiceEngine.Supertonic) {
+                if (!VoiceContentRoot.assertRuntimePaths(
+                        model.modelFile,
+                        model.tokensFile,
+                        model.dataDir,
+                        searchRoot = model.rootDir,
+                    )
+                ) {
+                    return null
+                }
+            } else if (!model.isComplete()) {
+                runCatching {
+                    Log.e(TAG, "Layout Supertonic incompleto: ${model.rootDir.absolutePath}")
+                }
                 return null
             }
             // Antes de tocar OfflineTts (su <clinit> carga el JNI): asegurar
@@ -155,7 +201,7 @@ class SherpaOfflineSynthesizer private constructor(
                     debug = debug,
                 )
                 val tts = createOfflineTts(config)
-                SherpaOfflineSynthesizer(model, tts)
+                SherpaOfflineSynthesizer(model, tts, testStub = false)
             } catch (t: Throwable) {
                 // Incluye Error/UnsatisfiedLinkError / ExceptionInInitializerError.
                 runCatching {
@@ -164,7 +210,8 @@ class SherpaOfflineSynthesizer private constructor(
                         "OfflineTts falló → fallback Android TTS " +
                             "(model=${model.modelFile.absolutePath} " +
                             "tokens=${model.tokensFile.absolutePath} " +
-                            "dataDir=${model.dataDir.absolutePath})",
+                            "dataDir=${model.dataDir.absolutePath} " +
+                            "engine=${model.engine})",
                         t,
                     )
                 }

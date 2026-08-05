@@ -65,27 +65,35 @@ class VoiceCatalogParseTest {
     }
 
     @Test
-    fun assetCatalog_kokoroEsSpeakersShareV1_0Package() {
+    fun assetCatalog_kokoroSpeakersShareV1_0Package() {
         val voices = VoiceCatalog.parse(
             File("src/main/assets/voice_catalog.json").readText(),
         )
         val kokoro = voices.filter { it.engine == "kokoro" }
-        assertEquals(2, kokoro.size)
+        assertEquals(53, kokoro.size)
+        assertEquals(KokoroVoices.SPEAKERS.size, kokoro.size)
         val dora = kokoro.first { it.id == "kokoro-es-dora" }
         val alex = kokoro.first { it.id == "kokoro-es-alex" }
         assertEquals(28, dora.speakerId)
         assertEquals(29, alex.speakerId)
         assertEquals("female", dora.gender)
         assertEquals("male", alex.gender)
+        assertEquals("Kokoro — Dora · Español", dora.displayName)
+        assertEquals("Kokoro — Alex · Español", alex.displayName)
         assertEquals(dora.installId(), alex.installId())
-        assertEquals("kokoro-multi-lang-v1_0", dora.packageId)
+        assertEquals(KokoroVoices.PACKAGE_ID, dora.packageId)
         assertTrue(dora.downloadUrl.endsWith("kokoro-multi-lang-v1_0.tar.bz2"))
-        assertEquals(
-            "c133d26353d776da730870dac7da07dbfc9a5e3bc80cc5e8e83ab6e823be7046",
-            dora.sha256,
-        )
+        assertEquals(KokoroVoices.SHA256, dora.sha256)
         assertFalse(dora.downloadUrl.contains("int8"))
-        assertEquals(2, VoiceCatalog.siblings(voices, dora).size)
+        assertEquals(53, VoiceCatalog.siblings(voices, dora).size)
+        // Español completo + principales de otros idiomas.
+        assertEquals(2, kokoro.count { it.language == "es" })
+        assertEquals(20, kokoro.count { it.language == "en-us" })
+        assertEquals(8, kokoro.count { it.language == "en-gb" })
+        assertEquals((0..52).toList(), kokoro.map { it.speakerId }.sorted())
+        val alloy = kokoro.first { it.id == "kokoro-en-us-alloy" }
+        assertEquals(0, alloy.speakerId)
+        assertEquals("Kokoro — Alloy · Inglés (US)", alloy.displayName)
     }
 
     @Test
@@ -118,10 +126,42 @@ class VoiceCatalogParseTest {
         assertTrue(claude.recommended)
         assertEquals(67, claude.sizeMB)
         for (v in voices) {
-            assertFalse("Catálogo no debe listar int8: ${v.id}", v.id.contains("int8"))
+            if (v.engine.equals("supertonic", ignoreCase = true)) {
+                // Supertonic solo existe como int8 en releases oficiales.
+                assertTrue(v.downloadUrl.contains("int8"))
+                continue
+            }
+            assertFalse("Catálogo no debe listar Piper/Kokoro int8: ${v.id}", v.id.contains("int8"))
             assertFalse(v.downloadUrl.contains("int8"))
             assertFalse(v.onnxFile.contains("int8"))
         }
+    }
+
+    @Test
+    fun assetCatalog_supertonicV3Int8Entry() {
+        val voices = VoiceCatalog.parse(
+            File("src/main/assets/voice_catalog.json").readText(),
+        )
+        val supers = voices.filter { it.engine == "supertonic" }
+        assertEquals(10, supers.size)
+        assertTrue(supers.all { it.engineType() == NeuralVoiceEngine.Supertonic })
+        assertTrue(supers.all { it.language == "es" })
+        assertTrue(supers.all { it.installId() == SupertonicVoices.PACKAGE_ID })
+        assertEquals(
+            (0..9).toList(),
+            supers.map { it.speakerId }.sorted(),
+        )
+        val f1 = supers.first { it.id == "supertonic-v3-es-f1" }
+        assertEquals(0, f1.speakerId)
+        assertEquals("female", f1.gender)
+        assertEquals(44_100, f1.sampleRate)
+        assertEquals(128_774_318L, f1.sizeBytes)
+        assertEquals(SupertonicVoices.SHA256, f1.sha256)
+        assertEquals(7, f1.requiredFiles.size)
+        val m1 = supers.first { it.id == "supertonic-v3-es-m1" }
+        assertEquals(5, m1.speakerId)
+        assertEquals("male", m1.gender)
+        assertEquals("Supertonic — M1 · Español", m1.displayName)
     }
 
     @Test

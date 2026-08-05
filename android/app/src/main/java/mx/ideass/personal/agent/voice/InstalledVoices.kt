@@ -156,6 +156,11 @@ class InstalledVoices @Inject constructor(
         NeuralVoicesStore.resolveVoiceBaseDir(rootDir(), installId)?.let { toDelete.add(it) }
         NeuralVoicesStore.resolveVoiceBaseDir(rootDir(), voiceId)?.let { toDelete.add(it) }
 
+        // Liberar OfflineTts antes de borrar ficheros del paquete cacheado.
+        for (dir in toDelete) {
+            SherpaOfflineTtsCache.releaseIfRoot(dir.absolutePath)
+        }
+
         val existed = toDelete.any { it.exists() } ||
             readRecords().any { it.id == installId || it.id in siblingIds || it.id == voiceId }
         for (dir in toDelete) {
@@ -250,7 +255,9 @@ class InstalledVoices @Inject constructor(
     fun purgeAbandonedQuantizedInstalls(): Int {
         val root = rootDir()
         if (!root.isDirectory) return 0
-        val catalogIds = catalog.entries.map { it.id }.toSet()
+        val catalogIds = catalog.entries.flatMap { e ->
+            listOfNotNull(e.id, e.installId(), e.archiveRoot)
+        }.toSet()
         var removed = 0
         val dirs = root.listFiles { f ->
             f.isDirectory && f.name != PARTIAL_DIR_NAME
@@ -258,6 +265,8 @@ class InstalledVoices @Inject constructor(
         for (dir in dirs) {
             if (!NeuralVoicesStore.isAbandonedQuantizedName(dir.name)) continue
             if (dir.name in catalogIds) continue
+            // Supertonic oficial (int8 en el nombre) no se purga.
+            if (dir.name.contains("supertonic", ignoreCase = true)) continue
             Log.w(TAG, "Eliminando voz cuantizada no soportada: ${dir.name}")
             if (dir.deleteRecursively()) removed++
             File(partialDir(), "${dir.name}.tar.bz2").delete()
@@ -287,6 +296,7 @@ class InstalledVoices @Inject constructor(
                 rootDir = base,
                 onnxName = "model.onnx",
             )
+            ?: NeuralVoiceModel.resolveSupertonic(id = voiceId, rootDir = base)
     }
 
     private fun resolveModelInDir(id: String, dir: File): NeuralVoiceModel? {
@@ -295,6 +305,7 @@ class InstalledVoices @Inject constructor(
         if (NeuralVoicesStore.isAbandonedQuantizedName(dir.name)) return null
         return NeuralVoiceModel.resolvePiper(id, dir)
             ?: NeuralVoiceModel.resolveKokoro(id, dir, onnxName = "model.onnx")
+            ?: NeuralVoiceModel.resolveSupertonic(id = id, rootDir = dir)
     }
 
     private fun logVoicesTreeMissing(voiceId: String, entry: VoiceCatalogEntry) {

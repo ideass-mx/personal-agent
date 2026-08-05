@@ -42,6 +42,7 @@ class NeuralVoiceSettingsPolicyTest {
         )
         assertEquals(NeuralVoiceRowKind.Active, rows[0].kind)
         assertEquals(NeuralVoiceRowKind.Installed, rows[1].kind)
+        // Un solo Kokoro → fila agrupable con 1 hermana (no isGrouped).
         assertEquals(NeuralVoiceRowKind.Downloading, rows[2].kind)
         assertEquals(0.5f, rows[2].progressFraction!!, 0.001f)
         assertEquals("Kokoro", NeuralVoiceSettingsPolicy.engineLabel("kokoro"))
@@ -67,39 +68,84 @@ class NeuralVoiceSettingsPolicyTest {
     }
 
     @Test
-    fun buildRows_sharedPackage_marksBothSpeakersInstalled() {
+    fun buildRows_kokoro_collapsesToOneGroupedRow() {
         val catalog = listOf(
             entry("kokoro-es-dora", engine = "kokoro").copy(
-                packageId = "kokoro-multi-lang-v1_0",
+                packageId = KokoroVoices.PACKAGE_ID,
                 speakerId = 28,
-                archiveRoot = "kokoro-multi-lang-v1_0",
+                language = "es",
+                archiveRoot = KokoroVoices.PACKAGE_ID,
+                displayName = "Kokoro — Dora · Español",
             ),
             entry("kokoro-es-alex", engine = "kokoro").copy(
-                packageId = "kokoro-multi-lang-v1_0",
+                packageId = KokoroVoices.PACKAGE_ID,
                 speakerId = 29,
-                archiveRoot = "kokoro-multi-lang-v1_0",
+                language = "es",
+                archiveRoot = KokoroVoices.PACKAGE_ID,
+                displayName = "Kokoro — Alex · Español",
+            ),
+            entry("kokoro-en-us-alloy", engine = "kokoro").copy(
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 0,
+                language = "en-us",
+                archiveRoot = KokoroVoices.PACKAGE_ID,
             ),
         )
         val rows = NeuralVoiceSettingsPolicy.buildRows(
             catalog = catalog,
-            installedById = mapOf("kokoro-multi-lang-v1_0" to 349_000_000L),
+            installedById = mapOf(KokoroVoices.PACKAGE_ID to 349_000_000L),
             activeVoiceId = "kokoro-es-alex",
             downloadStatuses = emptyMap(),
         )
-        assertEquals(NeuralVoiceRowKind.Installed, rows[0].kind)
-        assertEquals(NeuralVoiceRowKind.Active, rows[1].kind)
-        assertEquals(349_000_000L, rows[0].bytesOnDisk)
-        assertEquals(349_000_000L, rows[1].bytesOnDisk)
+        assertEquals(1, rows.size)
+        val row = rows[0]
+        assertTrue(row.isGrouped)
+        assertEquals(3, row.groupEntries.size)
+        assertEquals(NeuralVoiceRowKind.Active, row.kind)
+        assertEquals("kokoro-es-alex", row.entry.id)
+        assertEquals(349_000_000L, row.bytesOnDisk)
     }
 
     @Test
-    fun buildRows_sharedPackage_downloadStatusPropagates() {
+    fun buildRows_kokoro_defaultSelectionIsDora() {
         val catalog = listOf(
+            entry("kokoro-en-us-alloy", engine = "kokoro").copy(
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 0,
+                language = "en-us",
+            ),
             entry("kokoro-es-dora", engine = "kokoro").copy(
-                packageId = "kokoro-multi-lang-v1_0",
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 28,
+                language = "es",
             ),
             entry("kokoro-es-alex", engine = "kokoro").copy(
-                packageId = "kokoro-multi-lang-v1_0",
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 29,
+                language = "es",
+            ),
+        )
+        val rows = NeuralVoiceSettingsPolicy.buildRows(
+            catalog = catalog,
+            installedById = mapOf(KokoroVoices.PACKAGE_ID to 1L),
+            activeVoiceId = null,
+            downloadStatuses = emptyMap(),
+        )
+        assertEquals("kokoro-es-dora", rows[0].entry.id)
+    }
+
+    @Test
+    fun buildRows_kokoro_downloadStatusPropagates() {
+        val catalog = listOf(
+            entry("kokoro-es-dora", engine = "kokoro").copy(
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 28,
+                language = "es",
+            ),
+            entry("kokoro-es-alex", engine = "kokoro").copy(
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 29,
+                language = "es",
             ),
         )
         val rows = NeuralVoiceSettingsPolicy.buildRows(
@@ -107,10 +153,100 @@ class NeuralVoiceSettingsPolicyTest {
             installedById = emptyMap(),
             activeVoiceId = null,
             downloadStatuses = mapOf(
-                "kokoro-multi-lang-v1_0" to VoiceDownloadStatus.Downloading(10, 100),
+                KokoroVoices.PACKAGE_ID to VoiceDownloadStatus.Downloading(10, 100),
             ),
         )
+        assertEquals(1, rows.size)
         assertEquals(NeuralVoiceRowKind.Downloading, rows[0].kind)
-        assertEquals(NeuralVoiceRowKind.Downloading, rows[1].kind)
+    }
+
+    @Test
+    fun buildRows_kokoro_draftOverridesSelection() {
+        val catalog = listOf(
+            entry("kokoro-es-dora", engine = "kokoro").copy(
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 28,
+                language = "es",
+            ),
+            entry("kokoro-es-alex", engine = "kokoro").copy(
+                packageId = KokoroVoices.PACKAGE_ID,
+                speakerId = 29,
+                language = "es",
+            ),
+        )
+        val rows = NeuralVoiceSettingsPolicy.buildRows(
+            catalog = catalog,
+            installedById = mapOf(KokoroVoices.PACKAGE_ID to 1L),
+            activeVoiceId = "kokoro-es-dora",
+            downloadStatuses = emptyMap(),
+            draftVoiceIdByPackage = mapOf(KokoroVoices.PACKAGE_ID to "kokoro-es-alex"),
+        )
+        assertEquals(1, rows.size)
+        assertEquals("kokoro-es-alex", rows[0].entry.id)
+        assertEquals(NeuralVoiceRowKind.Installed, rows[0].kind)
+    }
+
+    @Test
+    fun buildRows_supertonic_collapsesToOneGroupedRow() {
+        val pkg = SupertonicVoices.PACKAGE_ID
+        val catalog = listOf(
+            entry("piper-a"),
+            entry("supertonic-v3-es-f1", engine = "supertonic").copy(
+                packageId = pkg,
+                archiveRoot = pkg,
+                speakerId = 0,
+                language = "es",
+                displayName = "Supertonic — F1 · Español",
+            ),
+            entry("supertonic-v3-es-m1", engine = "supertonic").copy(
+                packageId = pkg,
+                archiveRoot = pkg,
+                speakerId = 5,
+                language = "es",
+                displayName = "Supertonic — M1 · Español",
+            ),
+        )
+        val rows = NeuralVoiceSettingsPolicy.buildRows(
+            catalog = catalog,
+            installedById = mapOf(pkg to 129_000_000L),
+            activeVoiceId = "supertonic-v3-es-m1",
+            downloadStatuses = emptyMap(),
+        )
+        assertEquals(2, rows.size)
+        assertEquals("piper-a", rows[0].entry.id)
+        val superRow = rows[1]
+        assertTrue(superRow.isGrouped)
+        assertEquals(2, superRow.groupEntries.size)
+        assertEquals(NeuralVoiceRowKind.Active, superRow.kind)
+        assertEquals("supertonic-v3-es-m1", superRow.entry.id)
+        assertEquals(129_000_000L, superRow.bytesOnDisk)
+    }
+
+    @Test
+    fun buildRows_supertonic_draftOverridesSelection() {
+        val pkg = SupertonicVoices.PACKAGE_ID
+        val catalog = listOf(
+            entry("supertonic-v3-es-f1", engine = "supertonic").copy(
+                packageId = pkg,
+                speakerId = 0,
+                language = "es",
+            ),
+            entry("supertonic-v3-es-m1", engine = "supertonic").copy(
+                packageId = pkg,
+                speakerId = 5,
+                language = "es",
+            ),
+        )
+        val rows = NeuralVoiceSettingsPolicy.buildRows(
+            catalog = catalog,
+            installedById = mapOf(pkg to 1L),
+            activeVoiceId = "supertonic-v3-es-f1",
+            downloadStatuses = emptyMap(),
+            draftVoiceIdByPackage = mapOf(pkg to "supertonic-v3-es-m1"),
+        )
+        assertEquals(1, rows.size)
+        assertEquals("supertonic-v3-es-m1", rows[0].entry.id)
+        // Activa solo si la combinación seleccionada es la activa; si no, Installed + Activar.
+        assertEquals(NeuralVoiceRowKind.Installed, rows[0].kind)
     }
 }

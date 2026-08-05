@@ -4,12 +4,22 @@ import java.io.File
 
 /**
  * Validación post-extracción de un modelo neuronal.
- * Piper y Kokoro requieren sets distintos; ambos usan `espeak-ng-data/phontab`
- * cuando el motor fonemiza con espeak-ng.
+ * Piper y Kokoro requieren espeak (`espeak-ng-data/phontab`);
+ * Supertonic usa un layout de 7 ficheros sin espeak/tokens.
  */
 object VoiceInstallValidator {
     const val PHONTAB = "phontab"
     const val ESPEAK_PHONTAB = "${NeuralVoiceModel.ESPEAK_DATA_DIR_NAME}/$PHONTAB"
+
+    val SUPERTONIC_REQUIRED_FILES = listOf(
+        NeuralVoiceModel.SUPERTONIC_DURATION_PREDICTOR,
+        NeuralVoiceModel.SUPERTONIC_TEXT_ENCODER,
+        NeuralVoiceModel.SUPERTONIC_VECTOR_ESTIMATOR,
+        NeuralVoiceModel.SUPERTONIC_VOCODER,
+        NeuralVoiceModel.SUPERTONIC_TTS_JSON,
+        NeuralVoiceModel.SUPERTONIC_UNICODE_INDEXER,
+        NeuralVoiceModel.SUPERTONIC_VOICE_STYLE,
+    )
 
     /**
      * Rutas relativas al root de la voz que deben existir y no estar vacías.
@@ -31,6 +41,15 @@ object VoiceInstallValidator {
                 add(ESPEAK_PHONTAB)
                 addAll(entry.lexiconFiles)
             }
+            NeuralVoiceEngine.Supertonic -> listOf(
+                entry.onnxFile.ifBlank { NeuralVoiceModel.SUPERTONIC_DURATION_PREDICTOR },
+                NeuralVoiceModel.SUPERTONIC_TEXT_ENCODER,
+                NeuralVoiceModel.SUPERTONIC_VECTOR_ESTIMATOR,
+                NeuralVoiceModel.SUPERTONIC_VOCODER,
+                NeuralVoiceModel.SUPERTONIC_TTS_JSON,
+                NeuralVoiceModel.SUPERTONIC_UNICODE_INDEXER,
+                entry.voicesFile ?: NeuralVoiceModel.SUPERTONIC_VOICE_STYLE,
+            )
         }
     }
 
@@ -40,8 +59,14 @@ object VoiceInstallValidator {
      * basenombre en el árbol (p. ej. tar sin aplanar).
      */
     fun missingRelativePaths(entry: VoiceCatalogEntry, installOrContentDir: File): List<String> {
-        val contentRoot = VoiceContentRoot.discover(installOrContentDir, entry.archiveRoot)
-            ?: installOrContentDir
+        val contentRoot = when (entry.engineType()) {
+            NeuralVoiceEngine.Supertonic ->
+                VoiceContentRoot.discoverSupertonic(installOrContentDir, entry.archiveRoot)
+                    ?: installOrContentDir
+            else ->
+                VoiceContentRoot.discover(installOrContentDir, entry.archiveRoot)
+                    ?: installOrContentDir
+        }
         return requiredRelativePaths(entry).filter { rel ->
             !filePresent(contentRoot, installOrContentDir, rel)
         }
@@ -87,4 +112,34 @@ object VoiceInstallValidator {
             voicesFile != null && voicesFile.isFile && voicesFile.length() > 0L &&
             dataDir.isDirectory &&
             File(dataDir, PHONTAB).let { it.isFile && it.length() > 0L }
+
+    /** Supertonic: 7 ficheros (sin tokens/espeak). */
+    fun isSupertonicLayoutComplete(
+        durationPredictor: File?,
+        textEncoder: File?,
+        vectorEstimator: File?,
+        vocoder: File?,
+        ttsJson: File?,
+        unicodeIndexer: File?,
+        voiceStyle: File?,
+    ): Boolean {
+        val files = listOf(
+            durationPredictor,
+            textEncoder,
+            vectorEstimator,
+            vocoder,
+            ttsJson,
+            unicodeIndexer,
+            voiceStyle,
+        )
+        return files.all { f -> f != null && f.isFile && f.length() > 0L }
+    }
+
+    fun isSupertonicDirComplete(dir: File): Boolean {
+        if (!dir.isDirectory) return false
+        return SUPERTONIC_REQUIRED_FILES.all { name ->
+            val f = VoiceContentRoot.findNamedFile(dir, name)
+            f != null && f.isFile && f.length() > 0L
+        }
+    }
 }

@@ -7,17 +7,27 @@ import android.media.AudioManager
 import android.media.AudioTrack
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.voice.audio.VoiceAudioPath
 import mx.ideass.personal.agent.voice.audio.VoicePlaybackRoute
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 /**
- * TTS neuronal (sherpa-onnx) con streaming de síntesis:
- * [OfflineTts.generateWithCallback] → normalización de pico → PCM → [AudioTrack].
+ * TTS neuronal (sherpa-onnx):
+ * [OfflineTts.generateWithCallback] → chunks en cola → normalización de pico
+ * streaming → PCM → [AudioTrack] (hilo de playback aparte para no bloquear JNI).
+ *
+ * [OfflineTts] vive en [SherpaOfflineTtsCache] (una voz a la vez): no se
+ * recarga el modelo en cada racha/preview. Este engine solo referencia el
+ * sintetizador; [destroy] no libera el nativo.
  *
  * La ruta de salida se reevalúa en cada [speak]:
  * - SCO conectado → 16 kHz + USAGE_VOICE_COMMUNICATION
@@ -90,6 +100,8 @@ class SherpaTtsEngine(
             val gen = playGeneration.incrementAndGet()
             releaseTrackLocked()
 
+            val tSpeak0 = SystemClock.elapsedRealtime()
+            val cacheHitAtSpeak = SherpaOfflineTtsCache.lastWasHit
             val route = routeProvider()
             val nativeRate = synth.sampleRateHz
             val playRate = VoiceAudioPath.playSampleRateHz(route, nativeRate)
@@ -106,93 +118,148 @@ class SherpaTtsEngine(
             }
             playbackTrack = track
             logAudioTrackConfig(track, route)
-            runCatching { track.play() }.onFailure {
-                Log.w(TAG, "AudioTrack play falló: ${it.message}")
-                releaseTrackLocked()
-                mainHandler.post { listener.onError("Error al hablar la respuesta.") }
-                return@execute
-            }
 
             Log.i(
                 TAG,
-                "Sherpa speak: voice=${model.id} route=$route " +
+                "Sherpa speak: voice=${model.id} sid=${model.defaultSpeakerId} " +
+                    "lang=${model.language} route=$route " +
                     "nativeHz=$nativeRate playHz=$playRate " +
-                    "speed=$speed peakTarget=$peakTarget maxGain=$maxGain",
+                    "speed=$speed peakTarget=$peakTarget maxGain=$maxGain " +
+                    "cacheHit=$cacheHitAtSpeak createCount=${SherpaOfflineTtsCache.createCount}",
             )
 
-            var framesWritten = 0L
+            // Cola: callback JNI solo copia; el hilo play escribe a AudioTrack
+            // (si write bloqueara el callback, ralentizaría generate).
+            // LinkedBlockingQueue NO admite null → centinela de fin de stream.
+            val chunkQueue = LinkedBlockingQueue<FloatArray>()
+            val framesWritten = AtomicLong(0L)
+            val ttfaMs = AtomicLong(-1L)
+            val firstChunkMs = AtomicLong(-1L)
+            val playChunks = AtomicInteger(0)
+            val playDone = CountDownLatch(1)
+            val playFailed = AtomicBoolean(false)
+
+            val playThread = Thread(
+                {
+                    try {
+                        val norm = StreamingPeakNormalizer(peakTarget, maxGain)
+                        var playing = false
+                        var ampInt16Peak = 0f
+                        var ampResamplePeak = 0f
+                        while (true) {
+                            val chunk = chunkQueue.take()
+                            if (chunk === STREAM_EOS) break
+                            if (stopRequested.get() || gen != playGeneration.get()) continue
+                            if (chunk.isEmpty()) continue
+                            playChunks.incrementAndGet()
+                            val floats = norm.apply(chunk)
+                            val pcm = PcmFloat.toPcm16(floats)
+                            val int16Amp = PcmAmplitude.measure(pcm)
+                            if (int16Amp.peak > ampInt16Peak) ampInt16Peak = int16Amp.peak
+                            val out = resampler?.push(pcm) ?: pcm
+                            if (out.isEmpty()) continue
+                            val rAmp = PcmAmplitude.measure(out)
+                            if (rAmp.peak > ampResamplePeak) ampResamplePeak = rAmp.peak
+                            if (!playing) {
+                                runCatching { track.play() }.onFailure {
+                                    Log.w(TAG, "AudioTrack play falló: ${it.message}")
+                                    playFailed.set(true)
+                                    return@Thread
+                                }
+                                playing = true
+                                ttfaMs.compareAndSet(-1L, SystemClock.elapsedRealtime() - tSpeak0)
+                            }
+                            framesWritten.addAndGet(writeFully(track, out, gen))
+                        }
+                        if (playing && !stopRequested.get() && gen == playGeneration.get()) {
+                            resampler?.flush()?.takeIf { it.isNotEmpty() }?.let { tail ->
+                                val rAmp = PcmAmplitude.measure(tail)
+                                if (rAmp.peak > ampResamplePeak) ampResamplePeak = rAmp.peak
+                                framesWritten.addAndGet(writeFully(track, tail, gen))
+                            }
+                        }
+                        Log.i(
+                            TAG,
+                            "PCM streaming: float→int16 peak≈%.4f / %.1f dBFS " +
+                                "post-resample peak≈%.4f / %.1f dBFS normPeak=%.4f".format(
+                                    ampInt16Peak,
+                                    PcmAmplitude.toDbFs(ampInt16Peak),
+                                    ampResamplePeak,
+                                    PcmAmplitude.toDbFs(ampResamplePeak),
+                                    norm.peakAbs,
+                                ),
+                        )
+                        if (playing && gen == playGeneration.get() && !stopRequested.get()) {
+                            waitUntilDrained(track, framesWritten.get(), gen)
+                        }
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "Playback streaming falló: ${t.message}", t)
+                        playFailed.set(true)
+                    } finally {
+                        playDone.countDown()
+                    }
+                },
+                "sherpa-tts-play",
+            ).also {
+                it.isDaemon = true
+                it.start()
+            }
+
             try {
+                val tInfer0 = SystemClock.elapsedRealtime()
                 val result = synth.synthesize(
                     text = spoken,
                     sid = model.defaultSpeakerId,
                     speed = speed,
-                ) {
-                    // Solo acumula (normalización de pico requiere la frase completa).
-                    !stopRequested.get() && gen == playGeneration.get()
+                    language = model.language,
+                ) { samples ->
+                    if (stopRequested.get() || gen != playGeneration.get()) return@synthesize false
+                    if (samples.isEmpty()) return@synthesize true
+                    firstChunkMs.compareAndSet(-1L, SystemClock.elapsedRealtime() - tSpeak0)
+                    // Copia: el buffer nativo se reutiliza entre callbacks.
+                    chunkQueue.put(samples.copyOf())
+                    true
+                }
+                val inferMs = SystemClock.elapsedRealtime() - tInfer0
+                chunkQueue.put(STREAM_EOS) // fin → hilo play drena y termina
+                if (!playDone.await(120, TimeUnit.SECONDS)) {
+                    Log.w(TAG, "Timeout esperando playback streaming")
+                    stopRequested.set(true)
+                    chunkQueue.clear()
+                    chunkQueue.offer(STREAM_EOS)
                 }
 
-                if (gen != playGeneration.get() || stopRequested.get()) return@execute
+                if (gen != playGeneration.get() || stopRequested.get()) {
+                    releaseTrackLocked()
+                    return@execute
+                }
 
-                if (!result.hasAudibleSignal() && result.samples.isEmpty()) {
-                    Log.w(TAG, "Sherpa: síntesis vacía")
+                if (playFailed.get() ||
+                    (framesWritten.get() <= 0L && !result.hasAudibleSignal() && result.samples.isEmpty())
+                ) {
+                    Log.w(TAG, "Sherpa: síntesis/playback vacío o fallido")
                     releaseTrackLocked()
                     mainHandler.post { listener.onError("Error al hablar la respuesta.") }
                     return@execute
                 }
 
-                val floatsRaw = result.samples
-                val ampRaw = PcmAmplitude.measure(floatsRaw)
-                Log.i(TAG, "PCM etapa 1 (sherpa float): ${ampRaw.summary()}")
-
-                val floats = PcmNormalizer.normalizePeak(
-                    samples = floatsRaw,
-                    targetPeak = peakTarget,
-                    maxGain = maxGain,
-                )
-                val ampNorm = PcmAmplitude.measure(floats)
-                Log.i(TAG, "PCM etapa 1b (normalizado): ${ampNorm.summary()}")
-
-                // float→int16 por chunks + resample + write
-                val chunk = 4096
-                var offset = 0
-                var ampInt16Peak = 0f
-                var ampResamplePeak = 0f
-                while (offset < floats.size) {
-                    if (stopRequested.get() || gen != playGeneration.get()) return@execute
-                    val end = (offset + chunk).coerceAtMost(floats.size)
-                    val slice = floats.copyOfRange(offset, end)
-                    val pcm = PcmFloat.toPcm16(slice)
-                    val int16Amp = PcmAmplitude.measure(pcm)
-                    if (int16Amp.peak > ampInt16Peak) ampInt16Peak = int16Amp.peak
-                    val out = resampler?.push(pcm) ?: pcm
-                    if (out.isNotEmpty()) {
-                        val rAmp = PcmAmplitude.measure(out)
-                        if (rAmp.peak > ampResamplePeak) ampResamplePeak = rAmp.peak
-                        framesWritten += writeFully(track, out, gen)
-                    }
-                    offset = end
-                }
-                resampler?.flush()?.takeIf { it.isNotEmpty() }?.let { tail ->
-                    val rAmp = PcmAmplitude.measure(tail)
-                    if (rAmp.peak > ampResamplePeak) ampResamplePeak = rAmp.peak
-                    framesWritten += writeFully(track, tail, gen)
+                if (result.samples.isNotEmpty()) {
+                    val ampRaw = PcmAmplitude.measure(result.samples)
+                    Log.i(TAG, "PCM etapa 1 (sherpa float acumulado): ${ampRaw.summary()}")
                 }
 
                 Log.i(
                     TAG,
-                    "PCM etapa 2 (float→int16 peak≈%.4f / %.1f dBFS) etapa 3 " +
-                        "(post-resample peak≈%.4f / %.1f dBFS)".format(
-                            ampInt16Peak,
-                            PcmAmplitude.toDbFs(ampInt16Peak),
-                            ampResamplePeak,
-                            PcmAmplitude.toDbFs(ampResamplePeak),
-                        ),
+                    "timing speak: inferMs=$inferMs firstChunkMs=${firstChunkMs.get()} " +
+                        "ttfaMs=${ttfaMs.get()} " +
+                        "cacheHit=$cacheHitAtSpeak " +
+                        "lastLoadMs=${SherpaOfflineTtsCache.lastLoadMs} " +
+                        "createCount=${SherpaOfflineTtsCache.createCount} " +
+                        "streamMode=callback-queue-play " +
+                        "genChunks=${result.chunkCount} playChunks=${playChunks.get()} " +
+                        "samples=${result.samples.size} framesWritten=${framesWritten.get()}",
                 )
 
-                if (gen != playGeneration.get() || stopRequested.get()) return@execute
-
-                waitUntilDrained(track, framesWritten, gen)
-                if (gen != playGeneration.get()) return@execute
                 releaseTrackLocked()
                 mainHandler.post {
                     if (gen == playGeneration.get() && !destroyed.get()) {
@@ -205,6 +272,8 @@ class SherpaTtsEngine(
                     "Sherpa synthesize falló (runtime nativo; voice=${model.id}): ${t.message}",
                     t,
                 )
+                chunkQueue.offer(STREAM_EOS)
+                runCatching { playDone.await(2, TimeUnit.SECONDS) }
                 releaseTrackLocked()
                 if (!destroyed.get()) {
                     mainHandler.post { listener.onError("Error al hablar la respuesta.") }
@@ -226,7 +295,7 @@ class SherpaTtsEngine(
         playGeneration.incrementAndGet()
         synthExecutor.execute {
             releaseTrackLocked()
-            runCatching { synthesizer?.close() }
+            // OfflineTts lo posee SherpaOfflineTtsCache (voz activa).
             synthesizer = null
         }
         synthExecutor.shutdown()
@@ -246,12 +315,14 @@ class SherpaTtsEngine(
             }
             return
         }
-        val synth = SherpaOfflineSynthesizer.createOrNull(
+        val t0 = SystemClock.elapsedRealtime()
+        val synth = SherpaOfflineTtsCache.getOrCreate(
             model = model,
             numThreads = numThreads,
             silenceScale = silenceScale,
             debug = false,
         )
+        val acquireMs = SystemClock.elapsedRealtime() - t0
         if (synth == null) {
             ready = false
             Log.w(
@@ -267,7 +338,6 @@ class SherpaTtsEngine(
             return
         }
         if (destroyed.get()) {
-            synth.close()
             return
         }
         synthesizer = synth
@@ -276,6 +346,9 @@ class SherpaTtsEngine(
             TAG,
             "Sherpa listo: voice=${model.id} engine=${model.engine} " +
                 "hz=${synth.sampleRateHz} speakers=${synth.numSpeakers} " +
+                "acquireMs=$acquireMs cacheHit=${SherpaOfflineTtsCache.lastWasHit} " +
+                "lastLoadMs=${SherpaOfflineTtsCache.lastLoadMs} " +
+                "createCount=${SherpaOfflineTtsCache.createCount} " +
                 "dataDir=${model.dataDir.absolutePath}",
         )
         mainHandler.post {
@@ -381,6 +454,9 @@ class SherpaTtsEngine(
     companion object {
         private const val TAG = "SherpaTtsEngine"
         private const val PLAYBACK_SLACK_MS = 60L
+
+        /** Centinela de fin de cola (LinkedBlockingQueue rechaza null). */
+        private val STREAM_EOS = FloatArray(0)
 
         private fun usageName(usage: Int): String = when (usage) {
             AudioAttributes.USAGE_VOICE_COMMUNICATION -> "VOICE_COMMUNICATION"

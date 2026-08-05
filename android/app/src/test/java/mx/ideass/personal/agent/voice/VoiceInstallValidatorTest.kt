@@ -64,6 +64,36 @@ class VoiceInstallValidatorTest {
     }
 
     @Test
+    fun supertonicDefaultsAreSevenFilesWithoutEspeak() {
+        val entry = VoiceCatalogEntry(
+            id = "supertonic-v3-es-f1",
+            displayName = "Supertonic",
+            engine = "supertonic",
+            language = "es",
+            sampleRate = 44100,
+            sizeBytes = 100,
+            downloadUrl = "https://example.com/s",
+            sha256 = "cc",
+            archiveRoot = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11",
+            onnxFile = "duration_predictor.int8.onnx",
+            voicesFile = "voice.bin",
+        )
+        val req = VoiceInstallValidator.requiredRelativePaths(entry)
+        assertEquals(7, req.size)
+        assertTrue(req.contains("tts.json"))
+        assertTrue(req.contains("voice.bin"))
+        assertFalse(req.any { it.contains("espeak") })
+        assertFalse(req.contains("tokens.txt"))
+
+        val dir = tmp.newFolder("super-ok")
+        for (name in VoiceInstallValidator.SUPERTONIC_REQUIRED_FILES) {
+            File(dir, name).writeBytes(byteArrayOf(1))
+        }
+        assertTrue(VoiceInstallValidator.isComplete(entry, dir))
+        assertTrue(VoiceInstallValidator.isSupertonicDirComplete(dir))
+    }
+
+    @Test
     fun incompleteExtract_notComplete_andExtractWithPhontab_ok() {
         val archive = File(tmp.root, "voice.tar.bz2")
         writePiperArchive(archive, root = "demo-voice", includePhontab = false)

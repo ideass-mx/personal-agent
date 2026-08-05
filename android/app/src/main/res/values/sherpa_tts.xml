@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Parámetros de síntesis neuronal (sherpa-onnx). Marca blanca. -->
-    <integer name="sherpa_tts_num_threads">2</integer>
+    <!-- 4 hilos: con 2 Kokoro iba a RTF≈1 (~3.5 s/frase); VoxSherpa suele usar ≥4. -->
+    <integer name="sherpa_tts_num_threads">4</integer>
     <item name="sherpa_tts_default_speed" format="float" type="dimen">1.0</item>
     <item name="sherpa_tts_silence_scale" format="float" type="dimen">0.2</item>
     <!-- Pico objetivo post-síntesis (~−1 dBFS). Piper sale ~0.42 (−7.5 dBFS). -->

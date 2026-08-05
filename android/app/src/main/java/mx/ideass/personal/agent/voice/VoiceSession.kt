@@ -396,8 +396,6 @@ class VoiceSession @Inject constructor(
             val activeId = preferences.getActiveNeuralVoiceId()
             val neuralModel = installedVoices.resolveForPlayback(activeId)
                 ?: NeuralVoicesStore.resolveActiveOrAnyInstalled(context)
-            val enginePackage = preferences.getTtsEnginePackage()
-            val voiceName = preferences.getTtsVoiceName()
             if (!sessionActive) return@launch
 
             val sessionListener = createTtsListener(bindPlan)
@@ -427,11 +425,7 @@ class VoiceSession @Inject constructor(
                                         TAG,
                                         "TTS: Sherpa no disponible (runtime/modelo) → fallback Android",
                                     )
-                                    bindAndroidTts(
-                                        enginePackage = enginePackage,
-                                        voiceName = voiceName,
-                                        listener = sessionListener,
-                                    )
+                                    bindAndroidTts(listener = sessionListener)
                                 }
                             }
                         }
@@ -442,32 +436,22 @@ class VoiceSession @Inject constructor(
                     },
                 )
             } else {
-                Log.i(TAG, "TTS: sin modelo neuronal → Android TTS")
-                bindAndroidTts(
-                    enginePackage = enginePackage,
-                    voiceName = voiceName,
-                    listener = sessionListener,
-                )
+                Log.i(TAG, "TTS: sin modelo neuronal → Android TTS (fallback invisible)")
+                bindAndroidTts(listener = sessionListener)
             }
         }
     }
 
-    private fun bindAndroidTts(
-        enginePackage: String?,
-        voiceName: String?,
-        listener: AgentTtsEngine.Listener,
-    ) {
+    /** TTS del sistema: solo fallback automático; sin preferencias de UI. */
+    private fun bindAndroidTts(listener: AgentTtsEngine.Listener) {
         if (!sessionActive) return
         tts?.destroy()
         ttsReady = false
-        Log.i(
-            TAG,
-            "TTS prefs: engine=${enginePackage ?: "(sistema)"} voice=${voiceName ?: "(locale)"}",
-        )
+        Log.i(TAG, "TTS: bind Android fallback (motor/voz del sistema)")
         tts = TtsEngine(
             context = context,
-            preferredEnginePackage = enginePackage,
-            preferredVoiceName = voiceName,
+            preferredEnginePackage = null,
+            preferredVoiceName = null,
             routeProvider = {
                 VoicePlaybackRoutePolicy.resolve(bluetoothSco.isScoConnected)
             },

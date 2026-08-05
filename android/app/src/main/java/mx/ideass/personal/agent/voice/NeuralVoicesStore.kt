@@ -10,8 +10,9 @@ import java.io.File
  * Al cargar, [resolveVoiceBaseDir] localiza la carpeta real (p. ej.
  * `archiveRoot` del tar u otro nombre usable) sin asumir que el nombre == id.
  *
- * Catálogo: solo modelos **no cuantizados** hasta confirmar soporte int8
- * del AAR integrado (las variantes `-int8`/`-fp16` se purgan al reconciliar).
+ * Catálogo: modelos no cuantizados (Piper/Kokoro) más Supertonic V3 int8
+ * (única variante oficial). Las carpetas Piper `-int8`/`-fp16` abandonadas
+ * se purgan al reconciliar.
  */
 object NeuralVoicesStore {
     const val ROOT_DIR_NAME = "neural_voices"
@@ -22,7 +23,7 @@ object NeuralVoicesStore {
     const val CP1_TEST_VOICE_ID_SHORT = "vits-piper-es_MX-claude-high"
     const val CP1_TEST_ONNX_NAME = "es_MX-claude-high.onnx"
 
-    /** Sufijos de variantes cuantizadas abandonadas (runtime no fiable). */
+    /** Sufijos de variantes cuantizadas abandonadas (Piper; runtime no fiable). */
     val ABANDONED_QUANTIZED_SUFFIXES = listOf("-int8", "-fp16")
 
     fun rootDir(context: Context): File =
@@ -38,7 +39,7 @@ object NeuralVoicesStore {
      * Orden: nombre == id → == archiveRoot → prefijo id + sufijo → contiene
      * [onnxFile]. Ignora carpetas con sufijo cuantizado abandonado salvo que
      * el [voiceId]/[archiveRoot] pedido sea exactamente esa carpeta.
-     * Solo se acepta si el layout es usable (tokens + phontab + onnx).
+     * Solo se acepta si el layout es usable (Piper/Kokoro o Supertonic).
      */
     fun resolveVoiceBaseDir(
         voicesRoot: File,
@@ -54,7 +55,10 @@ object NeuralVoicesStore {
 
         val rootHint = archiveRoot?.trim()?.trimEnd('/')
         val allowExactQuantized = isAbandonedQuantizedName(voiceId) ||
-            (!rootHint.isNullOrEmpty() && isAbandonedQuantizedName(rootHint))
+            (!rootHint.isNullOrEmpty() && isAbandonedQuantizedName(rootHint)) ||
+            // Paquete Supertonic oficial lleva "int8" en el nombre (no es Piper -int8).
+            voiceId.contains("supertonic", ignoreCase = true) ||
+            (rootHint?.contains("supertonic", ignoreCase = true) == true)
 
         fun acceptable(dir: File): Boolean {
             if (allowExactQuantized) return true
@@ -86,14 +90,17 @@ object NeuralVoicesStore {
         }
     }
 
-    fun isAbandonedQuantizedName(name: String): Boolean =
-        ABANDONED_QUANTIZED_SUFFIXES.any { name.endsWith(it) }
+    fun isAbandonedQuantizedName(name: String): Boolean {
+        if (name.contains("supertonic", ignoreCase = true)) return false
+        return ABANDONED_QUANTIZED_SUFFIXES.any { name.endsWith(it) }
+    }
 
     fun isUsableVoiceDir(
         dir: File,
         preferredOnnxName: String? = null,
     ): Boolean {
         if (!dir.isDirectory) return false
+        if (VoiceInstallValidator.isSupertonicDirComplete(dir)) return true
         val tokens = VoiceContentRoot.resolveTokens(dir) ?: return false
         val dataDir = VoiceContentRoot.resolveEspeakDataDir(dir) ?: return false
         val onnx = VoiceContentRoot.resolveOnnx(dir, preferredOnnxName) ?: return false
@@ -154,6 +161,7 @@ object NeuralVoicesStore {
                 rootDir = dir,
                 onnxName = "model.onnx",
             )?.let { return it }
+            NeuralVoiceModel.resolveSupertonic(id = dir.name, rootDir = dir)?.let { return it }
         }
         return null
     }

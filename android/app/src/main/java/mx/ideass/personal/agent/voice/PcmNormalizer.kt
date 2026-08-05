@@ -11,7 +11,7 @@ package mx.ideass.personal.agent.voice
 object PcmNormalizer {
     const val DEFAULT_TARGET_PEAK = 0.89125f // 10^(-1/20) ≈ −1 dBFS
     const val DEFAULT_MAX_GAIN = 4f
-    private const val MIN_PEAK = 1e-6f
+    internal const val MIN_PEAK = 1e-6f
 
     /**
      * @return nuevo buffer normalizado (no muta [samples]).
@@ -33,6 +33,39 @@ object PcmNormalizer {
         val gain = (targetPeak / peak).coerceAtMost(maxGain)
         if (gain == 1f) return samples.copyOf()
 
+        return FloatArray(samples.size) { i ->
+            (samples[i] * gain).coerceIn(-1f, 1f)
+        }
+    }
+}
+
+/**
+ * Pico acumulado entre chunks para poder reproducir en streaming sin esperar
+ * la frase completa. El gain solo baja cuando aparece un pico mayor (los
+ * chunks ya reproducidos no se reescriben).
+ */
+class StreamingPeakNormalizer(
+    private val targetPeak: Float = PcmNormalizer.DEFAULT_TARGET_PEAK,
+    private val maxGain: Float = PcmNormalizer.DEFAULT_MAX_GAIN,
+) {
+    init {
+        require(targetPeak > 0f && targetPeak <= 1f) {
+            "targetPeak debe estar en (0, 1], got=$targetPeak"
+        }
+        require(maxGain >= 1f) { "maxGain debe ser ≥ 1, got=$maxGain" }
+    }
+
+    var peakAbs: Float = 0f
+        private set
+
+    /** @return nuevo buffer; no muta [samples]. */
+    fun apply(samples: FloatArray): FloatArray {
+        if (samples.isEmpty()) return FloatArray(0)
+        val chunkPeak = PcmFloat.peakAbs(samples)
+        if (chunkPeak > peakAbs) peakAbs = chunkPeak
+        if (peakAbs < PcmNormalizer.MIN_PEAK) return samples.copyOf()
+        val gain = (targetPeak / peakAbs).coerceAtMost(maxGain)
+        if (gain == 1f) return samples.copyOf()
         return FloatArray(samples.size) { i ->
             (samples[i] * gain).coerceIn(-1f, 1f)
         }
