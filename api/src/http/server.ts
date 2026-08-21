@@ -1,12 +1,13 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import type { AgentRuntime } from "../agent/runtime.ts";
 import { config } from "../config.ts";
 import { runMigrations } from "../db/database.ts";
 import { connectedDevices } from "./sessions.ts";
 import { attachGateway } from "./ws.ts";
 
 /** Arranca HTTP (Hono), health y el WebSocket en `/ws`. */
-export function startServer(): void {
+export function startServer(runtime: AgentRuntime): void {
   runMigrations();
 
   const app = new Hono();
@@ -20,5 +21,5 @@ export function startServer(): void {
     console.log(`[api] WebSocket en ws://localhost:${info.port}/ws`);
   });
 
-  attachGateway(server as import("node:http").Server);
+  attachGateway(server as import("node:http").Server, runtime);
 }
