@@ -40,11 +40,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppRadii
 import mx.ideass.personal.agent.app.streamingCursorAlpha
@@ -52,7 +54,7 @@ import mx.ideass.personal.agent.network.ConnectionState
 
 @Composable
 fun ChatScreen(
-    onOpenConnection: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenVoice: (sessionKey: String) -> Unit,
     onOpenSessions: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(),
@@ -78,7 +80,7 @@ fun ChatScreen(
         ChatHeader(
             connection = connection,
             activeSessionName = ui.activeSessionName,
-            onOpenConnection = onOpenConnection,
+            onOpenSettings = onOpenSettings,
             onOpenSessions = onOpenSessions,
         )
 
@@ -117,7 +119,7 @@ fun ChatScreen(
 private fun ChatHeader(
     connection: ConnectionState,
     activeSessionName: String,
-    onOpenConnection: () -> Unit,
+    onOpenSettings: () -> Unit,
     onOpenSessions: () -> Unit,
 ) {
     val (subtitle, subtitleColor) = when (connection) {
@@ -175,10 +177,10 @@ private fun ChatHeader(
                 tint = AppColors.textMuted,
             )
         }
-        IconButton(onClick = onOpenConnection) {
+        IconButton(onClick = onOpenSettings) {
             Icon(
                 imageVector = Icons.Default.Settings,
-                contentDescription = "Ajustes de conexión",
+                contentDescription = stringResource(R.string.settings_open),
                 tint = AppColors.textMuted,
             )
         }

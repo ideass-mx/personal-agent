@@ -2,6 +2,8 @@ package mx.ideass.personal.agent.chat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import mx.ideass.personal.agent.app.AppPreferences
+import mx.ideass.personal.agent.connection.ConnectionPrefsPolicy
 import mx.ideass.personal.agent.gateway.session.SessionProvider
 import mx.ideass.personal.agent.network.ChatConnection
 import mx.ideass.personal.agent.network.ConnectionState
@@ -36,6 +38,7 @@ class ChatViewModel @Inject constructor(
     private val chatConnection: ChatConnection,
     private val chatStore: ChatStore,
     private val sessionProvider: SessionProvider,
+    preferences: AppPreferences,
 ) : ViewModel() {
 
     private val _draft = MutableStateFlow("")
@@ -57,8 +60,16 @@ class ChatViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ChatUiState())
 
-    val connectionState: StateFlow<ConnectionState> = chatConnection.connectionState
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConnectionState.SinConfigurar)
+    val connectionState: StateFlow<ConnectionState> = combine(
+        chatConnection.connectionState,
+        preferences.configured,
+    ) { raw, configured ->
+        ConnectionPrefsPolicy.effectiveConnectionState(raw, configured)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        chatConnection.connectionState.value,
+    )
 
     private val _hadConnection = MutableStateFlow(false)
     val hadConnection: StateFlow<Boolean> = _hadConnection.asStateFlow()

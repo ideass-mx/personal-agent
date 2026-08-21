@@ -105,6 +105,34 @@ class SherpaOfflineSynthesizerGuardTest {
     }
 
     @Test
+    fun createOrNull_xnnpackFails_fallsBackToCpu() {
+        val root = tmp.newFolder("voice-fallback")
+        writePiper(root, "es_MX-claude-high.onnx")
+        val model = NeuralVoiceModel.resolvePiper(
+            id = "vits-piper-es_MX-claude-high",
+            rootDir = root,
+            preferredOnnxName = "es_MX-claude-high.onnx",
+        )!!
+
+        val tried = mutableListOf<String>()
+        val previous = SherpaOfflineSynthesizer.createOfflineTts
+        try {
+            SherpaOfflineSynthesizer.createOfflineTts = { config ->
+                tried += config.model.provider
+                if (config.model.provider == "xnnpack") {
+                    error("xnnpack no disponible en stub")
+                }
+                // Stub: no OfflineTts real en JVM; lanzamos tras registrar el intento cpu.
+                throw UnsatisfiedLinkError("cpu stub: no JNI en unit test")
+            }
+            assertNull(SherpaOfflineSynthesizer.createOrNull(model))
+            assertEquals(listOf("xnnpack", "cpu"), tried)
+        } finally {
+            SherpaOfflineSynthesizer.createOfflineTts = previous
+        }
+    }
+
+    @Test
     fun createOrNull_missingNativeLibs_returnsNullBeforeOfflineTts() {
         val root = tmp.newFolder("voice2")
         writePiper(root, "es_MX-claude-high.onnx")

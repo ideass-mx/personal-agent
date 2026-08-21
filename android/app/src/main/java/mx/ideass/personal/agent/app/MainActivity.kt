@@ -40,15 +40,16 @@ import mx.ideass.personal.agent.chat.ChatScreen
 import mx.ideass.personal.agent.chat.SessionsScreen
 import mx.ideass.personal.agent.connection.ConnectionScreen
 import mx.ideass.personal.agent.service.AgentService
+import mx.ideass.personal.agent.settings.SettingsScreen
 import mx.ideass.personal.agent.voice.VoiceLaunch
 import mx.ideass.personal.agent.voice.VoiceOrigin
 import mx.ideass.personal.agent.voice.VoiceScreen
+import mx.ideass.personal.agent.voice.VoiceSettingsScreen
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -149,6 +150,8 @@ private object Routes {
     const val Connection = "connection"
     const val Chat = "chat"
     const val Sessions = "sessions"
+    const val Settings = "settings"
+    const val VoiceSettings = "settings/voice"
     /** Invocación del asistente (racha nueva). */
     const val VoiceAssistant = "voice"
     /** Micrófono desde conversación abierta (`sessionKey` URL-encoded). */
@@ -164,8 +167,7 @@ private object Routes {
 class BootViewModel @Inject constructor(
     preferences: AppPreferences,
 ) : ViewModel() {
-    val configured: StateFlow<Boolean?> = preferences.hubConfig
-        .map { it != null }
+    val configured: StateFlow<Boolean?> = preferences.configured
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 }
 
@@ -179,11 +181,12 @@ private fun AppNav(
     val navController = rememberNavController()
     var ready by remember { mutableStateOf(false) }
 
+    // Arranque siempre al chat (vacío / sin configurar). El Gateway es opcional:
+    // Ajustes → Conexión lo gestiona cuando el usuario quiera; Voz es local.
     LaunchedEffect(configured) {
         if (configured != null && !ready) {
             ready = true
-            val start = if (configured == true) Routes.Chat else Routes.Connection
-            navController.navigate(start) {
+            navController.navigate(Routes.Chat) {
                 popUpTo(Routes.Boot) { inclusive = true }
             }
         }
@@ -208,6 +211,7 @@ private fun AppNav(
             )
         }
         composable(Routes.Connection) {
+            val canGoBack = navController.previousBackStackEntry != null
             ConnectionScreen(
                 onConnected = {
                     if (!navController.popBackStack(Routes.Chat, inclusive = false)) {
@@ -216,12 +220,17 @@ private fun AppNav(
                         }
                     }
                 },
+                onBack = if (canGoBack) {
+                    { navController.popBackStack() }
+                } else {
+                    null
+                },
             )
         }
         composable(Routes.Chat) {
             ChatScreen(
-                onOpenConnection = {
-                    navController.navigate(Routes.Connection)
+                onOpenSettings = {
+                    navController.navigate(Routes.Settings)
                 },
                 onOpenVoice = { sessionKey ->
                     navController.navigate(Routes.voiceInConversation(sessionKey))
@@ -235,6 +244,18 @@ private fun AppNav(
             SessionsScreen(
                 onBack = { navController.popBackStack() },
                 onSessionSelected = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.Settings) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenConnection = { navController.navigate(Routes.Connection) },
+                onOpenVoice = { navController.navigate(Routes.VoiceSettings) },
+            )
+        }
+        composable(Routes.VoiceSettings) {
+            VoiceSettingsScreen(
+                onBack = { navController.popBackStack() },
             )
         }
         composable(

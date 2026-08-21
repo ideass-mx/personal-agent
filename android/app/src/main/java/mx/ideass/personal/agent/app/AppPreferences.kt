@@ -10,8 +10,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import mx.ideass.personal.agent.connection.ConnectionPrefsPolicy
 import mx.ideass.personal.agent.gateway.client.GatewayConfigSource
-import mx.ideass.personal.agent.gateway.config.ClientAuthMode
 import mx.ideass.personal.agent.gateway.config.GatewayConfig
 import java.util.UUID
 import javax.inject.Inject
@@ -67,32 +67,27 @@ class AppPreferences @Inject constructor(
     }
 
     val connectionBackend: Flow<ConnectionBackend> = context.dataStore.data.map { prefs ->
-        when (prefs[Keys.Backend]) {
-            "hub" -> ConnectionBackend.HUB
-            "gateway" -> ConnectionBackend.GATEWAY
-            // Por defecto Gateway; Hub solo si se eligió explícitamente (debug / rollback).
-            else -> ConnectionBackend.GATEWAY
-        }
+        backendOf(prefs)
     }
 
     override val config: Flow<GatewayConfig?> = context.dataStore.data.map { prefs ->
-        if (prefs[Keys.Backend] != "gateway") return@map null
-        val url = prefs[Keys.GatewayUrl].orEmpty().trim()
-        if (url.isBlank()) return@map null
-        val token = prefs[Keys.GatewayToken]?.trim()?.takeIf { it.isNotEmpty() }
-        val bootstrap = prefs[Keys.GatewayBootstrap]?.trim()?.takeIf { it.isNotEmpty() }
-        GatewayConfig(
-            url = url,
-            gatewayStableId = url,
-            authMode = when {
-                token != null -> ClientAuthMode.TOKEN
-                else -> ClientAuthMode.NONE
-            },
-            sharedToken = token,
-            bootstrapToken = bootstrap,
-            defaultAgentId = prefs[Keys.GatewayAgentId]?.trim()?.takeIf { it.isNotEmpty() },
-            defaultSessionKey = prefs[Keys.GatewaySessionKey]?.trim()?.takeIf { it.isNotEmpty() },
-            clientDisplayName = prefs[Keys.DeviceName]?.trim()?.takeIf { it.isNotEmpty() },
+        ConnectionPrefsPolicy.toGatewayConfig(
+            backend = backendOf(prefs),
+            url = prefs[Keys.GatewayUrl],
+            token = prefs[Keys.GatewayToken],
+            bootstrap = prefs[Keys.GatewayBootstrap],
+            agentId = prefs[Keys.GatewayAgentId],
+            sessionKey = prefs[Keys.GatewaySessionKey],
+            deviceName = prefs[Keys.DeviceName],
+        )
+    }
+
+    val configured: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        ConnectionPrefsPolicy.isConfigured(
+            backend = backendOf(prefs),
+            gatewayUrl = prefs[Keys.GatewayUrl],
+            hubAddress = prefs[Keys.HubAddress],
+            hubToken = prefs[Keys.HubToken],
         )
     }
 
@@ -100,12 +95,7 @@ class AppPreferences @Inject constructor(
         prefs[Keys.ConversationId]
     }
 
-    suspend fun isConfigured(): Boolean {
-        return when (connectionBackend.first()) {
-            ConnectionBackend.GATEWAY -> config.first() != null
-            ConnectionBackend.HUB -> hubConfig.first() != null
-        }
-    }
+    suspend fun isConfigured(): Boolean = configured.first()
 
     suspend fun getHubConfig(): HubConfig? = hubConfig.first()
 
@@ -152,6 +142,12 @@ class AppPreferences @Inject constructor(
             }
         }
     }
+
+    suspend fun getDeviceName(): String? =
+        context.dataStore.data.first()[Keys.DeviceName]?.trim()?.takeIf { it.isNotEmpty() }
+
+    suspend fun getGatewayBootstrap(): String? =
+        context.dataStore.data.first()[Keys.GatewayBootstrap]?.trim()?.takeIf { it.isNotEmpty() }
 
     suspend fun getGatewayUrl(): String? =
         context.dataStore.data.first()[Keys.GatewayUrl]?.trim()?.takeIf { it.isNotEmpty() }
@@ -219,4 +215,12 @@ class AppPreferences @Inject constructor(
             }
         }
     }
+
+    private fun backendOf(prefs: Preferences): ConnectionBackend =
+        ConnectionPrefsPolicy.backendFromStored(
+            storedBackend = prefs[Keys.Backend],
+            gatewayUrl = prefs[Keys.GatewayUrl],
+            hubAddress = prefs[Keys.HubAddress],
+            hubToken = prefs[Keys.HubToken],
+        )
 }

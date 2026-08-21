@@ -66,6 +66,16 @@
     <string name="session_quick_display_name">Rápidas</string>
     <string name="session_quick_id">rapidas</string>
 
+    <!-- Hub de ajustes (lista → secciones) -->
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_subtitle">Conexión, voz y más</string>
+    <string name="settings_back">Volver</string>
+    <string name="settings_section_connection">Conexión</string>
+    <string name="settings_section_connection_subtitle">Gateway, token y salud de la conexión</string>
+    <string name="settings_section_voice">Voz</string>
+    <string name="settings_section_voice_subtitle">Voces neuronales offline</string>
+    <string name="settings_open">Ajustes</string>
+
     <!-- Ajustes voces neuronales (sherpa-onnx) -->
     <string name="neural_voice_settings_title">Voz</string>
     <string name="neural_voice_settings_subtitle">Voces neuronales offline. Descarga la que quieras, escucha una muestra y actívala para las rachas.</string>

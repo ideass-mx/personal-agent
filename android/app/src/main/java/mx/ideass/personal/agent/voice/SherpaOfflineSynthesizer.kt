@@ -21,6 +21,8 @@ class SherpaOfflineSynthesizer private constructor(
     private val model: NeuralVoiceModel,
     private val tts: OfflineTts?,
     private val testStub: Boolean = false,
+    /** Provider ORT con el que se creó (xnnpack|cpu); solo informativo. */
+    val provider: String = "cpu",
 ) : AutoCloseable {
 
     val sampleRateHz: Int
@@ -125,7 +127,12 @@ class SherpaOfflineSynthesizer private constructor(
 
         /** Stub JVM sin OfflineTts (solo tests de [SherpaOfflineTtsCache]). */
         internal fun createTestStub(model: NeuralVoiceModel): SherpaOfflineSynthesizer =
-            SherpaOfflineSynthesizer(model = model, tts = null, testStub = true)
+            SherpaOfflineSynthesizer(
+                model = model,
+                tts = null,
+                testStub = true,
+                provider = "stub",
+            )
 
         /**
          * Callback JNI-compatible para [OfflineTts.generateWithCallback].
@@ -155,8 +162,8 @@ class SherpaOfflineSynthesizer private constructor(
 
         /**
          * Crea el sintetizador solo si el layout es válido y OfflineTts carga
-         * sin lanzar. Si falla (rutas, JNI, modelo incompatible), loguea y
-         * devuelve null → fallback Android TTS.
+         * sin lanzar. Prueba providers en [SherpaTtsConfigFactory.PROVIDER_FALLBACK_ORDER]
+         * (xnnpack → cpu), como VoxSherpa. Si todos fallan → null → Android TTS.
          */
         fun createOrNull(
             model: NeuralVoiceModel,
@@ -193,30 +200,55 @@ class SherpaOfflineSynthesizer private constructor(
                 }
                 return null
             }
-            return try {
-                val config = SherpaTtsConfigFactory.fromModel(
-                    model = model,
-                    numThreads = numThreads,
-                    silenceScale = silenceScale,
-                    debug = debug,
-                )
-                val tts = createOfflineTts(config)
-                SherpaOfflineSynthesizer(model, tts, testStub = false)
-            } catch (t: Throwable) {
-                // Incluye Error/UnsatisfiedLinkError / ExceptionInInitializerError.
-                runCatching {
-                    Log.e(
-                        TAG,
-                        "OfflineTts falló → fallback Android TTS " +
-                            "(model=${model.modelFile.absolutePath} " +
-                            "tokens=${model.tokensFile.absolutePath} " +
-                            "dataDir=${model.dataDir.absolutePath} " +
-                            "engine=${model.engine})",
-                        t,
+            var lastError: Throwable? = null
+            for (provider in SherpaTtsConfigFactory.PROVIDER_FALLBACK_ORDER) {
+                try {
+                    val config = SherpaTtsConfigFactory.fromModel(
+                        model = model,
+                        numThreads = numThreads,
+                        silenceScale = silenceScale,
+                        debug = debug,
+                        provider = provider,
                     )
+                    val tts = createOfflineTts(config)
+                    runCatching {
+                        Log.i(
+                            TAG,
+                            "OfflineTts ok provider=$provider threads=$numThreads " +
+                                "model=${model.id} engine=${model.engine}",
+                        )
+                    }
+                    return SherpaOfflineSynthesizer(
+                        model = model,
+                        tts = tts,
+                        testStub = false,
+                        provider = provider,
+                    )
+                } catch (t: Throwable) {
+                    // Incluye Error/UnsatisfiedLinkError / ExceptionInInitializerError.
+                    lastError = t
+                    runCatching {
+                        Log.w(
+                            TAG,
+                            "OfflineTts provider=$provider falló " +
+                                "(model=${model.id}); probando siguiente…",
+                            t,
+                        )
+                    }
                 }
-                null
             }
+            runCatching {
+                Log.e(
+                    TAG,
+                    "OfflineTts falló en todos los providers → fallback Android TTS " +
+                        "(model=${model.modelFile.absolutePath} " +
+                        "tokens=${model.tokensFile.absolutePath} " +
+                        "dataDir=${model.dataDir.absolutePath} " +
+                        "engine=${model.engine})",
+                    lastError,
+                )
+            }
+            return null
         }
     }
 }

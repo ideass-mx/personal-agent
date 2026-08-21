@@ -44,7 +44,35 @@ class SherpaTtsConfigFactoryTest {
         assertEquals(2, config.model.numThreads)
         assertEquals(0.25f, config.silenceScale, 0.0001f)
         assertEquals("cpu", config.model.provider)
+        assertEquals(1, config.maxNumSentences)
         assertTrue(config.model.kokoro.model.isEmpty())
+    }
+
+    @Test
+    fun fromModel_respectsProviderOverride() {
+        val root = tmp.newFolder("piper-xnn")
+        val onnx = File(root, "es_MX-claude-high.onnx").apply { writeBytes(byteArrayOf(1)) }
+        val tokens = File(root, "tokens.txt").apply { writeText("a") }
+        val data = File(root, "espeak-ng-data").apply {
+            mkdirs()
+            File(this, "phontab").writeBytes(byteArrayOf(1))
+        }
+        val model = NeuralVoiceModel(
+            id = "vits-piper-es_MX-claude-high",
+            engine = NeuralVoiceEngine.Piper,
+            rootDir = root,
+            modelFile = onnx,
+            tokensFile = tokens,
+            dataDir = data,
+            sampleRateHz = 22_050,
+        )
+        val config = SherpaTtsConfigFactory.fromModel(model, provider = "xnnpack")
+        assertEquals("xnnpack", config.model.provider)
+    }
+
+    @Test
+    fun providerFallbackOrder_xnnpackThenCpu() {
+        assertEquals(listOf("xnnpack", "cpu"), SherpaTtsConfigFactory.PROVIDER_FALLBACK_ORDER)
     }
 
     @Test

@@ -8,14 +8,21 @@ import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 
 /**
  * Arma [OfflineTtsConfig] según el motor del modelo, sin filtrar al resto del código.
+ *
+ * Provider: VoxSherpa prueba `xnnpack` y cae a `cpu`; la elección la hace
+ * [SherpaOfflineSynthesizer.createOrNull] (fallback). Aquí solo se fija el valor.
  */
 object SherpaTtsConfigFactory {
+
+    /** Orden de intento al crear OfflineTts (paridad con VoxSherpa). */
+    val PROVIDER_FALLBACK_ORDER: List<String> = listOf("xnnpack", "cpu")
 
     fun fromModel(
         model: NeuralVoiceModel,
         numThreads: Int = 2,
         silenceScale: Float = 0.2f,
         debug: Boolean = false,
+        provider: String = "cpu",
     ): OfflineTtsConfig {
         require(model.isComplete()) {
             "Modelo incompleto: ${model.rootDir.absolutePath}"
@@ -32,7 +39,7 @@ object SherpaTtsConfigFactory {
                 ) {
                     "Rutas OfflineTts ausentes (dataDir=${model.dataDir.absolutePath})"
                 }
-                piperConfig(model, numThreads, silenceScale, debug)
+                piperConfig(model, numThreads, silenceScale, debug, provider)
             }
             NeuralVoiceEngine.Kokoro -> {
                 require(
@@ -45,10 +52,10 @@ object SherpaTtsConfigFactory {
                 ) {
                     "Rutas OfflineTts ausentes (dataDir=${model.dataDir.absolutePath})"
                 }
-                kokoroConfig(model, numThreads, silenceScale, debug)
+                kokoroConfig(model, numThreads, silenceScale, debug, provider)
             }
             NeuralVoiceEngine.Supertonic ->
-                supertonicConfig(model, numThreads, silenceScale, debug)
+                supertonicConfig(model, numThreads, silenceScale, debug, provider)
         }
     }
 
@@ -57,6 +64,7 @@ object SherpaTtsConfigFactory {
         numThreads: Int,
         silenceScale: Float,
         debug: Boolean,
+        provider: String,
     ): OfflineTtsConfig =
         OfflineTtsConfig(
             model = OfflineTtsModelConfig(
@@ -67,8 +75,9 @@ object SherpaTtsConfigFactory {
                 ),
                 numThreads = numThreads.coerceAtLeast(1),
                 debug = debug,
-                provider = "cpu",
+                provider = provider,
             ),
+            maxNumSentences = 1,
             silenceScale = silenceScale,
         )
 
@@ -77,6 +86,7 @@ object SherpaTtsConfigFactory {
         numThreads: Int,
         silenceScale: Float,
         debug: Boolean,
+        provider: String,
     ): OfflineTtsConfig {
         val voices = model.voicesFile?.absolutePath.orEmpty()
         require(voices.isNotEmpty()) { "Kokoro sin voices.bin" }
@@ -94,8 +104,9 @@ object SherpaTtsConfigFactory {
                 ),
                 numThreads = numThreads.coerceAtLeast(1),
                 debug = debug,
-                provider = "cpu",
+                provider = provider,
             ),
+            maxNumSentences = 1,
             silenceScale = silenceScale,
         )
     }
@@ -105,6 +116,7 @@ object SherpaTtsConfigFactory {
         numThreads: Int,
         silenceScale: Float,
         debug: Boolean,
+        provider: String,
     ): OfflineTtsConfig {
         val duration = requireNotNull(model.durationPredictorFile) { "Supertonic sin duration_predictor" }
         val textEncoder = requireNotNull(model.textEncoderFile) { "Supertonic sin text_encoder" }
@@ -130,8 +142,9 @@ object SherpaTtsConfigFactory {
                 ),
                 numThreads = numThreads.coerceAtLeast(1),
                 debug = debug,
-                provider = "cpu",
+                provider = provider,
             ),
+            maxNumSentences = 1,
             silenceScale = silenceScale,
         )
     }

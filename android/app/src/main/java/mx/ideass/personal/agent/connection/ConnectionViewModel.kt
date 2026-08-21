@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.stateIn
@@ -32,7 +33,7 @@ import javax.inject.Inject
 
 data class ConnectionUiState(
     val backend: ConnectionBackend = ConnectionBackend.GATEWAY,
-    val address: String = "wss://127.0.0.1:18789",
+    val address: String = "",
     val token: String = "",
     val bootstrapToken: String = "",
     val agentId: String = "",
@@ -67,68 +68,59 @@ class ConnectionViewModel @Inject constructor(
     )
     val ui: StateFlow<ConnectionUiState> = _ui.asStateFlow()
 
-    val health: StateFlow<ConnectionHealth> = healthTracker.health
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConnectionHealth())
+    val health: StateFlow<ConnectionHealth> = combine(
+        healthTracker.health,
+        preferences.configured,
+    ) { snapshot, configured ->
+        snapshot.copy(
+            state = ConnectionPrefsPolicy.effectiveConnectionState(snapshot.state, configured),
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ConnectionHealth())
 
     private var connectJob: Job? = null
 
     init {
         viewModelScope.launch {
-            val backend = preferences.getConnectionBackend()
-            when (backend) {
-                ConnectionBackend.GATEWAY -> {
-                    _ui.update {
-                        it.copy(
-                            backend = ConnectionBackend.GATEWAY,
-                            address = preferences.getGatewayUrl()
-                                ?: "wss://127.0.0.1:18789",
-                            token = preferences.getGatewayToken().orEmpty(),
-                            agentId = preferences.getGatewayAgentId().orEmpty(),
-                            sessionKey = preferences.getGatewaySessionKey().orEmpty(),
-                            deviceName = preferences.getHubConfig()?.deviceName
-                                ?.ifBlank { it.deviceName } ?: it.deviceName,
-                            hasSavedConfig = preferences.getGatewayUrl() != null,
-                        )
-                    }
-                }
-                ConnectionBackend.HUB -> {
-                    preferences.getHubConfig()?.let { config ->
-                        _ui.update {
-                            it.copy(
-                                backend = ConnectionBackend.HUB,
-                                address = config.address,
-                                token = config.token,
-                                deviceName = config.deviceName.ifBlank { it.deviceName },
-                                hasSavedConfig = true,
-                            )
-                        }
-                    } ?: _ui.update {
-                        it.copy(
-                            backend = ConnectionBackend.HUB,
-                            address = "ws://10.0.2.2:8787",
-                        )
-                    }
-                }
-            }
+            applyPrefill()
         }
     }
 
     fun onBackendChange(backend: ConnectionBackend) {
+        viewModelScope.launch {
+            applyPrefill(forceBackend = backend)
+        }
+    }
+
+    private suspend fun applyPrefill(forceBackend: ConnectionBackend? = null) {
+        val storedBackend = preferences.getConnectionBackend()
+        val backend = forceBackend ?: storedBackend
+        val hub = preferences.getHubConfig()
+        val fallbackName = Build.MODEL.orEmpty().ifBlank { "Android" }
+        val form = connectionFormPrefill(
+            backend = backend,
+            gatewayUrl = preferences.getGatewayUrl(),
+            gatewayToken = preferences.getGatewayToken(),
+            gatewayBootstrap = preferences.getGatewayBootstrap(),
+            gatewayAgentId = preferences.getGatewayAgentId(),
+            gatewaySessionKey = preferences.getGatewaySessionKey(),
+            hubAddress = hub?.address,
+            hubToken = hub?.token,
+            deviceName = preferences.getDeviceName() ?: hub?.deviceName,
+            fallbackDeviceName = fallbackName,
+        )
         _ui.update {
-            when (backend) {
-                ConnectionBackend.GATEWAY -> it.copy(
-                    backend = backend,
-                    address = if (it.backend != backend) "wss://127.0.0.1:18789" else it.address,
-                    resultMessage = null,
-                    pairingPending = false,
-                )
-                ConnectionBackend.HUB -> it.copy(
-                    backend = backend,
-                    address = if (it.backend != backend) "ws://10.0.2.2:8787" else it.address,
-                    resultMessage = null,
-                    pairingPending = false,
-                )
-            }
+            it.copy(
+                backend = form.backend,
+                address = form.address,
+                token = form.token,
+                bootstrapToken = form.bootstrapToken,
+                agentId = form.agentId,
+                sessionKey = form.sessionKey,
+                deviceName = form.deviceName.ifBlank { it.deviceName },
+                hasSavedConfig = form.hasSavedConfig,
+                resultMessage = if (forceBackend != null) null else it.resultMessage,
+                pairingPending = if (forceBackend != null) false else it.pairingPending,
+            )
         }
     }
 

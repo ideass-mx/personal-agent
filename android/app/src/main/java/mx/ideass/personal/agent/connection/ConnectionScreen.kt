@@ -58,12 +58,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import androidx.compose.ui.res.stringResource
+import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppRadii
 import mx.ideass.personal.agent.app.ConnectionBackend
 import mx.ideass.personal.agent.network.ConnectionState
 import mx.ideass.personal.agent.service.ConnectionHealth
-import mx.ideass.personal.agent.voice.NeuralVoiceSettingsSection
+import mx.ideass.personal.agent.settings.SettingsHeader
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -72,6 +74,7 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun ConnectionScreen(
     onConnected: () -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: ConnectionViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
@@ -91,219 +94,231 @@ fun ConnectionScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppColors.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .background(AppColors.background),
     ) {
-        Text(
-            text = if (ui.backend == ConnectionBackend.GATEWAY) {
-                "Conecta el Gateway"
-            } else {
-                "Conecta tu hub"
-            },
-            color = AppColors.textPrimary,
-            fontSize = 28.sp,
-            modifier = Modifier.combinedClickable(
-                onClick = {},
-                onLongClick = { viewModel.toggleBackendSelector() },
-            ),
-        )
-        Text(
-            text = "Tu agente vive en tu servidor, no en la nube de nadie.",
-            color = AppColors.textMuted,
-            fontSize = 15.sp,
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (ui.debugBuild && ui.showBackendSelector) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = { viewModel.onBackendChange(ConnectionBackend.HUB) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (ui.backend == ConnectionBackend.HUB) {
-                            AppColors.accent
-                        } else {
-                            AppColors.textMuted
-                        },
-                    ),
-                ) { Text("Hub") }
-                OutlinedButton(
-                    onClick = { viewModel.onBackendChange(ConnectionBackend.GATEWAY) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (ui.backend == ConnectionBackend.GATEWAY) {
-                            AppColors.accent
-                        } else {
-                            AppColors.textMuted
-                        },
-                    ),
-                ) { Text("Gateway") }
-            }
+        if (onBack != null) {
+            SettingsHeader(
+                title = stringResource(R.string.settings_section_connection),
+                subtitle = stringResource(R.string.settings_section_connection_subtitle),
+                onBack = onBack,
+            )
         }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    horizontal = 24.dp,
+                    vertical = if (onBack != null) 16.dp else 32.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = if (ui.backend == ConnectionBackend.GATEWAY) {
+                    "Conecta el Gateway"
+                } else {
+                    "Conecta tu hub"
+                },
+                color = AppColors.textPrimary,
+                fontSize = 28.sp,
+                modifier = Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = { viewModel.toggleBackendSelector() },
+                ),
+            )
+            Text(
+                text = "Tu agente vive en tu servidor, no en la nube de nadie.",
+                color = AppColors.textMuted,
+                fontSize = 15.sp,
+            )
 
-        OutlinedTextField(
-            value = ui.address,
-            onValueChange = viewModel::onAddressChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Dirección") },
-            placeholder = {
-                Text(
-                    if (ui.backend == ConnectionBackend.GATEWAY) {
-                        "wss://host:18789"
-                    } else {
-                        "ws://10.0.2.2:8787"
-                    },
-                )
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(AppRadii.card),
-            colors = fieldColors,
-            textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
-        )
+            Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = ui.token,
-            onValueChange = viewModel::onTokenChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Token") },
-            singleLine = true,
-            shape = RoundedCornerShape(AppRadii.card),
-            colors = fieldColors,
-            visualTransformation = if (ui.tokenVisible) {
-                VisualTransformation.None
-            } else {
-                PasswordVisualTransformation()
-            },
-            trailingIcon = {
-                IconButton(onClick = viewModel::toggleTokenVisible) {
-                    Icon(
-                        imageVector = if (ui.tokenVisible) {
-                            Icons.Default.VisibilityOff
-                        } else {
-                            Icons.Default.Visibility
-                        },
-                        contentDescription = if (ui.tokenVisible) "Ocultar token" else "Mostrar token",
-                        tint = AppColors.textMuted,
-                    )
+            if (ui.debugBuild && ui.showBackendSelector) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.onBackendChange(ConnectionBackend.HUB) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (ui.backend == ConnectionBackend.HUB) {
+                                AppColors.accent
+                            } else {
+                                AppColors.textMuted
+                            },
+                        ),
+                    ) { Text("Hub") }
+                    OutlinedButton(
+                        onClick = { viewModel.onBackendChange(ConnectionBackend.GATEWAY) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (ui.backend == ConnectionBackend.GATEWAY) {
+                                AppColors.accent
+                            } else {
+                                AppColors.textMuted
+                            },
+                        ),
+                    ) { Text("Gateway") }
                 }
-            },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        )
+            }
 
-        if (ui.backend == ConnectionBackend.GATEWAY) {
             OutlinedTextField(
-                value = ui.bootstrapToken,
-                onValueChange = viewModel::onBootstrapChange,
+                value = ui.address,
+                onValueChange = viewModel::onAddressChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Setup-code (opcional)") },
+                label = { Text("Dirección") },
+                placeholder = {
+                    Text(
+                        if (ui.backend == ConnectionBackend.GATEWAY) {
+                            "wss://host:18789"
+                        } else {
+                            "ws://10.0.2.2:8787"
+                        },
+                    )
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(AppRadii.card),
                 colors = fieldColors,
-                visualTransformation = PasswordVisualTransformation(),
+                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
+            )
+
+            OutlinedTextField(
+                value = ui.token,
+                onValueChange = viewModel::onTokenChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Token") },
+                singleLine = true,
+                shape = RoundedCornerShape(AppRadii.card),
+                colors = fieldColors,
+                visualTransformation = if (ui.tokenVisible) {
+                    VisualTransformation.None
+                } else {
+                    PasswordVisualTransformation()
+                },
+                trailingIcon = {
+                    IconButton(onClick = viewModel::toggleTokenVisible) {
+                        Icon(
+                            imageVector = if (ui.tokenVisible) {
+                                Icons.Default.VisibilityOff
+                            } else {
+                                Icons.Default.Visibility
+                            },
+                            contentDescription = if (ui.tokenVisible) "Ocultar token" else "Mostrar token",
+                            tint = AppColors.textMuted,
+                        )
+                    }
+                },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
-            OutlinedTextField(
-                value = ui.agentId,
-                onValueChange = viewModel::onAgentIdChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("agentId (opcional)") },
-                singleLine = true,
-                shape = RoundedCornerShape(AppRadii.card),
-                colors = fieldColors,
-                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
-            )
-            OutlinedTextField(
-                value = ui.sessionKey,
-                onValueChange = viewModel::onSessionKeyChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("sessionKey (opcional)") },
-                singleLine = true,
-                shape = RoundedCornerShape(AppRadii.card),
-                colors = fieldColors,
-                textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
-            )
-        }
 
-        OutlinedTextField(
-            value = ui.deviceName,
-            onValueChange = viewModel::onDeviceNameChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Nombre del dispositivo") },
-            singleLine = true,
-            shape = RoundedCornerShape(AppRadii.card),
-            colors = fieldColors,
-        )
-
-        Button(
-            onClick = { viewModel.testAndConnect(onConnected) },
-            enabled = !ui.testing,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(AppRadii.cta),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = AppColors.accent,
-                contentColor = AppColors.onAccent,
-                disabledContainerColor = AppColors.accent.copy(alpha = 0.5f),
-                disabledContentColor = AppColors.onAccent,
-            ),
-        ) {
-            if (ui.testing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.height(22.dp),
-                    color = AppColors.onAccent,
-                    strokeWidth = 2.dp,
+            if (ui.backend == ConnectionBackend.GATEWAY) {
+                OutlinedTextField(
+                    value = ui.bootstrapToken,
+                    onValueChange = viewModel::onBootstrapChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Setup-code (opcional)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(AppRadii.card),
+                    colors = fieldColors,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
-            } else {
-                Text("Probar y conectar", fontSize = 16.sp)
+                OutlinedTextField(
+                    value = ui.agentId,
+                    onValueChange = viewModel::onAgentIdChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("agentId (opcional)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(AppRadii.card),
+                    colors = fieldColors,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
+                )
+                OutlinedTextField(
+                    value = ui.sessionKey,
+                    onValueChange = viewModel::onSessionKeyChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("sessionKey (opcional)") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(AppRadii.card),
+                    colors = fieldColors,
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
+                )
             }
-        }
 
-        if (ui.testing) {
-            OutlinedButton(
-                onClick = viewModel::cancelConnect,
+            OutlinedTextField(
+                value = ui.deviceName,
+                onValueChange = viewModel::onDeviceNameChange,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(AppRadii.cta),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textMuted),
-            ) {
-                Text(if (ui.pairingPending) "Cancelar emparejamiento" else "Cancelar")
-            }
-        }
+                label = { Text("Nombre del dispositivo") },
+                singleLine = true,
+                shape = RoundedCornerShape(AppRadii.card),
+                colors = fieldColors,
+            )
 
-        ui.resultMessage?.let { message ->
-            Text(
-                text = message,
-                color = if (ui.resultOk) AppColors.accent else AppColors.warn,
-                fontSize = 14.sp,
+            Button(
+                onClick = { viewModel.testAndConnect(onConnected) },
+                enabled = !ui.testing,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, AppColors.border, RoundedCornerShape(AppRadii.card))
-                    .background(AppColors.surface, RoundedCornerShape(AppRadii.card))
-                    .padding(14.dp),
+                    .height(52.dp),
+                shape = RoundedCornerShape(AppRadii.cta),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AppColors.accent,
+                    contentColor = AppColors.onAccent,
+                    disabledContainerColor = AppColors.accent.copy(alpha = 0.5f),
+                    disabledContentColor = AppColors.onAccent,
+                ),
+            ) {
+                if (ui.testing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.height(22.dp),
+                        color = AppColors.onAccent,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text("Probar y conectar", fontSize = 16.sp)
+                }
+            }
+
+            if (ui.testing) {
+                OutlinedButton(
+                    onClick = viewModel::cancelConnect,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(AppRadii.cta),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textMuted),
+                ) {
+                    Text(if (ui.pairingPending) "Cancelar emparejamiento" else "Cancelar")
+                }
+            }
+
+            ui.resultMessage?.let { message ->
+                Text(
+                    text = message,
+                    color = if (ui.resultOk) AppColors.accent else AppColors.warn,
+                    fontSize = 14.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, AppColors.border, RoundedCornerShape(AppRadii.card))
+                        .background(AppColors.surface, RoundedCornerShape(AppRadii.card))
+                        .padding(14.dp),
+                )
+            }
+
+            if (ui.hasSavedConfig) {
+                Spacer(modifier = Modifier.height(8.dp))
+                ConnectionHealthSection(health = health)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Los datos se guardan solo en este teléfono.",
+                color = AppColors.textMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
         }
-
-        if (ui.hasSavedConfig) {
-            Spacer(modifier = Modifier.height(8.dp))
-            ConnectionHealthSection(health = health)
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        NeuralVoiceSettingsSection()
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = "Los datos se guardan solo en este teléfono.",
-            color = AppColors.textMuted,
-            fontSize = 12.sp,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        )
     }
 }
 

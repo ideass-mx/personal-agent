@@ -125,6 +125,7 @@ class SherpaTtsEngine(
                     "lang=${model.language} route=$route " +
                     "nativeHz=$nativeRate playHz=$playRate " +
                     "speed=$speed peakTarget=$peakTarget maxGain=$maxGain " +
+                    "provider=${synth.provider} " +
                     "cacheHit=$cacheHitAtSpeak createCount=${SherpaOfflineTtsCache.createCount}",
             )
 
@@ -252,6 +253,7 @@ class SherpaTtsEngine(
                     TAG,
                     "timing speak: inferMs=$inferMs firstChunkMs=${firstChunkMs.get()} " +
                         "ttfaMs=${ttfaMs.get()} " +
+                        "provider=${synth.provider} " +
                         "cacheHit=$cacheHitAtSpeak " +
                         "lastLoadMs=${SherpaOfflineTtsCache.lastLoadMs} " +
                         "createCount=${SherpaOfflineTtsCache.createCount} " +
@@ -346,6 +348,7 @@ class SherpaTtsEngine(
             TAG,
             "Sherpa listo: voice=${model.id} engine=${model.engine} " +
                 "hz=${synth.sampleRateHz} speakers=${synth.numSpeakers} " +
+                "provider=${synth.provider} " +
                 "acquireMs=$acquireMs cacheHit=${SherpaOfflineTtsCache.lastWasHit} " +
                 "lastLoadMs=${SherpaOfflineTtsCache.lastLoadMs} " +
                 "createCount=${SherpaOfflineTtsCache.createCount} " +
