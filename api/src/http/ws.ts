@@ -6,14 +6,9 @@ import {
   type ServerMessage,
   type UserMessage,
 } from "../../../packages/protocol/messages.ts";
+import { agentRuntime } from "../agent/runtime.ts";
 import { config } from "../config.ts";
-import { streamReply } from "../brain/claude.ts";
-import {
-  addMessage,
-  ensureConversation,
-  getHistory,
-  touchDevice,
-} from "../memory/history.ts";
+import { touchDevice } from "../memory/history.ts";
 import { createSession, dropSession, type Session } from "./sessions.ts";
 
 function send(ws: WebSocket, msg: ServerMessage): void {
@@ -29,26 +24,31 @@ function tokenMatches(candidate: string): boolean {
 async function reply(session: Session, msg: UserMessage): Promise<void> {
   session.replying = true;
   try {
-    const conversationId = ensureConversation(msg.conversationId);
-    addMessage(conversationId, "user", msg.text, session.deviceId);
-
-    const history = getHistory(conversationId);
-
-    let full = "";
-    for await (const chunk of streamReply(history)) {
-      full += chunk;
-      send(session.ws, { type: "assistant_chunk", text: chunk });
+    for await (const event of agentRuntime.runTurn({
+      conversationId: msg.conversationId,
+      deviceId: session.deviceId,
+      userMessage: msg.text,
+    })) {
+      switch (event.type) {
+        case "text_delta":
+          send(session.ws, { type: "assistant_chunk", text: event.text });
+          break;
+        case "done":
+          send(session.ws, {
+            type: "assistant_done",
+            messageId: event.messageId,
+            conversationId: event.conversationId,
+          });
+          break;
+        case "error":
+          send(session.ws, {
+            type: "error",
+            code: "internal",
+            message: event.message,
+          });
+          break;
+      }
     }
-
-    const messageId = addMessage(conversationId, "assistant", full);
-    send(session.ws, { type: "assistant_done", messageId, conversationId });
-  } catch (err) {
-    console.error("[gateway] error generando respuesta:", err);
-    send(session.ws, {
-      type: "error",
-      code: "internal",
-      message: "El agente tuvo un problema generando la respuesta.",
-    });
   } finally {
     session.replying = false;
   }

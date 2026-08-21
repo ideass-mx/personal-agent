@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { config } from "../config.ts";
-import { db } from "./db.ts";
+import { db } from "../db/database.ts";
 
 export type Role = "user" | "assistant";
 export interface HistoryEntry {

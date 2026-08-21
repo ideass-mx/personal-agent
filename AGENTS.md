@@ -12,7 +12,7 @@ Contexto obligatorio antes de tocar código: `docs/architecture.md`,
    carpetas core/features ni patrones "enterprise" no pedidos. Paquetes por
    capacidad (chat, voice, network), jamás por tipo técnico (utils, models, ui).
 3. **No construyas para el futuro.** Nada de código "por si acaso" para fases
-   que no están en curso. Los stubs existentes (`api/src/router`) se dejan vacíos.
+   que no están en curso. No dejes stubs vacíos sin uso real.
 4. **Naming:** namespaces `mx.ideass.personal.agent.*` / `@mxideass/*`;
    las clases del agente usan prefijo `Agent` (AgentApp, AgentService); el resto
    se nombra por lo que hace. En UI y copy: «el agente» / «Agente» (sin nombre
@@ -21,7 +21,8 @@ Contexto obligatorio antes de tocar código: `docs/architecture.md`,
    OkHttp para WebSocket, kotlinx.serialization con `ignoreUnknownKeys = true`
    y `classDiscriminator = "type"`. El foreground service es innegociable.
 6. **Agent API (`api/`):** TypeScript estricto, sin frameworks nuevos.
-   Persistencia solo vía `api/src/memory/`. Los prompts del agente viven solo
-   en `brain/prompts.ts`. El paquete npm es `@mxideass/api` (antes `hub`).
+   Persistencia conversacional vía `api/src/memory/`; SQLite en `api/src/db/`.
+   Los prompts del agente viven solo en `agent/prompts.ts`.
+   El paquete npm es `@mxideass/api` (antes `hub`).
 7. **Idioma:** código y nombres en inglés; comentarios, strings de UI y
    documentación en español.

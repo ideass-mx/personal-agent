@@ -11,7 +11,7 @@ el api piensa y enruta.
     la puerta (WebSocket de clientes), el cerebro (llamadas a Claude con
     memoria/contexto), el enrutador (qué nodo ejecuta qué — Fase 4) y la
     memoria (SQLite → Postgres).
-    Estructura plana por capacidad: `gateway/ brain/ memory/ router/`.
+    Estructura plana por capacidad: `http/ agent/ providers/ memory/ db/`.
     Paquete npm: `@mxideass/api` (renombrado desde `hub`).
 
 **Cliente Android (Kotlin/Compose)** — cascarón de entrada/salida. Un solo

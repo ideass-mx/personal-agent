@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { config } from "../config.ts";
 import type { HistoryEntry } from "../memory/history.ts";
-import { SYSTEM_PROMPT } from "./prompts.ts";
+import { SYSTEM_PROMPT } from "../agent/prompts.ts";
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
