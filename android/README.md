@@ -6,5 +6,5 @@ y `AGENTS.md`. Protocolo: `packages/protocol`.
 ```bash
 cd android
 ./gradlew :app:assembleDebug
-# Emulador + hub local: ws://10.0.2.2:8787
+# Emulador + Agent API local: ws://10.0.2.2:8787
 ```

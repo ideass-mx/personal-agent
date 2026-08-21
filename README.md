@@ -9,7 +9,7 @@ de **el agente** / **Agente**.
 ## Estructura
 
 ```
-hub/              El cerebro · Node + TypeScript (WebSocket + Claude + SQLite)
+api/              Agent Runtime + API local · Node + TypeScript (WebSocket + Claude + SQLite)
 android/          El cliente · Kotlin + Compose
 agent-windows/    Las garras · C#/.NET (Fase 4)
 packages/protocol El contrato de mensajes — fuente de verdad
@@ -17,10 +17,10 @@ db/               Esquema y migraciones (SQLite hoy, Postgres mañana)
 docs/             Arquitectura, roadmap y doctrina
 ```
 
-## Levantar el hub
+## Levantar el Agent API
 
 ```bash
-cp .env.example .env    # completa ANTHROPIC_API_KEY y HUB_TOKEN
+cp api/.env.example api/.env    # completa ANTHROPIC_API_KEY y HUB_TOKEN
 npm install
 npm run dev             # http://localhost:8787  ·  ws://localhost:8787/ws
 ```
@@ -33,12 +33,12 @@ npx wscat -c ws://localhost:8787/ws
 > {"type":"user_message","text":"hola, preséntate"}
 ```
 
-Verás los `assistant_chunk` llegar en streaming. Reinicia el hub y repite
+Verás los `assistant_chunk` llegar en streaming. Reinicia el api y repite
 con el mismo `conversationId` del `assistant_done`: la memoria persiste.
 
 ## Doctrina (resumen — completa en docs/architecture.md)
 
-1. Nada se conecta directo a nada: todo pasa por el hub.
+1. Nada se conecta directo a nada: todo pasa por el Agent API (`api/`).
 2. Estructura plana por capacidad; la ceremonia se gana con crecimiento real.
 3. El protocolo (`packages/protocol/PROTOCOL.md`) manda; el código obedece.
 4. Identidad: **MX Ideass · Personal Agent** (marca); repo `personal-agent`;

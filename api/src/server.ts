@@ -10,12 +10,12 @@ runMigrations();
 const app = new Hono();
 
 app.get("/health", (c) =>
-  c.json({ ok: true, name: "personal-agent-hub", devices: connectedDevices() }),
+  c.json({ ok: true, name: "personal-agent-api", devices: connectedDevices() }),
 );
 
 const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`[hub] Agente despierto en http://localhost:${info.port}`);
-  console.log(`[hub] WebSocket en ws://localhost:${info.port}/ws`);
+  console.log(`[api] Agente despierto en http://localhost:${info.port}`);
+  console.log(`[api] WebSocket en ws://localhost:${info.port}/ws`);
 });
 
 attachGateway(server as import("node:http").Server);

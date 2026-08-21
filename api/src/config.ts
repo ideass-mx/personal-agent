@@ -15,13 +15,14 @@ function required(name: string): string {
 
 export const config = {
   anthropicApiKey: required("ANTHROPIC_API_KEY"),
+  /** Token de auth WS; env `HUB_TOKEN` se conserva por compatibilidad. */
   hubToken: required("HUB_TOKEN"),
   port: Number(process.env.HUB_PORT ?? 8787),
 
   /** Carpeta /db del monorepo (migraciones versionadas). */
   migrationsDir: path.resolve(here, "../../db/migrations"),
 
-  /** Archivo SQLite en runtime (fuera de git). */
+  /** Archivo SQLite en runtime (fuera de git): api/data/. */
   dbFile: path.resolve(here, "../data/personal-agent.db"),
 
   model: "claude-sonnet-4-6",

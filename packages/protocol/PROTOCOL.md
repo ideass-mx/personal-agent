@@ -1,9 +1,9 @@
 # Protocolo personal-agent · v1
 
-Contrato de mensajes del WebSocket clientes ↔ hub. **Fuente de verdad.**
+Contrato de mensajes del WebSocket clientes ↔ Agent API (`api/`). **Fuente de verdad.**
 Los espejos (`messages.ts`, `Messages.kt`) se adaptan a este documento, nunca al revés.
 
-- Transporte: WebSocket en `ws://<hub>:<puerto>/ws`
+- Transporte: WebSocket en `ws://<api>:<puerto>/ws`
 - Formato: JSON, un mensaje por frame, discriminado por el campo `type`
 - Primera obligación del cliente: enviar `auth` antes que cualquier otra cosa.
   Cualquier mensaje previo a una autenticación exitosa cierra la conexión.
@@ -17,12 +17,13 @@ Los espejos (`messages.ts`, `Messages.kt`) se adaptan a este documento, nunca al
 ```
 `deviceId`: estable por dispositivo (lo inventa el cliente y lo persiste).
 `deviceName`: opcional, legible para humanos.
+`token`: el valor de la variable de entorno `HUB_TOKEN` del Agent API (nombre histórico).
 
 ### `user_message`
 ```json
 { "type": "user_message", "text": "hola, preséntate", "conversationId": "c_abc123" }
 ```
-`conversationId` es opcional: si se omite, el hub crea una conversación nueva
+`conversationId` es opcional: si se omite, el api crea una conversación nueva
 y devuelve su id en `assistant_done`. El cliente debe reutilizarlo en los
 mensajes siguientes para mantener el hilo.
 
@@ -30,7 +31,7 @@ mensajes siguientes para mantener el hilo.
 ```json
 { "type": "ping" }
 ```
-Latido opcional del cliente. El hub responde `pong`.
+Latido opcional del cliente. El api responde `pong`.
 
 ## Servidor → Cliente
 
@@ -68,7 +69,7 @@ Códigos actuales: `auth_failed`, `auth_required`, `bad_message`, `busy`, `inter
 1. Cambios **aditivos** (campos opcionales, tipos nuevos de mensaje) no rompen v1.
 2. Renombrar o eliminar campos = versión nueva del protocolo. No se hace a la ligera.
 3. Los clientes ignoran silenciosamente tipos de mensaje que no conocen
-   (permite que el hub evolucione antes que los clientes).
+   (permite que el api evolucione antes que los clientes).
 
 ## Reservado para fases futuras (no implementar aún)
 

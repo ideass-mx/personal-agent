@@ -12,8 +12,8 @@ out/
 .env.*
 !.env.example
 
-# Datos locales del hub (SQLite)
-hub/data/
+# Datos locales del Agent API (SQLite)
+api/data/
 *.db
 *.db-journal
 *.sqlite
