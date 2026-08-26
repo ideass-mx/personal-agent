@@ -32,6 +32,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Confirmación Hub en RAM; no se persiste. */
+data class HubConfirmPending(
+    val confirmationId: String,
+    val toolName: String,
+    val inputSummary: String,
+    val conversationId: String,
+)
+
 @Serializable
 data class StoredChatMessage(
     val id: String,
@@ -69,6 +77,9 @@ class ChatStore @Inject constructor(
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
+    private val _pendingHubConfirm = MutableStateFlow<HubConfirmPending?>(null)
+    val pendingHubConfirm: StateFlow<HubConfirmPending?> = _pendingHubConfirm.asStateFlow()
+
     private var loaded = false
 
     suspend fun ensureLoaded() = mutex.withLock {
@@ -80,6 +91,11 @@ class ChatStore @Inject constructor(
     fun currentConversationId(): String? =
         sessionProvider.activeSession.value?.sessionKey
             ?: threads.visibleSessionKey
+
+    suspend fun hasAssistantWork(sessionKey: String): Boolean = mutex.withLock {
+        ensureLoadedLocked()
+        threads.hasAssistantWork(sessionKey.trim())
+    }
 
     /**
      * Espera a que [sessionKey] no tenga respuesta en vuelo ni send pendiente.
@@ -128,6 +144,22 @@ class ChatStore @Inject constructor(
     suspend fun handleInbound(msg: ChatInbound) {
         mutex.withLock {
             ensureLoadedLocked()
+            if (msg is ChatInbound.ConfirmRequest) {
+                val summary = msg.inputJson.trim().ifEmpty { "{}" }
+                _pendingHubConfirm.value = HubConfirmPending(
+                    confirmationId = msg.confirmationId,
+                    toolName = msg.toolName,
+                    inputSummary = if (summary.length > 800) summary.take(800) + "…" else summary,
+                    conversationId = msg.conversationId,
+                )
+                return@withLock
+            }
+            if (msg is ChatInbound.AssistantDone) {
+                val pending = _pendingHubConfirm.value
+                if (pending != null && pending.conversationId == msg.conversationId) {
+                    _pendingHubConfirm.value = null
+                }
+            }
             val key = resolveInboundKeyLocked(msg.sessionKey) ?: return@withLock
             val affectsVisible = threads.handleInbound(key, msg)
             if (affectsVisible) {
@@ -135,18 +167,43 @@ class ChatStore @Inject constructor(
             }
             persistLocked()
             assistantWorkChanged.tryEmit(Unit)
-            // TODO(CP4+): marcar actividad en lista si !affectsVisible
         }
+    }
+
+    fun clearPendingHubConfirm() {
+        _pendingHubConfirm.value = null
     }
 
     suspend fun handleServer(msg: ServerMessage) {
         when (msg) {
             is ServerMessage.AssistantChunk ->
-                handleInbound(ChatInbound.AssistantDelta(text = msg.text, replace = false))
+                handleInbound(
+                    ChatInbound.AssistantDelta(
+                        text = msg.text,
+                        replace = false,
+                        sessionKey = msg.conversationId,
+                    ),
+                )
             is ServerMessage.AssistantDone ->
                 handleInbound(ChatInbound.AssistantDone(msg.conversationId))
             is ServerMessage.Error ->
-                handleInbound(ChatInbound.Error(code = msg.code, message = msg.message))
+                handleInbound(
+                    ChatInbound.Error(
+                        code = msg.code,
+                        message = msg.message,
+                        sessionKey = msg.conversationId,
+                    ),
+                )
+            is ServerMessage.ConfirmRequest ->
+                handleInbound(
+                    ChatInbound.ConfirmRequest(
+                        confirmationId = msg.confirmationId,
+                        toolCallId = msg.toolCallId,
+                        toolName = msg.toolName,
+                        inputJson = msg.input.toString(),
+                        conversationId = msg.conversationId,
+                    ),
+                )
             else -> Unit
         }
     }

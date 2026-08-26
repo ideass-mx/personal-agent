@@ -110,6 +110,15 @@ class HubClient @Inject constructor(
         }
     }
 
+    fun sendConfirmResponse(confirmationId: String, approved: Boolean) {
+        val id = confirmationId.trim()
+        if (id.isEmpty()) return
+        val message = ClientMessage.ConfirmResponse(confirmationId = id, approved = approved)
+        scope.launch {
+            sendRaw(message)
+        }
+    }
+
     fun isConnected(): Boolean = authenticated.get()
 
     /**

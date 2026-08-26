@@ -1,8 +1,19 @@
 {
   "name": "personal-agent",
   "private": true,
-  "workspaces": ["api", "packages/protocol"],
   "scripts": {
-    "dev": "npm run dev --workspace @mxideass/api"
+    "install:all": "npm install --prefix packages/protocol && npm install --prefix packages/workspace-http && npm install --prefix hub && npm install --prefix agent",
+    "hub": "npm start --prefix hub",
+    "hub:handshake": "HUB_HANDSHAKE_ONLY=1 npm start --prefix hub",
+    "dev": "npm run dev --prefix hub",
+    "agent": "npm start --prefix agent",
+    "agent:dev": "npm run dev --prefix agent",
+    "agent:test": "npm test --prefix agent",
+    "agent:typecheck": "npm run typecheck --prefix agent",
+    "test": "npm test --prefix packages/workspace-http && npm test --prefix hub && npm test --prefix agent",
+    "typecheck": "npm run typecheck --prefix packages/workspace-http && npm run typecheck --prefix hub && npm run typecheck --prefix agent",
+    "build": "node scripts/build.mjs",
+    "package": "node scripts/package.mjs",
+    "smoke:package": "node scripts/smoke-package.mjs"
   }
 }

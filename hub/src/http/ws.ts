@@ -7,8 +7,9 @@ import {
   type UserMessage,
 } from "../../../packages/protocol/messages.ts";
 import type { AgentRuntime } from "../agent/runtime.ts";
+import { createConfirmationWaiter } from "./confirmation-waiter.ts";
 import { config } from "../config.ts";
-import { touchDevice } from "../memory/history.ts";
+import { touchDevice, ensureConversation } from "../memory/history.ts";
 import { createSession, dropSession, type Session } from "./sessions.ts";
 
 function send(ws: WebSocket, msg: ServerMessage): void {
@@ -24,15 +25,39 @@ function tokenMatches(candidate: string): boolean {
 export function attachGateway(server: Server, runtime: AgentRuntime): void {
   async function reply(session: Session, msg: UserMessage): Promise<void> {
     session.replying = true;
+    const waiter = createConfirmationWaiter({
+      sessionId: session.id,
+      deviceId: session.deviceId,
+    });
+    session.confirmationWaiter = waiter;
+    // Resolver id una sola vez: chunks/errores y el Runtime deben compartir
+    // la misma Conversation (si el cliente omite id, no mintar dos veces).
+    const conversationId = ensureConversation(msg.conversationId);
     try {
       for await (const event of runtime.runTurn({
-        conversationId: msg.conversationId,
+        conversationId,
         deviceId: session.deviceId,
+        sessionId: session.id,
         userMessage: msg.text,
+        confirmation: waiter.port,
       })) {
         switch (event.type) {
           case "text_delta":
-            send(session.ws, { type: "assistant_chunk", text: event.text });
+            send(session.ws, {
+              type: "assistant_chunk",
+              text: event.text,
+              conversationId,
+            });
+            break;
+          case "confirm_request":
+            send(session.ws, {
+              type: "confirm_request",
+              confirmationId: event.confirmationId,
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              input: event.input,
+              conversationId: event.conversationId,
+            });
             break;
           case "done":
             send(session.ws, {
@@ -46,11 +71,14 @@ export function attachGateway(server: Server, runtime: AgentRuntime): void {
               type: "error",
               code: "internal",
               message: event.message,
+              conversationId,
             });
             break;
         }
       }
     } finally {
+      waiter.cancelAll();
+      session.confirmationWaiter = undefined;
       session.replying = false;
     }
   }
@@ -101,6 +129,27 @@ export function attachGateway(server: Server, runtime: AgentRuntime): void {
       case "ping":
         send(session.ws, { type: "pong" });
         return;
+      case "confirm_response": {
+        // El cliente solo aporta confirmationId + approved.
+        // Binding (session/device) lo impone esta conexión WS.
+        const waiter = session.confirmationWaiter;
+        const ok =
+          !!waiter &&
+          waiter.respond(parsed.confirmationId, parsed.approved, {
+            sessionId: session.id,
+            deviceId: session.deviceId,
+          });
+        if (!ok) {
+          // Mensaje genérico: no filtrar si el id pertenece a otra sesión.
+          send(session.ws, {
+            type: "error",
+            code: "bad_message",
+            message:
+              "Confirmación desconocida, ya resuelta o sin turno pendiente.",
+          });
+        }
+        return;
+      }
       case "user_message":
         if (session.replying) {
           send(session.ws, {

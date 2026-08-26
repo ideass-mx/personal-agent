@@ -3,10 +3,14 @@ package mx.ideass.personal.agent.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import mx.ideass.personal.agent.app.AppPreferences
+import mx.ideass.personal.agent.app.ConnectionBackend
 import mx.ideass.personal.agent.connection.ConnectionPrefsPolicy
 import mx.ideass.personal.agent.gateway.session.SessionProvider
 import mx.ideass.personal.agent.network.ChatConnection
 import mx.ideass.personal.agent.network.ConnectionState
+import mx.ideass.personal.agent.workspace.ConversationWorkspaceCoordinator
+import mx.ideass.personal.agent.workspace.ConversationWorkspaceUiState
+import mx.ideass.personal.agent.workspace.WorkspaceGateway
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,10 +42,15 @@ class ChatViewModel @Inject constructor(
     private val chatConnection: ChatConnection,
     private val chatStore: ChatStore,
     private val sessionProvider: SessionProvider,
-    preferences: AppPreferences,
+    private val workspaceGateway: WorkspaceGateway,
+    private val preferences: AppPreferences,
 ) : ViewModel() {
 
     private val _draft = MutableStateFlow("")
+    private val coordinator = ConversationWorkspaceCoordinator(workspaceGateway)
+    private val _workspace = MutableStateFlow(coordinator.state)
+    val workspace: StateFlow<ConversationWorkspaceUiState> = _workspace.asStateFlow()
+    val pendingHubConfirm: StateFlow<HubConfirmPending?> = chatStore.pendingHubConfirm
 
     val ui: StateFlow<ChatUiState> = combine(
         chatStore.messages,
@@ -85,6 +94,23 @@ class ChatViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            combine(
+                sessionProvider.activeSession,
+                preferences.connectionBackend,
+                preferences.hubConfig,
+            ) { active, backend, hub ->
+                Triple(active?.sessionKey.orEmpty(), backend, hub)
+            }.collect { (conversationId, backend, hub) ->
+                val hubOk = backend == ConnectionBackend.HUB && hub != null
+                coordinator.setHubAvailable(hubOk)
+                if (hubOk) {
+                    workspaceGateway.configure(hub!!.address, hub.token)
+                    coordinator.load(conversationId)
+                }
+                publishWorkspace()
+            }
+        }
     }
 
     fun onDraftChange(value: String) = _draft.update { value }
@@ -98,5 +124,62 @@ class ChatViewModel @Inject constructor(
             chatStore.appendUserMessage(text, queued)
             chatConnection.sendUserMessage(text, chatStore.currentConversationId())
         }
+    }
+
+    fun respondHubConfirm(approved: Boolean) {
+        val pending = chatStore.pendingHubConfirm.value ?: return
+        chatConnection.sendConfirmResponse(pending.confirmationId, approved)
+        chatStore.clearPendingHubConfirm()
+    }
+
+    fun openWorkspaceMenu() {
+        coordinator.setMenuOpen(true)
+        publishWorkspace()
+    }
+
+    fun closeWorkspaceMenu() {
+        coordinator.setMenuOpen(false)
+        publishWorkspace()
+    }
+
+    fun selectConversationWorkspace(workspaceId: String?) {
+        viewModelScope.launch {
+            coordinator.selectWorkspace(workspaceId)
+            publishWorkspace()
+        }
+    }
+
+    fun openCreateWorkspace() {
+        coordinator.setCreateDialogOpen(true)
+        coordinator.setMenuOpen(false)
+        publishWorkspace()
+    }
+
+    fun closeCreateWorkspace() {
+        coordinator.setCreateDialogOpen(false)
+        publishWorkspace()
+    }
+
+    fun onCreateWorkspaceName(name: String) {
+        coordinator.setCreateName(name)
+        publishWorkspace()
+    }
+
+    fun createWorkspace(useAfterCreate: Boolean) {
+        viewModelScope.launch {
+            coordinator.createWorkspace(useAfterCreate)
+            publishWorkspace()
+        }
+    }
+
+    fun reloadConversationWorkspace() {
+        viewModelScope.launch {
+            coordinator.load(_workspace.value.conversationId)
+            publishWorkspace()
+        }
+    }
+
+    private fun publishWorkspace() {
+        _workspace.value = coordinator.state
     }
 }

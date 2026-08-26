@@ -28,10 +28,16 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -40,17 +46,22 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppRadii
 import mx.ideass.personal.agent.app.streamingCursorAlpha
 import mx.ideass.personal.agent.network.ConnectionState
+import mx.ideass.personal.agent.workspace.ConversationWorkspaceUiState
+import mx.ideass.personal.agent.workspace.label
 
 @Composable
 fun ChatScreen(
@@ -60,15 +71,56 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val workspace by viewModel.workspace.collectAsStateWithLifecycle()
     val connection by viewModel.connectionState.collectAsStateWithLifecycle()
     val hadConnection by viewModel.hadConnection.collectAsStateWithLifecycle()
+    val hubConfirm by viewModel.pendingHubConfirm.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val degraded = hadConnection && connection !is ConnectionState.Conectado
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.reloadConversationWorkspace()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(ui.messages.size, ui.messages.lastOrNull()?.text) {
         if (ui.messages.isNotEmpty()) {
             listState.animateScrollToItem(ui.messages.lastIndex)
         }
+    }
+
+    hubConfirm?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { viewModel.respondHubConfirm(approved = false) },
+            title = { Text(stringResource(R.string.hub_confirm_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.hub_confirm_tool, pending.toolName))
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.hub_confirm_input, pending.inputSummary),
+                        fontSize = 13.sp,
+                        color = AppColors.textPrimary,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.respondHubConfirm(approved = true) }) {
+                    Text(stringResource(R.string.hub_confirm_approve))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.respondHubConfirm(approved = false) }) {
+                    Text(stringResource(R.string.hub_confirm_reject))
+                }
+            },
+        )
     }
 
     Column(
@@ -80,9 +132,23 @@ fun ChatScreen(
         ChatHeader(
             connection = connection,
             activeSessionName = ui.activeSessionName,
+            workspace = workspace,
             onOpenSettings = onOpenSettings,
             onOpenSessions = onOpenSessions,
+            onOpenWorkspaceMenu = viewModel::openWorkspaceMenu,
+            onCloseWorkspaceMenu = viewModel::closeWorkspaceMenu,
+            onSelectWorkspace = viewModel::selectConversationWorkspace,
+            onOpenCreateWorkspace = viewModel::openCreateWorkspace,
         )
+
+        workspace.errorMessage?.let { message ->
+            Text(
+                text = message,
+                color = AppColors.warn,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
 
         if (degraded) {
             DegradedBanner()
@@ -113,14 +179,68 @@ fun ChatScreen(
             },
         )
     }
+
+    if (workspace.createDialogOpen) {
+        AlertDialog(
+            onDismissRequest = viewModel::closeCreateWorkspace,
+            title = { Text("Nuevo Workspace") },
+            text = {
+                BasicTextField(
+                    value = workspace.createName,
+                    onValueChange = viewModel::onCreateWorkspaceName,
+                    textStyle = TextStyle(color = AppColors.textPrimary, fontSize = 15.sp),
+                    cursorBrush = SolidColor(AppColors.accent),
+                    decorationBox = { inner ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(AppColors.surface, RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                        ) {
+                            if (workspace.createName.isEmpty()) {
+                                Text("Nombre", color = AppColors.textMuted, fontSize = 15.sp)
+                            }
+                            inner()
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.createWorkspace(useAfterCreate = true) },
+                    enabled = !workspace.creating,
+                ) {
+                    Text("Crear y usar")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = { viewModel.createWorkspace(useAfterCreate = false) },
+                        enabled = !workspace.creating,
+                    ) {
+                        Text("Solo crear")
+                    }
+                    TextButton(onClick = viewModel::closeCreateWorkspace) {
+                        Text("Cancelar")
+                    }
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun ChatHeader(
     connection: ConnectionState,
     activeSessionName: String,
+    workspace: ConversationWorkspaceUiState,
     onOpenSettings: () -> Unit,
     onOpenSessions: () -> Unit,
+    onOpenWorkspaceMenu: () -> Unit,
+    onCloseWorkspaceMenu: () -> Unit,
+    onSelectWorkspace: (String?) -> Unit,
+    onOpenCreateWorkspace: () -> Unit,
 ) {
     val (subtitle, subtitleColor) = when (connection) {
         is ConnectionState.Conectado -> "en línea" to AppColors.accent
@@ -169,6 +289,41 @@ private fun ChatHeader(
                 fontSize = 13.sp,
                 maxLines = 1,
             )
+            if (workspace.hubAvailable) {
+                Box {
+                    Text(
+                        text = workspace.label() +
+                            if (workspace.saving) " · guardando" else "",
+                        color = AppColors.textMuted,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clickable(onClick = onOpenWorkspaceMenu)
+                            .padding(top = 2.dp),
+                    )
+                    DropdownMenu(
+                        expanded = workspace.menuOpen,
+                        onDismissRequest = onCloseWorkspaceMenu,
+                    ) {
+                        workspace.workspaces.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(item.name) },
+                                onClick = { onSelectWorkspace(item.id) },
+                            )
+                        }
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Sin Workspace") },
+                            onClick = { onSelectWorkspace(null) },
+                        )
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("+ Nuevo Workspace") },
+                            onClick = onOpenCreateWorkspace,
+                        )
+                    }
+                }
+            }
         }
         IconButton(onClick = onOpenSessions) {
             Icon(

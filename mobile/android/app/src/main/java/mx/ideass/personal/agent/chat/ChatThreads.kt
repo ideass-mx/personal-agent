@@ -97,6 +97,7 @@ class ChatThreads {
                     ),
                 )
             }
+            is ChatInbound.ConfirmRequest -> Unit
         }
         return key == visibleSessionKey
     }

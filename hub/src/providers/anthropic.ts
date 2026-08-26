@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { DEFAULT_AGENT_MODEL } from "../agent/definition.ts";
 import { SYSTEM_PROMPT } from "../agent/prompts.ts";
 import { config } from "../config.ts";
 import type {
@@ -54,9 +55,10 @@ export function createAnthropicProvider(): LLMProvider {
   return {
     async *stream(request: LLMRequest) {
       const params: Anthropic.MessageCreateParams = {
-        model: config.model,
+        // Modelo efectivo: AgentDefinition vía Runtime (request.model).
+        model: request.model ?? DEFAULT_AGENT_MODEL,
         max_tokens: config.maxTokens,
-        system: SYSTEM_PROMPT,
+        system: request.system ?? SYSTEM_PROMPT,
         messages: toAnthropicMessages(request.messages),
       };
 

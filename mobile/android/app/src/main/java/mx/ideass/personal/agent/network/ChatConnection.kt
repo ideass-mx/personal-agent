@@ -14,6 +14,10 @@ interface ChatConnection {
     fun start()
     fun reconnectNow()
     fun sendUserMessage(text: String, conversationId: String?)
+
+    /** Hub: confirm_response. OpenClaw: no-op. */
+    fun sendConfirmResponse(confirmationId: String, approved: Boolean)
+
     fun isConnected(): Boolean
 
     suspend fun probe(

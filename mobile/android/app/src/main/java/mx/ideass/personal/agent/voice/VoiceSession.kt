@@ -468,7 +468,7 @@ class VoiceSession @Inject constructor(
                     failFatalEarcon(errorCopy.ui(VoiceErrorKind.TtsUnavailable))
                     return
                 }
-                // Un solo guardián de red: el gate. Nada de isConnected() → offline.
+                // Un solo coordinador de red: el gate. Nada de isConnected() → offline.
                 hubJob?.cancel()
                 hubJob = scope.launch {
                     if (!sessionActive) return@launch
@@ -747,6 +747,7 @@ class VoiceSession @Inject constructor(
                             _ui.update { it.copy(errorMessage = msg.message) }
                             finished.complete(null)
                         }
+                        is ChatInbound.ConfirmRequest -> Unit
                     }
                 }
             }

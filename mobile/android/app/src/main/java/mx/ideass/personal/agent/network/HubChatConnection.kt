@@ -28,11 +28,32 @@ class HubChatConnection @Inject constructor(
             hubClient.serverMessages.collect { msg ->
                 when (msg) {
                     is ServerMessage.AssistantChunk ->
-                        _inbound.emit(ChatInbound.AssistantDelta(msg.text))
+                        _inbound.emit(
+                            ChatInbound.AssistantDelta(
+                                text = msg.text,
+                                sessionKey = msg.conversationId,
+                            ),
+                        )
                     is ServerMessage.AssistantDone ->
                         _inbound.emit(ChatInbound.AssistantDone(msg.conversationId))
                     is ServerMessage.Error ->
-                        _inbound.emit(ChatInbound.Error(msg.code, msg.message))
+                        _inbound.emit(
+                            ChatInbound.Error(
+                                code = msg.code,
+                                message = msg.message,
+                                sessionKey = msg.conversationId,
+                            ),
+                        )
+                    is ServerMessage.ConfirmRequest ->
+                        _inbound.emit(
+                            ChatInbound.ConfirmRequest(
+                                confirmationId = msg.confirmationId,
+                                toolCallId = msg.toolCallId,
+                                toolName = msg.toolName,
+                                inputJson = msg.input.toString(),
+                                conversationId = msg.conversationId,
+                            ),
+                        )
                     else -> Unit
                 }
             }
@@ -45,6 +66,9 @@ class HubChatConnection @Inject constructor(
 
     override fun sendUserMessage(text: String, conversationId: String?) =
         hubClient.sendUserMessage(text, conversationId)
+
+    override fun sendConfirmResponse(confirmationId: String, approved: Boolean) =
+        hubClient.sendConfirmResponse(confirmationId, approved)
 
     override fun isConnected(): Boolean = hubClient.isConnected()
 

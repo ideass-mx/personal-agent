@@ -1,12 +1,28 @@
 import { randomUUID } from "node:crypto";
 import { config } from "../config.ts";
 import { db } from "../db/database.ts";
+import type { WorkspaceSqlDb } from "../workspace/sqlite-workspace-store.ts";
+import type { HistoryEntry, Role } from "./types.ts";
 
-export type Role = "user" | "assistant";
-export interface HistoryEntry {
+export type { HistoryEntry, Role } from "./types.ts";
+
+export type StoredMessage = {
+  id: string;
+  conversationId: string;
   role: Role;
   content: string;
-}
+  deviceId: string | null;
+  createdAt: string;
+};
+
+type MessageRow = {
+  id: string;
+  conversation_id: string;
+  role: Role;
+  content: string;
+  device_id: string | null;
+  created_at: string;
+};
 
 export function touchDevice(deviceId: string, name?: string): void {
   db.prepare(
@@ -17,13 +33,15 @@ export function touchDevice(deviceId: string, name?: string): void {
   ).run(deviceId, name ?? null);
 }
 
-/** Devuelve el id recibido si existe; si no, crea una conversación nueva. */
+/** Si el cliente envía conversationId, se reutiliza (aunque la fila aún no exista). */
 export function ensureConversation(conversationId?: string): string {
   if (conversationId) {
     const row = db
       .prepare("SELECT id FROM conversations WHERE id = ?")
       .get(conversationId);
     if (row) return conversationId;
+    db.prepare("INSERT INTO conversations (id) VALUES (?)").run(conversationId);
+    return conversationId;
   }
   const id = `c_${randomUUID()}`;
   db.prepare("INSERT INTO conversations (id) VALUES (?)").run(id);
@@ -55,4 +73,27 @@ export function getHistory(conversationId: string): HistoryEntry[] {
     )
     .all(conversationId, config.historyWindow) as HistoryEntry[];
   return rows.reverse();
+}
+
+/** Mensajes de una Conversation en orden cronológico (oldest → newest). */
+export function listConversationMessages(
+  conversationId: string,
+  sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
+): StoredMessage[] {
+  const rows = sql
+    .prepare(
+      `SELECT id, conversation_id, role, content, device_id, created_at
+       FROM messages
+       WHERE conversation_id = ?
+       ORDER BY created_at ASC, id ASC`,
+    )
+    .all(conversationId) as MessageRow[];
+  return rows.map((row) => ({
+    id: row.id,
+    conversationId: row.conversation_id,
+    role: row.role,
+    content: row.content,
+    deviceId: row.device_id,
+    createdAt: row.created_at,
+  }));
 }

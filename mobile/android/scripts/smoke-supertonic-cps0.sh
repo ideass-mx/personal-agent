@@ -4,7 +4,7 @@
 # 2) Síntesis Linux (misma API OfflineTts)
 # 3) Carga + síntesis en dispositivo arm64 (ORT del AAR — riesgo real)
 #
-# Uso (desde android/):
+# Uso (desde mobile/android/):
 #   ./scripts/smoke-supertonic-cps0.sh
 #   ./scripts/smoke-supertonic-cps0.sh --skip-device   # solo host
 set -euo pipefail

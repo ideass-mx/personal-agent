@@ -34,14 +34,14 @@ Tipografía del sistema. Wordmark provisional: "Agente" y avatar "A"
   (en Fase 1 el mic es placeholder deshabilitado con toast "la voz llega pronto").
 - Banner degradado: bajo el header, warnTint, icono + "Sin conexión con tu hub.
   Tus mensajes se enviarán al reconectar." (Copy UI histórico; el backend es
-  el Agent API en `api/`.) Mensajes enviados sin conexión: opacidad 55% +
+  el Hub en `hub/`.) Mensajes enviados sin conexión: opacidad 55% +
   etiqueta "en cola"; se despachan al reconectar en orden.
 - Conexión (primera vez y desde ajustes): título "Conecta tu hub", subtítulo
   "Tu agente vive en tu servidor, no en la nube de nadie.", campos: dirección
   ws:// (mono), token (oculto con toggle), nombre del dispositivo (default del
   modelo del teléfono); CTA "Probar y conectar" que valida con auth real y
   muestra resultado ("Hub encontrado · latencia N ms" / error legible).
-  El endpoint es el Agent API (`api/`, puerto 8787 por defecto).
+  El endpoint es el Hub (`hub/`, puerto 8787 por defecto).
 
   ## Pantalla de sesión de voz — cuatro estados
 

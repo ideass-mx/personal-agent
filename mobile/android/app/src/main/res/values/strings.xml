@@ -122,6 +122,18 @@
     <string name="sessions_create_need_connection">Necesitas conexión con el agente para crear</string>
     <string name="sessions_create_name_placeholder">Nombre</string>
     <string name="sessions_create">Crear</string>
+    <string name="sessions_create_casual">Nueva conversación</string>
+    <string name="sessions_create_in_workspace">Nueva conversación en %1$s</string>
+    <string name="sessions_create_in_workspace_section">Crear en un Workspace (explícito; no se hereda)</string>
+    <string name="sessions_create_hub_hint">Nombre del hilo. «Nueva conversación» nace sin Workspace. El Workspace se elige solo con el botón de ese Workspace.</string>
+    <string name="sessions_create_need_hub">Configura el Hub (dirección y token) para crear conversaciones</string>
+    <string name="sessions_section">Sesiones</string>
+    <string name="sessions_workspaces_section">Workspaces</string>
+    <string name="sessions_workspace_open_threads">Ver conversaciones</string>
+    <string name="sessions_workspace_threads">Hilos de %1$s</string>
+    <string name="sessions_workspace_threads_subtitle">Conversations de este Workspace (no es Active Workspace)</string>
+    <string name="sessions_workspace_empty">Este Workspace no tiene conversaciones</string>
+    <string name="sessions_workspace_loading">Cargando conversaciones…</string>
     <string name="sessions_creating">Creando…</string>
     <string name="sessions_selection_exit">Salir de selección</string>
     <string name="sessions_select_all">Seleccionar todas</string>
@@ -136,4 +148,9 @@
         <item quantity="one">%d seleccionada</item>
         <item quantity="other">%d seleccionadas</item>
     </plurals>
+    <string name="hub_confirm_title">Confirmar operación</string>
+    <string name="hub_confirm_tool">Herramienta: %1$s</string>
+    <string name="hub_confirm_input">Datos: %1$s</string>
+    <string name="hub_confirm_approve">Aprobar</string>
+    <string name="hub_confirm_reject">Rechazar</string>
 </resources>

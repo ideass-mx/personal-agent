@@ -248,4 +248,55 @@ class ChatStoreInboundTest {
         assertEquals(null, threads.visibleSessionKey)
         assertTrue(threads.visibleMessages().isEmpty())
     }
+
+    @Test
+    fun confirmRequest_doesNotAddChatBubble() {
+        val threads = ChatThreads()
+        threads.setVisibleSession("c_1")
+        threads.appendUser("c_1", "escribe", queued = false)
+        threads.handleInbound(
+            "c_1",
+            ChatInbound.ConfirmRequest(
+                confirmationId = "cf_1",
+                toolCallId = "call_1",
+                toolName = "filesystem.write",
+                inputJson = """{"path":"a.txt"}""",
+                conversationId = "c_1",
+            ),
+        )
+        assertEquals(listOf("escribe"), threads.visibleMessages().map { it.text })
+    }
+
+    @Test
+    fun chunkWithConversationKey_doesNotPaintOtherVisibleThread() {
+        val threads = ChatThreads()
+        val a = "c_a"
+        val b = "c_b"
+        threads.setVisibleSession(b)
+        threads.appendUser(a, "msg A", queued = false)
+        threads.handleInbound(
+            a,
+            ChatInbound.AssistantDelta(
+                text = "respuesta A",
+                replace = true,
+                sessionKey = a,
+            ),
+        )
+        assertEquals(emptyList<String>(), threads.visibleMessages().map { it.text })
+        assertEquals(listOf("msg A", "respuesta A"), threads.messagesFor(a).map { it.text })
+    }
+
+    @Test
+    fun errorWithConversationKey_doesNotPaintOtherVisibleThread() {
+        val threads = ChatThreads()
+        val a = "c_a"
+        threads.setVisibleSession("c_b")
+        threads.appendUser(a, "msg A", queued = false)
+        threads.handleInbound(
+            a,
+            ChatInbound.Error(code = "internal", message = "fallo", sessionKey = a),
+        )
+        assertEquals(emptyList<String>(), threads.visibleMessages().map { it.text })
+        assertTrue(threads.messagesFor(a).any { it.text.contains("fallo") })
+    }
 }

@@ -19,17 +19,25 @@ export const UserMessage = z.object({
   conversationId: z.string().optional(),
 });
 
+export const ConfirmResponseMessage = z.object({
+  type: z.literal("confirm_response"),
+  confirmationId: z.string().min(1),
+  approved: z.boolean(),
+});
+
 export const PingMessage = z.object({ type: z.literal("ping") });
 
 export const ClientMessage = z.discriminatedUnion("type", [
   AuthMessage,
   UserMessage,
+  ConfirmResponseMessage,
   PingMessage,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
 export type AuthMessage = z.infer<typeof AuthMessage>;
 export type UserMessage = z.infer<typeof UserMessage>;
+export type ConfirmResponseMessage = z.infer<typeof ConfirmResponseMessage>;
 
 // ── Servidor → Cliente ────────────────────────────────────────────────
 
@@ -42,7 +50,15 @@ export type ErrorCode =
 
 export type ServerMessage =
   | { type: "auth_ok"; deviceId: string }
-  | { type: "assistant_chunk"; text: string }
+  | { type: "assistant_chunk"; text: string; conversationId?: string }
   | { type: "assistant_done"; messageId: string; conversationId: string }
+  | {
+      type: "confirm_request";
+      confirmationId: string;
+      toolCallId: string;
+      toolName: string;
+      input: unknown;
+      conversationId: string;
+    }
   | { type: "pong" }
-  | { type: "error"; code: ErrorCode; message: string };
+  | { type: "error"; code: ErrorCode; message: string; conversationId?: string };

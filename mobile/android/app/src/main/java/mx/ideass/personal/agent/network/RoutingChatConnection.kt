@@ -66,6 +66,9 @@ class RoutingChatConnection @Inject constructor(
     override fun sendUserMessage(text: String, conversationId: String?) =
         active.sendUserMessage(text, conversationId)
 
+    override fun sendConfirmResponse(confirmationId: String, approved: Boolean) =
+        active.sendConfirmResponse(confirmationId, approved)
+
     override fun isConnected(): Boolean = active.isConnected()
 
     override suspend fun probe(

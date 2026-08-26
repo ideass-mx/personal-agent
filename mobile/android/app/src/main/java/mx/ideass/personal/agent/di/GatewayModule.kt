@@ -10,6 +10,8 @@ import mx.ideass.personal.agent.gateway.session.PersistedSessionProvider
 import mx.ideass.personal.agent.gateway.session.SessionProvider
 import mx.ideass.personal.agent.network.ChatConnection
 import mx.ideass.personal.agent.network.RoutingChatConnection
+import mx.ideass.personal.agent.workspace.WorkspaceGateway
+import mx.ideass.personal.agent.workspace.WorkspaceHttpClient
 import javax.inject.Singleton
 
 @Module
@@ -22,6 +24,10 @@ abstract class GatewayModule {
     @Binds
     @Singleton
     abstract fun bindSessionProvider(impl: PersistedSessionProvider): SessionProvider
+
+    @Binds
+    @Singleton
+    abstract fun bindWorkspaceGateway(impl: WorkspaceHttpClient): WorkspaceGateway
 
     @Binds
     @Singleton

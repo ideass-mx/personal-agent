@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.MainActivity
 import mx.ideass.personal.agent.chat.ChatHistorySync
+import mx.ideass.personal.agent.chat.HubConversationHistorySync
 import mx.ideass.personal.agent.chat.ChatStore
 import mx.ideass.personal.agent.network.ChatConnection
 import mx.ideass.personal.agent.network.ChatInbound
@@ -50,6 +51,7 @@ class AgentService : Service() {
     @Inject lateinit var chatConnection: ChatConnection
     @Inject lateinit var chatStore: ChatStore
     @Inject lateinit var chatHistorySync: ChatHistorySync
+    @Inject lateinit var hubConversationHistorySync: HubConversationHistorySync
     @Inject lateinit var healthTracker: ConnectionHealthTracker
 
     private val binder = LocalBinder()
@@ -76,6 +78,7 @@ class AgentService : Service() {
         }
         chatConnection.start()
         chatHistorySync.start()
+        hubConversationHistorySync.start()
         observeConnection()
         observeMessages()
         registerNetworkCallback()
@@ -136,6 +139,7 @@ class AgentService : Service() {
                 healthTracker.onMessageReceived()
                 when (msg) {
                     is ChatInbound.AssistantDelta -> acquireWakeLock()
+                    is ChatInbound.ConfirmRequest -> acquireWakeLock()
                     is ChatInbound.AssistantDone,
                     is ChatInbound.Error,
                     -> releaseWakeLock()

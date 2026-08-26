@@ -52,6 +52,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import mx.ideass.personal.agent.R
 import mx.ideass.personal.agent.app.AppColors
 import mx.ideass.personal.agent.app.AppRadii
+import mx.ideass.personal.agent.workspace.WorkspaceDto
+import mx.ideass.personal.agent.workspace.conversationListTitle
 
 /**
  * Lista de sesiones.
@@ -68,6 +70,8 @@ fun SessionsScreen(
     viewModel: SessionsViewModel = hiltViewModel(),
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val listing by viewModel.workspaceListing.collectAsStateWithLifecycle()
+    val listingWorkspace = listing.listingWorkspace
 
     if (ui.pendingDeleteKeys.isNotEmpty()) {
         DeleteSessionsDialog(
@@ -93,11 +97,19 @@ fun SessionsScreen(
                 onSelectAll = viewModel::selectAllDeletable,
                 onDelete = { viewModel.requestDelete() },
             )
+        } else if (listingWorkspace != null) {
+            SessionsHeader(
+                onBack = viewModel::closeWorkspaceListing,
+                onCreate = viewModel::openCreate,
+                createEnabled = false,
+                title = stringResource(R.string.sessions_workspace_threads, listingWorkspace.name),
+                subtitle = stringResource(R.string.sessions_workspace_threads_subtitle),
+            )
         } else {
             SessionsHeader(
                 onBack = onBack,
                 onCreate = viewModel::openCreate,
-                createEnabled = !ui.creating,
+                createEnabled = ui.canCreate && !ui.creating,
             )
         }
 
@@ -110,14 +122,18 @@ fun SessionsScreen(
             )
         }
 
-        if (ui.showCreate) {
+        if (ui.showCreate && listingWorkspace == null) {
             CreateSessionPanel(
                 draftName = ui.draftName,
                 creating = ui.creating,
-                connected = ui.connected,
+                connected = ui.canCreate,
+                hubConversationCreate = ui.hubConversationCreate,
+                createWorkspaces = ui.createWorkspaces,
                 errorMessage = ui.errorMessage,
                 onDraftChange = viewModel::onDraftNameChange,
                 onCreate = viewModel::create,
+                onCreateCasual = { viewModel.createCasual(onSessionSelected) },
+                onCreateInWorkspace = { id -> viewModel.createInWorkspace(id, onSessionSelected) },
                 onCancel = viewModel::dismissCreate,
             )
         }
@@ -129,35 +145,95 @@ fun SessionsScreen(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            items(ui.sessions, key = { it.sessionKey }) { row ->
-                SessionRow(
-                    row = row,
-                    selectionMode = ui.selectionMode,
-                    onClick = {
-                        if (ui.selectionMode) {
-                            if (row.selectable) {
-                                viewModel.toggleSelection(row.sessionKey)
-                            }
-                        } else {
-                            viewModel.select(row.sessionKey)
-                            onSessionSelected()
-                        }
-                    },
-                    onLongClick = {
-                        if (row.selectable) {
-                            viewModel.enterSelection(row.sessionKey)
-                        }
-                    },
-                )
-            }
-            if (ui.sessions.isEmpty()) {
-                item {
-                    Text(
-                        text = stringResource(R.string.sessions_empty),
-                        color = AppColors.textMuted,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(top = 24.dp),
+            if (listingWorkspace != null) {
+                if (listing.loading) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.sessions_workspace_loading),
+                            color = AppColors.textMuted,
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
+                listing.errorMessage?.let { message ->
+                    item {
+                        Text(message, color = AppColors.warn, fontSize = 13.sp)
+                    }
+                }
+                items(listing.conversations, key = { it.id }) { record ->
+                    WorkspaceConversationRow(
+                        title = conversationListTitle(record),
+                        subtitle = record.id,
+                        onClick = {
+                            viewModel.openListedConversation(record, onSessionSelected)
+                        },
                     )
+                }
+                if (!listing.loading && listing.conversations.isEmpty() && listing.errorMessage == null) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.sessions_workspace_empty),
+                            color = AppColors.textMuted,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(top = 24.dp),
+                        )
+                    }
+                }
+            } else {
+                if (ui.hubConversationCreate && ui.createWorkspaces.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.sessions_workspaces_section),
+                            color = AppColors.textMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    items(ui.createWorkspaces, key = { "ws-${it.id}" }) { workspace ->
+                        WorkspaceConversationRow(
+                            title = workspace.name,
+                            subtitle = stringResource(R.string.sessions_workspace_open_threads),
+                            onClick = { viewModel.openWorkspaceListing(workspace) },
+                        )
+                    }
+                    item {
+                        Text(
+                            text = stringResource(R.string.sessions_section),
+                            color = AppColors.textMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+                items(ui.sessions, key = { it.sessionKey }) { row ->
+                    SessionRow(
+                        row = row,
+                        selectionMode = ui.selectionMode,
+                        onClick = {
+                            if (ui.selectionMode) {
+                                if (row.selectable) {
+                                    viewModel.toggleSelection(row.sessionKey)
+                                }
+                            } else {
+                                viewModel.select(row.sessionKey)
+                                onSessionSelected()
+                            }
+                        },
+                        onLongClick = {
+                            if (row.selectable) {
+                                viewModel.enterSelection(row.sessionKey)
+                            }
+                        },
+                    )
+                }
+                if (ui.sessions.isEmpty()) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.sessions_empty),
+                            color = AppColors.textMuted,
+                            fontSize = 14.sp,
+                            modifier = Modifier.padding(top = 24.dp),
+                        )
+                    }
                 }
             }
         }
@@ -204,6 +280,8 @@ private fun SessionsHeader(
     onBack: () -> Unit,
     onCreate: () -> Unit,
     createEnabled: Boolean,
+    title: String? = null,
+    subtitle: String? = null,
 ) {
     Row(
         modifier = Modifier
@@ -220,12 +298,12 @@ private fun SessionsHeader(
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.sessions_title),
+                text = title ?: stringResource(R.string.sessions_title),
                 color = AppColors.textPrimary,
                 fontSize = 18.sp,
             )
             Text(
-                text = stringResource(R.string.sessions_subtitle),
+                text = subtitle ?: stringResource(R.string.sessions_subtitle),
                 color = AppColors.textMuted,
                 fontSize = 13.sp,
             )
@@ -302,9 +380,13 @@ private fun CreateSessionPanel(
     draftName: String,
     creating: Boolean,
     connected: Boolean,
+    hubConversationCreate: Boolean,
+    createWorkspaces: List<WorkspaceDto>,
     errorMessage: String?,
     onDraftChange: (String) -> Unit,
     onCreate: () -> Unit,
+    onCreateCasual: () -> Unit,
+    onCreateInWorkspace: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
     Column(
@@ -325,9 +407,17 @@ private fun CreateSessionPanel(
         Text(
             text = stringResource(
                 if (connected) {
-                    R.string.sessions_create_hint
+                    if (hubConversationCreate) {
+                        R.string.sessions_create_hub_hint
+                    } else {
+                        R.string.sessions_create_hint
+                    }
                 } else {
-                    R.string.sessions_create_need_connection
+                    if (hubConversationCreate) {
+                        R.string.sessions_create_need_hub
+                    } else {
+                        R.string.sessions_create_need_connection
+                    }
                 },
             ),
             color = AppColors.textMuted,
@@ -378,27 +468,88 @@ private fun CreateSessionPanel(
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             )
             Spacer(Modifier.width(8.dp))
+            if (hubConversationCreate) {
+                CreateActionChip(
+                    label = stringResource(
+                        if (creating) R.string.sessions_creating else R.string.sessions_create_casual,
+                    ),
+                    enabled = !creating && connected,
+                    onClick = onCreateCasual,
+                )
+            } else {
+                CreateActionChip(
+                    label = stringResource(
+                        if (creating) R.string.sessions_creating else R.string.sessions_create,
+                    ),
+                    enabled = !creating && connected,
+                    onClick = onCreate,
+                )
+            }
+        }
+        if (hubConversationCreate && createWorkspaces.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
             Text(
-                text = stringResource(
-                    if (creating) R.string.sessions_creating else R.string.sessions_create,
-                ),
-                color = AppColors.onAccent,
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(AppRadii.cta))
-                    .background(
-                        if (creating || !connected) {
-                            AppColors.accent.copy(alpha = 0.45f)
-                        } else {
-                            AppColors.accent
-                        },
-                    )
-                    .clickable(enabled = !creating && connected, onClick = onCreate)
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                text = stringResource(R.string.sessions_create_in_workspace_section),
+                color = AppColors.textMuted,
+                fontSize = 12.sp,
             )
+            createWorkspaces.forEach { workspace ->
+                Spacer(Modifier.height(6.dp))
+                CreateActionChip(
+                    label = stringResource(
+                        R.string.sessions_create_in_workspace,
+                        workspace.name,
+                    ),
+                    enabled = !creating && connected,
+                    onClick = { onCreateInWorkspace(workspace.id) },
+                    fill = true,
+                )
+            }
         }
     }
     Spacer(Modifier.height(8.dp))
+}
+
+@Composable
+private fun WorkspaceConversationRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(AppRadii.card))
+            .background(AppColors.surface)
+            .border(1.dp, AppColors.border, RoundedCornerShape(AppRadii.card))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(text = title, color = AppColors.textPrimary, fontSize = 15.sp)
+        Text(text = subtitle, color = AppColors.textMuted, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun CreateActionChip(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    fill: Boolean = false,
+) {
+    Text(
+        text = label,
+        color = AppColors.onAccent,
+        fontSize = 14.sp,
+        modifier = Modifier
+            .then(if (fill) Modifier.fillMaxWidth() else Modifier)
+            .clip(RoundedCornerShape(AppRadii.cta))
+            .background(
+                if (enabled) AppColors.accent else AppColors.accent.copy(alpha = 0.45f),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

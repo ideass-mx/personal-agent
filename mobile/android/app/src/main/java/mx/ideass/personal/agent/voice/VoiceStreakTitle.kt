@@ -145,6 +145,7 @@ private suspend fun requestAgentTitle(
                 is ChatInbound.Error -> {
                     finished.complete(null)
                 }
+                is ChatInbound.ConfirmRequest -> Unit
             }
         }
     }

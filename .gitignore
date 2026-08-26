@@ -12,8 +12,8 @@ out/
 .env.*
 !.env.example
 
-# Datos locales del Agent API (SQLite)
-api/data/
+# Datos locales del Hub (SQLite)
+hub/data/
 *.db
 *.db-journal
 *.sqlite
@@ -31,10 +31,10 @@ captures/
 .kotlin/
 
 # sherpa-onnx: AAR y modelos de prueba (scripts/fetch-sherpa-cp1.sh)
-android/app/libs/*.aar
-android/.neural-voices/
+mobile/android/app/libs/*.aar
+mobile/android/.neural-voices/
 
-# .NET (agent-windows)
+# .NET (histórico; el Agent local ya no es un proyecto .NET separado)
 bin/
 obj/
 *.user

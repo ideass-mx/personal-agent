@@ -6,16 +6,28 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import mx.ideass.personal.agent.app.AppPreferences
+import mx.ideass.personal.agent.app.ConnectionBackend
 import mx.ideass.personal.agent.gateway.client.GatewayClient
 import mx.ideass.personal.agent.gateway.session.KnownSession
 import mx.ideass.personal.agent.gateway.session.SessionProvider
 import mx.ideass.personal.agent.gateway.session.agentIdFromSessionKey
 import mx.ideass.personal.agent.network.ConnectionState
+import mx.ideass.personal.agent.workspace.ConversationRecordDto
+import mx.ideass.personal.agent.workspace.HubConversationCreateRequest
+import mx.ideass.personal.agent.workspace.WorkspaceConversationsCoordinator
+import mx.ideass.personal.agent.workspace.WorkspaceConversationsUiState
+import mx.ideass.personal.agent.workspace.WorkspaceDto
+import mx.ideass.personal.agent.workspace.WorkspaceGateway
+import mx.ideass.personal.agent.workspace.conversationListTitle
+import mx.ideass.personal.agent.workspace.executeHubConversationCreate
+import mx.ideass.personal.agent.workspace.hubCasualConversation
+import mx.ideass.personal.agent.workspace.hubConversationInWorkspace
 import javax.inject.Inject
 
 data class SessionRowUi(
@@ -35,6 +47,9 @@ data class SessionsUiState(
     val creating: Boolean = false,
     val errorMessage: String? = null,
     val connected: Boolean = false,
+    val canCreate: Boolean = false,
+    val hubConversationCreate: Boolean = false,
+    val createWorkspaces: List<WorkspaceDto> = emptyList(),
     val selectionMode: Boolean = false,
     val selectedCount: Int = 0,
     /** Keys pendientes de confirmación de borrado (vacío = diálogo cerrado). */
@@ -85,6 +100,7 @@ class SessionsViewModel @Inject constructor(
     private val gatewayClient: GatewayClient,
     private val chatStore: ChatStore,
     private val preferences: AppPreferences,
+    private val workspaceGateway: WorkspaceGateway,
 ) : ViewModel() {
 
     private val _draftName = MutableStateFlow("")
@@ -96,6 +112,12 @@ class SessionsViewModel @Inject constructor(
     private val _pendingDeleteKeys = MutableStateFlow<Set<String>>(emptySet())
     private val _pendingDeleteNames = MutableStateFlow<List<String>>(emptyList())
     private val _deleting = MutableStateFlow(false)
+    private val _hubConversationCreate = MutableStateFlow(false)
+    private val _hubHttpReady = MutableStateFlow(false)
+    private val _createWorkspaces = MutableStateFlow<List<WorkspaceDto>>(emptyList())
+    private val listingCoordinator = WorkspaceConversationsCoordinator(workspaceGateway)
+    private val _workspaceListing = MutableStateFlow(listingCoordinator.state)
+    val workspaceListing: StateFlow<WorkspaceConversationsUiState> = _workspaceListing.asStateFlow()
 
     private data class FormState(
         val draftName: String,
@@ -107,6 +129,9 @@ class SessionsViewModel @Inject constructor(
         val pendingDeleteKeys: Set<String>,
         val pendingDeleteNames: List<String>,
         val deleting: Boolean,
+        val hubConversationCreate: Boolean,
+        val hubHttpReady: Boolean,
+        val createWorkspaces: List<WorkspaceDto>,
     )
 
     val ui: StateFlow<SessionsUiState> = combine(
@@ -127,16 +152,21 @@ class SessionsViewModel @Inject constructor(
                 combine(_pendingDeleteKeys, _pendingDeleteNames, _deleting) { keys, names, deleting ->
                     Triple(keys, names, deleting)
                 },
-            ) { selection, selected, pending ->
+                combine(_hubConversationCreate, _hubHttpReady, _createWorkspaces) { hub, ready, workspaces ->
+                    Triple(hub, ready, workspaces)
+                },
+            ) { selection, selected, pending, hub ->
                 SelectionSlice(
                     selectionMode = selection,
                     selectedKeys = selected,
                     pendingDeleteKeys = pending.first,
                     pendingDeleteNames = pending.second,
                     deleting = pending.third,
-                )
+                ) to hub
             },
-        ) { form, selection ->
+        ) { form, selectionAndHub ->
+            val selection = selectionAndHub.first
+            val hub = selectionAndHub.second
             FormState(
                 draftName = form.draftName,
                 showCreate = form.showCreate,
@@ -147,6 +177,9 @@ class SessionsViewModel @Inject constructor(
                 pendingDeleteKeys = selection.pendingDeleteKeys,
                 pendingDeleteNames = selection.pendingDeleteNames,
                 deleting = selection.deleting,
+                hubConversationCreate = hub.first,
+                hubHttpReady = hub.second,
+                createWorkspaces = hub.third,
             )
         },
     ) { catalog, form ->
@@ -163,6 +196,13 @@ class SessionsViewModel @Inject constructor(
             creating = form.creating,
             errorMessage = form.errorMessage,
             connected = connection is ConnectionState.Conectado && gatewayClient.isConnected(),
+            canCreate = if (form.hubConversationCreate) {
+                form.hubHttpReady
+            } else {
+                connection is ConnectionState.Conectado && gatewayClient.isConnected()
+            },
+            hubConversationCreate = form.hubConversationCreate,
+            createWorkspaces = form.createWorkspaces,
             selectionMode = form.selectionMode,
             selectedCount = selected.size,
             pendingDeleteKeys = form.pendingDeleteKeys,
@@ -170,6 +210,23 @@ class SessionsViewModel @Inject constructor(
             deleting = form.deleting,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SessionsUiState())
+
+    init {
+        viewModelScope.launch {
+            combine(preferences.connectionBackend, preferences.hubConfig) { backend, hub ->
+                backend to hub
+            }.collect { (backend, hub) ->
+                _hubConversationCreate.value = backend == ConnectionBackend.HUB
+                _hubHttpReady.value = backend == ConnectionBackend.HUB && hub != null
+                if (backend == ConnectionBackend.HUB && hub != null) {
+                    workspaceGateway.configure(hub.address, hub.token)
+                    _createWorkspaces.value = runCatching {
+                        workspaceGateway.listWorkspaces()
+                    }.getOrDefault(emptyList())
+                }
+            }
+        }
+    }
 
     private data class FormSlice(
         val draftName: String,
@@ -188,11 +245,49 @@ class SessionsViewModel @Inject constructor(
 
     fun onDraftNameChange(value: String) = _draftName.update { value }
 
+    fun openWorkspaceListing(workspace: WorkspaceDto) {
+        viewModelScope.launch {
+            listingCoordinator.open(workspace)
+            _workspaceListing.value = listingCoordinator.state
+        }
+    }
+
+    fun closeWorkspaceListing() {
+        listingCoordinator.close()
+        _workspaceListing.value = listingCoordinator.state
+    }
+
+    fun openListedConversation(record: ConversationRecordDto, onOpened: () -> Unit) {
+        viewModelScope.launch {
+            sessionProvider.registerAndActivate(
+                sessionKey = record.id,
+                displayName = conversationListTitle(record),
+                agentId = null,
+            )
+            listingCoordinator.close()
+            _workspaceListing.value = listingCoordinator.state
+            onOpened()
+        }
+    }
+
     fun openCreate() {
         if (_selectionMode.value) return
         _error.value = null
         _draftName.value = ""
         _showCreate.value = true
+        viewModelScope.launch {
+            if (preferences.getConnectionBackend() != ConnectionBackend.HUB) {
+                _createWorkspaces.value = emptyList()
+                return@launch
+            }
+            val hub = preferences.getHubConfig() ?: run {
+                _createWorkspaces.value = emptyList()
+                return@launch
+            }
+            workspaceGateway.configure(hub.address, hub.token)
+            _createWorkspaces.value = runCatching { workspaceGateway.listWorkspaces() }
+                .getOrDefault(emptyList())
+        }
     }
 
     fun dismissCreate() {
@@ -308,6 +403,10 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun create() {
+        if (_hubConversationCreate.value) {
+            createCasual()
+            return
+        }
         val name = _draftName.value.trim()
         if (name.isEmpty()) {
             _error.value = "Escribe un nombre para la sesión"
@@ -327,6 +426,51 @@ class SessionsViewModel @Inject constructor(
                 return@launch
             }
             dismissCreate()
+        }
+    }
+
+    fun createCasual(onCreated: () -> Unit = {}) {
+        createHubConversation(hubCasualConversation(_draftName.value), onCreated)
+    }
+
+    fun createInWorkspace(workspaceId: String, onCreated: () -> Unit = {}) {
+        createHubConversation(
+            hubConversationInWorkspace(_draftName.value, workspaceId),
+            onCreated,
+        )
+    }
+
+    private fun createHubConversation(
+        request: HubConversationCreateRequest,
+        onCreated: () -> Unit,
+    ) {
+        if (request.title.isEmpty()) {
+            _error.value = "Escribe un nombre para la sesión"
+            return
+        }
+        viewModelScope.launch {
+            val hub = preferences.getHubConfig()
+            if (hub == null) {
+                _error.value = "Configura el Hub para crear una conversación"
+                return@launch
+            }
+            workspaceGateway.configure(hub.address, hub.token)
+            _creating.value = true
+            _error.value = null
+            val created = runCatching {
+                executeHubConversationCreate(workspaceGateway, request)
+            }.onFailure { err ->
+                _creating.value = false
+                _error.value = err.message ?: "No se pudo crear la conversación."
+            }.getOrNull() ?: return@launch
+            sessionProvider.registerAndActivate(
+                sessionKey = created.id,
+                displayName = request.title,
+                agentId = null,
+            )
+            _creating.value = false
+            dismissCreate()
+            onCreated()
         }
     }
 }

@@ -1,44 +1,69 @@
-import type { HistoryEntry, Role } from "../memory/history.ts";
+import { randomUUID } from "node:crypto";
+import type { TurnMemory } from "../memory/types.ts";
 import type {
   LLMContentBlock,
   LLMMessage,
   LLMProvider,
 } from "../providers/types.ts";
 import { toLLMToolDescriptor } from "../tools/descriptor.ts";
-import type { ToolRegistry } from "../tools/registry.ts";
-import type { ToolResult } from "../tools/types.ts";
+import type { AgentTool, ToolResult } from "../tools/types.ts";
+import {
+  createDefaultAgentDefinition,
+  type AgentDefinition,
+} from "./definition.ts";
+import {
+  confirmationInconsistentResult,
+  confirmationUnavailableResult,
+  toolResultForDecision,
+  type ConfirmationPort,
+  type ConfirmationRequest,
+} from "./confirmation.ts";
+
+export type { TurnMemory } from "../memory/types.ts";
 
 /** Eventos internos del runtime (no son el protocolo WS público). */
 export type AgentEvent =
   | { type: "text_delta"; text: string }
   | { type: "done"; messageId: string; conversationId: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | {
+      type: "confirm_request";
+      confirmationId: string;
+      toolCallId: string;
+      toolName: string;
+      input: unknown;
+      conversationId: string;
+    };
 
 export interface AgentTurnInput {
   conversationId?: string;
   deviceId?: string;
+  /** Identidad opaca del turno (binding de confirmaciones). No es un objeto Session. */
+  sessionId?: string;
   userMessage: string;
+  /**
+   * Puerto de confirmación para tools con executionMode "confirm".
+   * Si falta y una tool pide confirm → fail-closed (no ejecuta).
+   */
+  confirmation?: ConfirmationPort;
 }
 
 /**
- * Persistencia mínima que el runtime necesita para un turno.
- * En producción apunta a memory/history; en tests se sustituye.
+ * Puerto de invocación de Tools (Gateway lo implementa hoy con ToolRegistry).
+ * El Runtime no nombra la clase ToolRegistry ni el SDK MCP.
+ * En producción execute es RemoteAgentTool → MCP Adapter.
  */
-export interface TurnMemory {
-  ensureConversation(conversationId?: string): string;
-  addMessage(
-    conversationId: string,
-    role: Role,
-    content: string,
-    deviceId?: string,
-  ): string;
-  getHistory(conversationId: string): HistoryEntry[];
+export interface AgentRuntimeTools {
+  get(name: string): AgentTool | undefined;
+  list(): AgentTool[];
 }
 
 export interface AgentRuntimeDeps {
+  /** Definición del Agent. Si se omite, se usa el Agent implícito del deployment. */
+  agent?: AgentDefinition;
   memory: TurnMemory;
   llm: LLMProvider;
-  tools: ToolRegistry;
+  tools: AgentRuntimeTools;
 }
 
 export interface AgentRuntime {
@@ -60,7 +85,23 @@ function toolResultForLlm(result: ToolResult): {
   return { content: JSON.stringify(result.error), isError: true };
 }
 
+async function executeToolSafe(
+  execute: () => Promise<ToolResult>,
+): Promise<ToolResult> {
+  try {
+    return await execute();
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Error ejecutando tool";
+    return {
+      ok: false,
+      error: { code: "tool_exception", message },
+    };
+  }
+}
+
 export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
+  const agent = deps.agent ?? createDefaultAgentDefinition();
   const { memory, llm, tools } = deps;
 
   return {
@@ -95,6 +136,8 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
             messages,
             tools:
               toolDescriptors.length > 0 ? toolDescriptors : undefined,
+            system: agent.prompt,
+            model: agent.model,
           })) {
             if (event.type === "text_delta") {
               turnText += event.text;
@@ -137,6 +180,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           for (const call of toolCalls) {
             const tool = tools.get(call.name);
             let result: ToolResult;
+
             if (!tool) {
               result = {
                 ok: false,
@@ -145,20 +189,69 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                   message: `Herramienta no encontrada: ${call.name}`,
                 },
               };
-            } else {
-              try {
-                result = await tool.execute(call.input, {
+            } else if (tool.executionMode === "confirm") {
+              if (!input.confirmation || !input.sessionId) {
+                result = confirmationUnavailableResult();
+              } else {
+                const confirmationId = `cf_${randomUUID()}`;
+                const request: ConfirmationRequest = {
+                  confirmationId,
+                  toolCallId: call.id,
+                  toolName: tool.name,
+                  input: call.input,
                   conversationId,
                   deviceId: input.deviceId,
-                });
-              } catch (err) {
-                const message =
-                  err instanceof Error ? err.message : "Error ejecutando tool";
-                result = {
-                  ok: false,
-                  error: { code: "tool_exception", message },
+                  sessionId: input.sessionId,
                 };
+                // Registrar la espera (input congelado) antes de notificar al cliente.
+                const outcomePromise = input.confirmation.wait(request);
+                yield {
+                  type: "confirm_request",
+                  confirmationId: request.confirmationId,
+                  toolCallId: request.toolCallId,
+                  toolName: request.toolName,
+                  input: request.input,
+                  conversationId: request.conversationId,
+                };
+                const outcome = await outcomePromise;
+
+                if (outcome.decision !== "approved") {
+                  result = toolResultForDecision(outcome.decision);
+                } else {
+                  const op = outcome.operation;
+                  // Ejecutar SOLO la operación pendiente del servidor.
+                  if (
+                    op.conversationId !== conversationId ||
+                    op.toolCallId !== call.id ||
+                    op.toolName !== tool.name
+                  ) {
+                    result = confirmationInconsistentResult();
+                  } else {
+                    const toolNow = tools.get(op.toolName);
+                    if (
+                      !toolNow ||
+                      toolNow.executionMode !== "confirm" ||
+                      toolNow.name !== op.toolName
+                    ) {
+                      result = confirmationInconsistentResult();
+                    } else {
+                      result = await executeToolSafe(() =>
+                        toolNow.execute(op.input, {
+                          conversationId: op.conversationId,
+                          deviceId: op.deviceId,
+                        }),
+                      );
+                    }
+                  }
+                }
               }
+            } else {
+              result = await executeToolSafe(() =>
+                tool.execute(call.input, {
+                  conversationId,
+                  deviceId: input.deviceId,
+                }),
+              );
             }
 
             const mapped = toolResultForLlm(result);

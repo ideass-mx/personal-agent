@@ -2,7 +2,7 @@ package mx.ideass.personal.agent.voice
 
 /**
  * Orquestación del arranque de racha respecto a la conexión.
- * Un solo guardián: el resultado de [VoiceConnectionGate]. Ningún
+ * Un solo coordinador: el resultado de [VoiceConnectionGate]. Ningún
  * `isConnected()` crudo puede emitir [VoiceErrorKind.NoNetwork].
  */
 object VoiceConnectionStartPolicy {

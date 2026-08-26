@@ -111,7 +111,7 @@ android {
 }
 
 dependencies {
-    // Runtime sherpa-onnx (OfflineTts + JNI). Descargar con android/scripts/fetch-sherpa-cp1.sh
+    // Runtime sherpa-onnx (OfflineTts + JNI). Descargar con mobile/android/scripts/fetch-sherpa-cp1.sh
     // Incluye jni/arm64-v8a/libonnxruntime.so + libsherpa-onnx-jni.so (ORT 1.27.0 custom).
     implementation(files(sherpaAarFile))
 

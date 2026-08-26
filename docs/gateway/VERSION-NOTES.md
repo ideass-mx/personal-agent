@@ -166,7 +166,7 @@ Marcar en código con comentario `// INCOMPATIBLE: requiere Gateway > 2026.7.1-2
 
 `mx.ideass.personal.agent.gateway.*`
 
-dentro de `android/app`, sustituyendo el uso de `network/HubClient` detrás de una interfaz estable para la UI/servicio.
+dentro de `mobile/android/app`, sustituyendo el uso de `network/HubClient` detrás de una interfaz estable para la UI/servicio.
 
 Esto choca con la doctrina histórica “todo pasa por el Agent API (`api/`, antes `hub/`)”; el cambio a Gateway OpenClaw es intencional y se limita a la capa de conexión del cliente Android.
 

@@ -28,7 +28,7 @@ renombra; la voz continúa la `sessionKey` activa y el historial se pinta ahí.
 
 «¿Está listo el reporte?» **no** cuelga (solo coincidencia exacta del comando).
 
-**Sin conexión al invocar el asistente:** un solo guardián
+**Sin conexión al invocar el asistente:** un único coordinador
 (`VoiceConnectionGate`, techo ~12 s en `voice_connection_gate_timeout_ms`)
 espera `hello-ok` o fallo real (earcon de «pensando» si reconecta). Offline
 solo cuando el gate se rinde — no por un chequeo paralelo de socket.
@@ -307,7 +307,7 @@ Los modelos **no** van en el APK: se colocan a mano en
 Preparación en el host:
 
 ```bash
-cd android
+cd mobile/android
 ./scripts/fetch-sherpa-cp1.sh          # AAR + modelo Piper es-MX
 ./scripts/fetch-sherpa-cp1.sh --verify # + síntesis de humo con binario Linux
 ```
@@ -317,11 +317,11 @@ Las variantes `-int8`/`-fp16` no se usan: el AAR integrado no las carga
 de forma fiable. En dispositivo (run-as / root según ROM):
 
 ```bash
-adb push android/.neural-voices/vits-piper-es_MX-claude-high \
+adb push mobile/android/.neural-voices/vits-piper-es_MX-claude-high \
   /data/data/mx.ideass.personal.agent/files/neural_voices/vits-piper-es_MX-claude-high
 
 # Kokoro multi-lang v1_0 (~349 MB; 53 speakers, idioma embebido en el sid)
-adb push android/.neural-voices/kokoro-multi-lang-v1_0 \
+adb push mobile/android/.neural-voices/kokoro-multi-lang-v1_0 \
   /data/data/mx.ideass.personal.agent/files/neural_voices/kokoro-multi-lang-v1_0
 ```
 

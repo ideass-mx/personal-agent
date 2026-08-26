@@ -17,12 +17,16 @@ Contexto obligatorio antes de tocar código: `docs/architecture.md`,
    las clases del agente usan prefijo `Agent` (AgentApp, AgentService); el resto
    se nombra por lo que hace. En UI y copy: «el agente» / «Agente» (sin nombre
    de personaje todavía).
-5. **Android:** un solo módulo `app`. minSdk 29, Kotlin + Jetpack Compose,
-   OkHttp para WebSocket, kotlinx.serialization con `ignoreUnknownKeys = true`
-   y `classDiscriminator = "type"`. El foreground service es innegociable.
-6. **Agent API (`api/`):** TypeScript estricto, sin frameworks nuevos.
-   Persistencia conversacional vía `api/src/memory/`; SQLite en `api/src/db/`.
-   Los prompts del agente viven solo en `agent/prompts.ts`.
-   El paquete npm es `@mxideass/api` (antes `hub`).
+5. **Android:** un solo módulo `app` bajo `mobile/android/`. minSdk 29,
+   Kotlin + Jetpack Compose, OkHttp para WebSocket, kotlinx.serialization con
+   `ignoreUnknownKeys = true` y `classDiscriminator = "type"`. El foreground
+   service es innegociable.
+6. **Hub (`hub/`):** TypeScript estricto, sin frameworks nuevos.
+   Persistencia conversacional vía `hub/src/memory/`; SQLite en `hub/src/db/`.
+   Los prompts del agente viven solo en `hub/src/agent/prompts.ts`
+   (Agent Runtime del Gateway, alojado hoy en el proceso Hub; no confundir
+   con el programa `agent/`, precursor del Local Node).
+   El paquete npm es `@mxideass/hub`.
+   Vocabulario: `docs/architecture/terminology.md`.
 7. **Idioma:** código y nombres en inglés; comentarios, strings de UI y
    documentación en español.

@@ -10,6 +10,7 @@ package mx.ideass.personal.agent.protocol
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 // ── Cliente → Servidor ────────────────────────────────────────────────
 
@@ -32,6 +33,13 @@ sealed interface ClientMessage {
     ) : ClientMessage
 
     @Serializable
+    @SerialName("confirm_response")
+    data class ConfirmResponse(
+        val confirmationId: String,
+        val approved: Boolean,
+    ) : ClientMessage
+
+    @Serializable
     @SerialName("ping")
     data object Ping : ClientMessage
 }
@@ -47,7 +55,10 @@ sealed interface ServerMessage {
 
     @Serializable
     @SerialName("assistant_chunk")
-    data class AssistantChunk(val text: String) : ServerMessage
+    data class AssistantChunk(
+        val text: String,
+        val conversationId: String? = null,
+    ) : ServerMessage
 
     @Serializable
     @SerialName("assistant_done")
@@ -57,10 +68,24 @@ sealed interface ServerMessage {
     ) : ServerMessage
 
     @Serializable
+    @SerialName("confirm_request")
+    data class ConfirmRequest(
+        val confirmationId: String,
+        val toolCallId: String,
+        val toolName: String,
+        val input: JsonElement,
+        val conversationId: String,
+    ) : ServerMessage
+
+    @Serializable
     @SerialName("pong")
     data object Pong : ServerMessage
 
     @Serializable
     @SerialName("error")
-    data class Error(val code: String, val message: String) : ServerMessage
+    data class Error(
+        val code: String,
+        val message: String,
+        val conversationId: String? = null,
+    ) : ServerMessage
 }

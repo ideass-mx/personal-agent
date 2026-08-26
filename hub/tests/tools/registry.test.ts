@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { toLLMToolDescriptor } from "../../src/tools/descriptor.ts";
 import { ToolRegistry } from "../../src/tools/registry.ts";
 import type { AgentTool, ToolContext } from "../../src/tools/types.ts";
 
@@ -12,11 +16,14 @@ const echoInputSchema = {
   additionalProperties: false,
 } as const;
 
-function createEchoTool(): AgentTool {
+function createEchoTool(
+  executionMode: AgentTool["executionMode"] = "automatic",
+): AgentTool {
   return {
     name: "echo",
     description: "Devuelve el texto recibido sin cambios.",
     inputSchema: { ...echoInputSchema },
+    executionMode,
     async execute(input, _context: ToolContext) {
       if (
         typeof input !== "object" ||
@@ -88,5 +95,61 @@ describe("AgentTool execute (echo)", () => {
     if (!result.ok) {
       assert.equal(result.error.code, "invalid_input");
     }
+  });
+});
+
+describe("ToolExecutionMode", () => {
+  it("echo declara executionMode automatic", () => {
+    assert.equal(createEchoTool("automatic").executionMode, "automatic");
+  });
+
+  it("una tool puede declarar executionMode confirm", () => {
+    const confirmTool = createEchoTool("confirm");
+    assert.equal(confirmTool.executionMode, "confirm");
+  });
+
+  it("ToolRegistry conserva executionMode", () => {
+    const registry = new ToolRegistry();
+    const confirmTool = createEchoTool("confirm");
+    // echo ya usa name "echo"; registrar confirm con nombre distinto
+    const risky: AgentTool = {
+      ...confirmTool,
+      name: "risky_write",
+      executionMode: "confirm",
+    };
+    registry.register(createEchoTool());
+    registry.register(risky);
+
+    assert.equal(registry.get("echo")?.executionMode, "automatic");
+    assert.equal(registry.get("risky_write")?.executionMode, "confirm");
+  });
+
+  it("el descriptor para el LLM no incluye executionMode", () => {
+    const descriptor = toLLMToolDescriptor(createEchoTool());
+    assert.equal("executionMode" in descriptor, false);
+    assert.deepEqual(Object.keys(descriptor).sort(), [
+      "description",
+      "inputSchema",
+      "name",
+    ]);
+
+    const confirmDescriptor = toLLMToolDescriptor({
+      ...createEchoTool("confirm"),
+      name: "needs_confirm",
+    });
+    assert.equal("executionMode" in confirmDescriptor, false);
+  });
+
+  it("AgentRuntime consulta executionMode pero no nombres concretos de tools", () => {
+    const runtimePath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../src/agent/runtime.ts",
+    );
+    const src = readFileSync(runtimePath, "utf8");
+    assert.match(src, /executionMode/);
+    assert.doesNotMatch(src, /filesystem\.write/);
+    assert.doesNotMatch(src, /gmail\.send/);
+    assert.doesNotMatch(src, /test\.confirm/);
+    assert.doesNotMatch(src, /calculator/);
   });
 });

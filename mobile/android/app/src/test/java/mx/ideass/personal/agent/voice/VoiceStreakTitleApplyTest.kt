@@ -250,6 +250,7 @@ private class FakeTitleChatConnection(
     override fun start() = Unit
     override fun reconnectNow() = Unit
     override fun isConnected(): Boolean = connected
+    override fun sendConfirmResponse(confirmationId: String, approved: Boolean) = Unit
     override suspend fun probe(address: String, token: String, deviceName: String) =
         Result.success(1L)
 

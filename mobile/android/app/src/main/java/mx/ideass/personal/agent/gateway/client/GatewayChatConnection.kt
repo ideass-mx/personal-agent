@@ -23,6 +23,8 @@ class GatewayChatConnection @Inject constructor(
     override fun sendUserMessage(text: String, conversationId: String?) =
         gatewayClient.sendUserMessage(text, conversationId)
 
+    override fun sendConfirmResponse(confirmationId: String, approved: Boolean) = Unit
+
     override fun isConnected(): Boolean = gatewayClient.isConnected()
 
     override suspend fun probe(

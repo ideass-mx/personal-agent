@@ -30,6 +30,10 @@ export interface LLMMessage {
 export interface LLMRequest {
   messages: LLMMessage[];
   tools?: LLMToolDescriptor[];
+  /** Prompt del Agent Definition. */
+  system?: string;
+  /** Modelo del Agent Definition. */
+  model?: string;
 }
 
 export type LLMEvent =

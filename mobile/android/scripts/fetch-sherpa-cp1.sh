@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Descarga el runtime sherpa-onnx (AAR) y el modelo de prueba CP1 (Piper es-MX,
 # variante estándar no cuantizada — el AAR no carga bien int8).
-# Uso (desde android/ o la raíz del repo):
+# Uso (desde mobile/android/ o la raíz del repo, invocando este script):
 #   ./scripts/fetch-sherpa-cp1.sh
 #   ./scripts/fetch-sherpa-cp1.sh --verify   # también sintetiza con el binario Linux
 set -euo pipefail
@@ -98,4 +98,4 @@ if [[ "$VERIFY" -eq 1 ]]; then
   echo "OK: síntesis produce WAV no vacío."
 fi
 
-echo "Listo. Siguiente: cd android && ./gradlew assembleDebug test"
+echo "Listo. Siguiente: cd mobile/android && ./gradlew assembleDebug test"
