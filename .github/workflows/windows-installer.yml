@@ -31,7 +31,7 @@ jobs:
       FETCH_ELECTRON_WIN: "1"
       REQUIRE_WINDOWS_RUNTIMES: "1"
       # Must match a real GitHub Electron release asset: electron-<tag>-win32-x64.zip
-      # (NOT win-x64 — that 404s). Do not use v33.2.1 (never published).
+      # (NOT win-x64 — that 404s). Do not pin unpublished Electron tags.
       ELECTRON_WIN_VERSION: "v33.4.11"
       # Dummy values so hub config can load during smoke only — not production secrets.
       # Never echo these in logs.
@@ -72,8 +72,8 @@ jobs:
           if ($script -notmatch 'win32-x64') {
             throw "STALE SCRIPT: package-windows.mjs missing win32-x64. Wrong commit checked out?"
           }
-          if ($script -match 'v33\.2\.1') {
-            throw "STALE SCRIPT: package-windows.mjs still defaults to v33.2.1. Wrong commit checked out?"
+          if ($script -match 'ELECTRON_WIN_VERSION \|\| "v33\.2\.1"') {
+            throw "STALE SCRIPT: package-windows.mjs still defaults to an unpublished Electron tag. Wrong commit checked out?"
           }
 
           $ver = $env:ELECTRON_WIN_VERSION
