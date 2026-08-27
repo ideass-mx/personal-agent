@@ -58,6 +58,56 @@ function flattenOnceIfSingleChild(dir) {
   }
 }
 
+/** Locate a file by name under dir (depth-first). */
+function findFileByName(dir, fileName) {
+  for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, ent.name);
+    if (ent.isFile() && ent.name === fileName) return full;
+    if (ent.isDirectory()) {
+      const found = findFileByName(full, fileName);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Unzip into a clean temp folder, then move the folder that contains
+ * `exeName` up into destDir. Avoids flatten failing when destDir already
+ * has FETCH.txt / zip sidecars (Node portable layout is nested).
+ */
+function unzipExeInto(zipPath, destDir, exeName) {
+  const extractDir = path.join(destDir, "_extract");
+  rmSync(extractDir, { recursive: true, force: true });
+  mkdirSync(extractDir, { recursive: true });
+  if (!tryUnzip(zipPath, extractDir)) {
+    throw new Error(`Failed to extract ${path.basename(zipPath)} (unzip/Expand-Archive)`);
+  }
+  flattenOnceIfSingleChild(extractDir);
+  let exePath = path.join(extractDir, exeName);
+  if (!existsSync(exePath)) {
+    const found = findFileByName(extractDir, exeName);
+    if (!found) {
+      throw new Error(
+        `Extracted ${path.basename(zipPath)} but ${exeName} not found under ${extractDir}`,
+      );
+    }
+    exePath = found;
+  }
+  const srcDir = path.dirname(exePath);
+  for (const name of readdirSync(srcDir)) {
+    const from = path.join(srcDir, name);
+    const to = path.join(destDir, name);
+    if (existsSync(to)) rmSync(to, { recursive: true, force: true });
+    renameSync(from, to);
+  }
+  rmSync(extractDir, { recursive: true, force: true });
+  if (!existsSync(path.join(destDir, exeName))) {
+    throw new Error(`${exeName} missing after promote into ${destDir}`);
+  }
+  return true;
+}
+
 const DOWNLOAD_UA = "personal-agent-package-windows/0.1 (+https://github.com/ideass-mx/personal-agent)";
 
 async function downloadBinary(url, label) {
@@ -125,15 +175,14 @@ async function fetchNodeWin(destDir) {
 
   const zipPath = path.join(destDir, "node-win.zip");
   writeFileSync(zipPath, await downloadBinary(url, "Node"));
-  const extracted = tryUnzip(zipPath, destDir);
-  if (extracted) flattenOnceIfSingleChild(destDir);
+  unzipExeInto(zipPath, destDir, "node.exe");
   const hasNodeExe = existsSync(path.join(destDir, "node.exe"));
   writeFileSync(
     path.join(destDir, "NODE_ZIP.txt"),
-    `zip=${path.basename(zipPath)}\nversion=${version}\nextracted=${extracted}\nhasNodeExe=${hasNodeExe}\n`,
+    `zip=${path.basename(zipPath)}\nversion=${version}\nextracted=true\nhasNodeExe=${hasNodeExe}\n`,
     "utf8",
   );
-  return { fetched: true, extracted, url, hasNodeExe, zipPath };
+  return { fetched: true, extracted: true, url, hasNodeExe, zipPath };
 }
 
 async function fetchElectronWin(destDir) {
@@ -168,14 +217,14 @@ async function fetchElectronWin(destDir) {
 
   const zipPath = path.join(destDir, "electron-win.zip");
   writeFileSync(zipPath, await downloadBinary(url, "Electron"));
-  const extracted = tryUnzip(zipPath, destDir);
+  unzipExeInto(zipPath, destDir, "electron.exe");
   const hasElectronExe = existsSync(path.join(destDir, "electron.exe"));
   writeFileSync(
     path.join(destDir, "ELECTRON_ZIP.txt"),
-    `zip=${path.basename(zipPath)}\nversion=${version}\nasset=${assetName}\nextracted=${extracted}\nhasElectronExe=${hasElectronExe}\nurl=${url}\n`,
+    `zip=${path.basename(zipPath)}\nversion=${version}\nasset=${assetName}\nextracted=true\nhasElectronExe=${hasElectronExe}\nurl=${url}\n`,
     "utf8",
   );
-  return { fetched: true, extracted, url, hasElectronExe, zipPath };
+  return { fetched: true, extracted: true, url, hasElectronExe, zipPath };
 }
 
 function buildWebConsole() {
@@ -398,6 +447,14 @@ export async function packageWindows() {
     process.stderr.write(
       "[package-windows] WARN: node.exe and/or electron.exe missing — end-user Setup must not ship without them. Set FETCH_NODE_WIN=1 FETCH_ELECTRON_WIN=1\n",
     );
+    if (
+      process.env.FETCH_NODE_WIN === "1" ||
+      process.env.FETCH_ELECTRON_WIN === "1"
+    ) {
+      throw new Error(
+        `FETCH_* set but runtimes incomplete (node.exe=${Boolean(nodeInfo.hasNodeExe)} electron.exe=${Boolean(electronInfo.hasElectronExe)})`,
+      );
+    }
   }
 
   return { outRoot, manifest, runtimeReady };

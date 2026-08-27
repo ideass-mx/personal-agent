@@ -63,19 +63,20 @@ if (!iss.includes("InitializeSetup")) fail("Inno InitializeSetup runtime checks"
 if (/npm install/i.test(iss)) fail("Inno must not run npm install");
 
 process.stdout.write("[validate-windows-package] layout OK\n");
-process.stdout.write(
-  `[validate-windows-package] runtimeReady=${result.runtimeReady} (node.exe+electron.exe)\n`,
-);
-process.stdout.write(
-  "[validate-windows-package] AUTOMATED / MOCK VALIDATION — not Windows field\n",
-);
 
 const nodeExe = path.join(root, "runtime", "node", "node.exe");
 const electronExe = path.join(root, "runtime", "electron", "electron.exe");
 const hasNode = existsSync(nodeExe);
 const hasElectron = existsSync(electronExe);
+
+process.stdout.write(
+  `[validate-windows-package] runtimeReady=${result.runtimeReady} (node.exe+electron.exe)\n`,
+);
 process.stdout.write(
   `[validate-windows-package] node.exe=${hasNode} electron.exe=${hasElectron}\n`,
+);
+process.stdout.write(
+  "[validate-windows-package] AUTOMATED / MOCK VALIDATION — not Windows field\n",
 );
 
 const requireRuntimes =
@@ -90,7 +91,7 @@ if (!result.runtimeReady) {
 
 if (requireRuntimes && (!hasNode || !hasElectron || !result.runtimeReady)) {
   fail(
-    "REQUIRED Windows runtimes missing (node.exe and/or electron.exe). Set FETCH_NODE_WIN=1 FETCH_ELECTRON_WIN=1",
+    `REQUIRED Windows runtimes missing (node.exe=${hasNode} electron.exe=${hasElectron}). Set FETCH_NODE_WIN=1 FETCH_ELECTRON_WIN=1`,
   );
 }
 
