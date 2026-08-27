@@ -33,7 +33,16 @@ En un runner **`windows-latest`**:
 2. Workflow **Windows Installer**  
 3. **Run workflow** (`workflow_dispatch`)  
 4. Elige la rama que contiene el workflow + packaging PHASE 51  
+   (p. ej. `ci/windows-installer` si aún no está en `main`)  
 5. **Run workflow**
+
+CLI (requiere `gh auth login`):
+
+```bash
+gh workflow run windows-installer.yml --ref ci/windows-installer
+gh run watch
+gh run download --name PersonalAgent-Windows-Installer
+```
 
 También se dispara al hacer push de tags `v*` (solo artifact; sin Release).
 
