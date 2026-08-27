@@ -126,6 +126,9 @@ class AgentService : Service() {
                 updateNotification(state)
                 if (state is ConnectionState.Conectado) {
                     chatStore.markQueuedAsSent()
+                } else {
+                    // Fail-closed HITL: no approvals tardíos tras drop (PHASE 38).
+                    chatStore.clearPendingHubConfirm()
                 }
             }
         }

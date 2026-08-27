@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.runtime.Composable
@@ -36,10 +37,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import mx.ideass.personal.agent.app.FirstRunDestination
+import mx.ideass.personal.agent.app.firstRunDestination
 import mx.ideass.personal.agent.chat.ChatScreen
+import mx.ideass.personal.agent.chat.HubConfirmHost
 import mx.ideass.personal.agent.chat.SessionsScreen
 import mx.ideass.personal.agent.connection.ConnectionScreen
 import mx.ideass.personal.agent.service.AgentService
+import mx.ideass.personal.agent.capabilities.CapabilitiesScreen
 import mx.ideass.personal.agent.settings.SettingsScreen
 import mx.ideass.personal.agent.voice.VoiceLaunch
 import mx.ideass.personal.agent.voice.VoiceOrigin
@@ -152,6 +157,7 @@ private object Routes {
     const val Sessions = "sessions"
     const val Settings = "settings"
     const val VoiceSettings = "settings/voice"
+    const val Capabilities = "settings/capabilities"
     /** Invocación del asistente (racha nueva). */
     const val VoiceAssistant = "voice"
     /** Micrófono desde conversación abierta (`sessionKey` URL-encoded). */
@@ -181,13 +187,21 @@ private fun AppNav(
     val navController = rememberNavController()
     var ready by remember { mutableStateOf(false) }
 
-    // Arranque siempre al chat (vacío / sin configurar). El Gateway es opcional:
-    // Ajustes → Conexión lo gestiona cuando el usuario quiera; Voz es local.
+    // Hub-first (PHASE 37): sin config → Connection; con config → Chat.
     LaunchedEffect(configured) {
         if (configured != null && !ready) {
             ready = true
-            navController.navigate(Routes.Chat) {
-                popUpTo(Routes.Boot) { inclusive = true }
+            when (firstRunDestination(configured == true)) {
+                FirstRunDestination.Connection -> {
+                    navController.navigate(Routes.Connection) {
+                        popUpTo(Routes.Boot) { inclusive = true }
+                    }
+                }
+                FirstRunDestination.Chat -> {
+                    navController.navigate(Routes.Chat) {
+                        popUpTo(Routes.Boot) { inclusive = true }
+                    }
+                }
             }
         }
     }
@@ -200,6 +214,7 @@ private fun AppNav(
         onVoiceLaunched()
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     NavHost(
         navController = navController,
         startDestination = Routes.Boot,
@@ -251,6 +266,12 @@ private fun AppNav(
                 onBack = { navController.popBackStack() },
                 onOpenConnection = { navController.navigate(Routes.Connection) },
                 onOpenVoice = { navController.navigate(Routes.VoiceSettings) },
+                onOpenCapabilities = { navController.navigate(Routes.Capabilities) },
+            )
+        }
+        composable(Routes.Capabilities) {
+            CapabilitiesScreen(
+                onBack = { navController.popBackStack() },
             )
         }
         composable(Routes.VoiceSettings) {
@@ -303,5 +324,7 @@ private fun AppNav(
                 },
             )
         }
+    }
+        HubConfirmHost()
     }
 }

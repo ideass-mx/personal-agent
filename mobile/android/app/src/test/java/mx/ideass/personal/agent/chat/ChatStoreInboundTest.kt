@@ -87,7 +87,7 @@ class ChatStoreInboundTest {
 
         assertEquals(listOf("ui"), threads.visibleMessages().map { it.text })
         assertTrue(threads.messagesFor("hidden").any { it.text.contains("secreto") })
-        assertTrue(threads.messagesFor("hidden").any { it.text.startsWith("Error:") })
+        assertTrue(threads.messagesFor("hidden").any { it.text.contains("boom") })
     }
 
     @Test
@@ -298,5 +298,22 @@ class ChatStoreInboundTest {
         )
         assertEquals(emptyList<String>(), threads.visibleMessages().map { it.text })
         assertTrue(threads.messagesFor(a).any { it.text.contains("fallo") })
+    }
+
+    @Test
+    fun errorAgentDisconnected_showsHumanCopy() {
+        val threads = ChatThreads()
+        threads.setVisibleSession("c_1")
+        threads.handleInbound(
+            "c_1",
+            ChatInbound.Error(
+                code = "agent_disconnected",
+                message = "agent_disconnected",
+                sessionKey = "c_1",
+            ),
+        )
+        val text = threads.visibleMessages().last().text
+        assertTrue(text.contains("PC"))
+        assertFalse(text.contains("Error: agent_disconnected"))
     }
 }

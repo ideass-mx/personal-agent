@@ -74,7 +74,8 @@ fun ChatScreen(
     val workspace by viewModel.workspace.collectAsStateWithLifecycle()
     val connection by viewModel.connectionState.collectAsStateWithLifecycle()
     val hadConnection by viewModel.hadConnection.collectAsStateWithLifecycle()
-    val hubConfirm by viewModel.pendingHubConfirm.collectAsStateWithLifecycle()
+    val history by viewModel.historyHydration.collectAsStateWithLifecycle()
+    val toolActivity by viewModel.toolActivity.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val degraded = hadConnection && connection !is ConnectionState.Conectado
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -95,33 +96,8 @@ fun ChatScreen(
         }
     }
 
-    hubConfirm?.let { pending ->
-        AlertDialog(
-            onDismissRequest = { viewModel.respondHubConfirm(approved = false) },
-            title = { Text(stringResource(R.string.hub_confirm_title)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.hub_confirm_tool, pending.toolName))
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.hub_confirm_input, pending.inputSummary),
-                        fontSize = 13.sp,
-                        color = AppColors.textPrimary,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.respondHubConfirm(approved = true) }) {
-                    Text(stringResource(R.string.hub_confirm_approve))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.respondHubConfirm(approved = false) }) {
-                    Text(stringResource(R.string.hub_confirm_reject))
-                }
-            },
-        )
-    }
+    // HITL global: HubConfirmHost en AppNav (PHASE 38).
+
 
     Column(
         modifier = Modifier
@@ -154,16 +130,116 @@ fun ChatScreen(
             DegradedBanner()
         }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(ui.messages, key = { it.id }) { message ->
-                MessageBubble(message)
+        when {
+            history.status == HistoryHydrationStatus.Loading && ui.messages.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = OperationalCopy.historyLoading(),
+                        color = AppColors.textMuted,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+            history.status == HistoryHydrationStatus.Error -> {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = OperationalCopy.historyError(),
+                        color = AppColors.warn,
+                        fontSize = 14.sp,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    TextButton(onClick = viewModel::retryHistory) {
+                        Text("Reintentar", color = AppColors.accent)
+                    }
+                    if (ui.messages.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            items(ui.messages, key = { it.id }) { message ->
+                                MessageBubble(
+                                    message = message,
+                                    lastToolName = toolActivity?.toolName,
+                                )
+                            }
+                            toolActivity?.let { activity ->
+                                item(key = "tool_activity_${activity.phase}") {
+                                    ToolActivityBanner(activity)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ui.messages.isEmpty() -> {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 28.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = OperationalCopy.chatEmptyTitle(),
+                        color = AppColors.textPrimary,
+                        fontSize = 22.sp,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = if (history.status == HistoryHydrationStatus.Ready) {
+                            OperationalCopy.historyEmpty()
+                        } else {
+                            OperationalCopy.chatEmptyBody()
+                        },
+                        color = AppColors.textMuted,
+                        fontSize = 14.sp,
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    TextButton(onClick = onOpenSessions) {
+                        Text("Nueva conversación", color = AppColors.accent)
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(ui.messages, key = { it.id }) { message ->
+                        MessageBubble(
+                            message = message,
+                            lastToolName = toolActivity?.toolName,
+                        )
+                    }
+                    toolActivity?.let { activity ->
+                        item(key = "tool_activity_${activity.phase}") {
+                            ToolActivityBanner(activity)
+                        }
+                    }
+                }
             }
         }
 
@@ -243,18 +319,38 @@ private fun ChatHeader(
     onOpenCreateWorkspace: () -> Unit,
 ) {
     val (subtitle, subtitleColor) = when (connection) {
-        is ConnectionState.Conectado -> "en línea" to AppColors.accent
+        is ConnectionState.Conectado ->
+            OperationalCopy.connectionHeaderLabel(
+                connected = true,
+                reconnecting = false,
+                unconfigured = false,
+            ) to AppColors.accent
         is ConnectionState.Reconectando -> {
+            val base = OperationalCopy.connectionHeaderLabel(
+                connected = false,
+                reconnecting = true,
+                unconfigured = false,
+            )
             val label = if (connection.segundos > 0) {
-                "reconectando · reintento en ${connection.segundos}s"
+                "$base · reintento en ${connection.segundos}s"
             } else {
-                "reconectando…"
+                "$base…"
             }
             label to AppColors.warn
         }
-        is ConnectionState.Emparejando -> "emparejando…" to AppColors.warn
-        is ConnectionState.Error -> "error de conexión" to AppColors.warn
-        is ConnectionState.SinConfigurar -> "sin configurar" to AppColors.warn
+        is ConnectionState.Emparejando -> "Emparejando…" to AppColors.warn
+        is ConnectionState.Error ->
+            OperationalCopy.connectionHeaderLabel(
+                connected = false,
+                reconnecting = false,
+                unconfigured = false,
+            ) to AppColors.warn
+        is ConnectionState.SinConfigurar ->
+            OperationalCopy.connectionHeaderLabel(
+                connected = false,
+                reconnecting = false,
+                unconfigured = true,
+            ) to AppColors.warn
     }
     val sessionLabel = activeSessionName.ifBlank { "Sesiones" }
 
@@ -359,7 +455,7 @@ private fun DegradedBanner() {
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            text = "Sin conexión con tu hub. Tus mensajes se enviarán al reconectar.",
+            text = OperationalCopy.degradedBannerText(),
             color = AppColors.warn,
             fontSize = 13.sp,
         )
@@ -367,7 +463,47 @@ private fun DegradedBanner() {
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun ToolActivityBanner(activity: ToolActivityState) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(AppColors.surface, RoundedCornerShape(AppRadii.card))
+            .border(1.dp, AppColors.border, RoundedCornerShape(AppRadii.card))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        activity.capabilityLabel?.let { label ->
+            Text(
+                text = label,
+                color = AppColors.textPrimary,
+                fontSize = 14.sp,
+            )
+            Spacer(Modifier.height(4.dp))
+        }
+        Text(
+            text = ToolActivityUx.statusLabel(activity.phase),
+            color = when (activity.phase) {
+                ToolActivityPhase.Failed -> AppColors.warn
+                ToolActivityPhase.AwaitingAuth -> AppColors.warn
+                else -> AppColors.textMuted
+            },
+            fontSize = 13.sp,
+        )
+        activity.platformNote?.let { note ->
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = note,
+                color = AppColors.textMuted,
+                fontSize = 12.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MessageBubble(
+    message: ChatMessage,
+    lastToolName: String? = null,
+) {
     val maxBubble = (LocalConfiguration.current.screenWidthDp * 0.78f).dp
     val shape = if (message.fromUser) {
         RoundedCornerShape(
@@ -399,9 +535,14 @@ private fun MessageBubble(message: ChatMessage) {
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
+            val displayText = if (message.fromUser || message.streaming) {
+                message.text
+            } else {
+                ToolResultUx.presentInConversation(message.text, lastToolName)
+            }
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    text = message.text,
+                    text = displayText,
                     color = if (message.fromUser) AppColors.userText else AppColors.textPrimary,
                     fontSize = 15.sp,
                 )

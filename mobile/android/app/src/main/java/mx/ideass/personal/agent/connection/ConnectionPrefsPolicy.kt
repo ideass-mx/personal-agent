@@ -27,7 +27,8 @@ object ConnectionPrefsPolicy {
         if (!hubAddress.isNullOrBlank() && !hubToken.isNullOrBlank()) {
             return ConnectionBackend.HUB
         }
-        return ConnectionBackend.GATEWAY
+        // First-run / prefs vacías: Hub es el camino feliz del MVP (PHASE 37).
+        return ConnectionBackend.HUB
     }
 
     fun isConfigured(

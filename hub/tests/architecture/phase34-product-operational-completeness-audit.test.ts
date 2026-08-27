@@ -64,10 +64,10 @@ describe("PHASE 34 product operational completeness (audit)", () => {
   });
 
   it("Android HITL y History sync presentes (ops mínimas)", () => {
-    const chat = read(
-      "mobile/android/app/src/main/java/mx/ideass/personal/agent/chat/ChatScreen.kt",
+    const host = read(
+      "mobile/android/app/src/main/java/mx/ideass/personal/agent/chat/HubConfirmHost.kt",
     );
-    assert.match(chat, /hub_confirm|pendingHubConfirm|HubConfirm/i);
+    assert.match(host, /HubConfirmHost|hub_confirm/i);
     const sync = read(
       "mobile/android/app/src/main/java/mx/ideass/personal/agent/chat/HubConversationHistorySync.kt",
     );

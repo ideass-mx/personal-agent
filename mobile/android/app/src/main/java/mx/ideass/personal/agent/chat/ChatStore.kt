@@ -32,12 +32,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Confirmación Hub en RAM; no se persiste. */
+/** Confirmación Hub en RAM; no se persiste. Una sola pendiente visible (la más reciente). */
 data class HubConfirmPending(
     val confirmationId: String,
     val toolName: String,
     val inputSummary: String,
     val conversationId: String,
+    val receivedAtMs: Long = System.currentTimeMillis(),
 )
 
 @Serializable
@@ -79,6 +80,14 @@ class ChatStore @Inject constructor(
 
     private val _pendingHubConfirm = MutableStateFlow<HubConfirmPending?>(null)
     val pendingHubConfirm: StateFlow<HubConfirmPending?> = _pendingHubConfirm.asStateFlow()
+
+    private val _toolActivity = MutableStateFlow<ToolActivityState?>(null)
+    val toolActivity: StateFlow<ToolActivityState?> = _toolActivity.asStateFlow()
+
+    /** Tool en ejecución tras HITL aprobado (RAM, por conversación). */
+    private val executingToolByConversation = mutableMapOf<String, String>()
+    /** Fase forzada (p. ej. rechazo) hasta el siguiente turno. */
+    private val forcedPhaseByConversation = mutableMapOf<String, ToolActivityPhase>()
 
     private var loaded = false
 
@@ -125,12 +134,15 @@ class ChatStore @Inject constructor(
     ): ChatMessage = mutex.withLock {
         ensureLoadedLocked()
         val key = sessionKey?.trim()?.takeIf { it.isNotEmpty() } ?: requireActiveKeyLocked()
+        forcedPhaseByConversation.remove(key)
+        executingToolByConversation.remove(key)
         val local = threads.appendUser(key, text, queued)
         if (key == threads.visibleSessionKey) {
             publishVisibleLocked()
         }
         persistLocked()
         assistantWorkChanged.tryEmit(Unit)
+        refreshToolActivityLocked(key)
         local
     }
 
@@ -145,13 +157,16 @@ class ChatStore @Inject constructor(
         mutex.withLock {
             ensureLoadedLocked()
             if (msg is ChatInbound.ConfirmRequest) {
-                val summary = msg.inputJson.trim().ifEmpty { "{}" }
+                val summary = HubConfirmUx.sanitizeInputSummary(msg.inputJson)
                 _pendingHubConfirm.value = HubConfirmPending(
                     confirmationId = msg.confirmationId,
                     toolName = msg.toolName,
-                    inputSummary = if (summary.length > 800) summary.take(800) + "…" else summary,
+                    inputSummary = summary,
                     conversationId = msg.conversationId,
+                    receivedAtMs = System.currentTimeMillis(),
                 )
+                forcedPhaseByConversation.remove(msg.conversationId)
+                refreshToolActivityLocked(msg.conversationId)
                 return@withLock
             }
             if (msg is ChatInbound.AssistantDone) {
@@ -161,17 +176,88 @@ class ChatStore @Inject constructor(
                 }
             }
             val key = resolveInboundKeyLocked(msg.sessionKey) ?: return@withLock
+            if (msg is ChatInbound.AssistantDone) {
+                onAssistantTurnFinishedLocked(key)
+            }
+            if (msg is ChatInbound.Error) {
+                forcedPhaseByConversation[key] = ToolActivityPhase.Failed
+            }
             val affectsVisible = threads.handleInbound(key, msg)
             if (affectsVisible) {
                 publishVisibleLocked()
             }
             persistLocked()
             assistantWorkChanged.tryEmit(Unit)
+            refreshToolActivityLocked(key)
         }
+    }
+
+    /**
+     * Tras approve/reject HITL: actualiza estado en conversación (PHASE 42).
+     * Gateway sigue siendo autoridad de ejecución.
+     */
+    fun recordConfirmResponse(approved: Boolean) {
+        val pending = _pendingHubConfirm.value ?: return
+        val conversationId = pending.conversationId
+        if (approved) {
+            forcedPhaseByConversation.remove(conversationId)
+            executingToolByConversation[conversationId] = pending.toolName
+        } else {
+            executingToolByConversation.remove(conversationId)
+            forcedPhaseByConversation[conversationId] = ToolActivityPhase.Failed
+        }
+        refreshToolActivityLocked(conversationId)
     }
 
     fun clearPendingHubConfirm() {
         _pendingHubConfirm.value = null
+        threads.visibleSessionKey?.let { refreshToolActivityLocked(it) }
+    }
+
+    private fun refreshToolActivityLocked(conversationId: String) {
+        val key = conversationId.trim()
+        if (key.isEmpty()) {
+            publishToolActivityLocked()
+            return
+        }
+        val pendingConfirm = _pendingHubConfirm.value?.takeIf { it.conversationId == key }
+        val forced = forcedPhaseByConversation[key]
+        val executingTool = executingToolByConversation[key]
+            ?: pendingConfirm?.toolName
+        val state = ToolActivityUx.resolveVisible(
+            conversationId = key,
+            hasPendingReply = threads.hasAssistantWork(key),
+            hasStreaming = threads.hasStreaming(key),
+            pendingConfirmForConversation = pendingConfirm != null,
+            executingToolName = executingTool,
+            forcedPhase = forced,
+        ) ?: pendingConfirm?.let {
+            ToolActivityUx.stateForConfirmRequest(key, it.toolName)
+        }
+        if (state == null) {
+            if (key == threads.visibleSessionKey) {
+                _toolActivity.value = null
+            }
+            return
+        }
+        if (key == threads.visibleSessionKey) {
+            _toolActivity.value = state
+        }
+    }
+
+    private fun publishToolActivityLocked() {
+        val visible = threads.visibleSessionKey
+        if (visible.isNullOrBlank()) {
+            _toolActivity.value = null
+            return
+        }
+        refreshToolActivityLocked(visible)
+    }
+
+    private fun onAssistantTurnFinishedLocked(conversationId: String) {
+        executingToolByConversation.remove(conversationId)
+        forcedPhaseByConversation.remove(conversationId)
+        refreshToolActivityLocked(conversationId)
     }
 
     suspend fun handleServer(msg: ServerMessage) {
@@ -250,6 +336,7 @@ class ChatStore @Inject constructor(
                     val key = active?.sessionKey?.trim()?.takeIf { it.isNotEmpty() }
                     threads.setVisibleSession(key)
                     publishVisibleLocked()
+                    publishToolActivityLocked()
                 }
             }
         }

@@ -1,60 +1,94 @@
 # MX Ideass · Personal Agent
 
-Agente personal soberano. Habla con él desde tus dispositivos; él orquesta
-tu PC, tu casa y tus tareas. Este monorepo contiene todo el sistema.
+Agente personal soberano: vive en **tu PC** y lo controlas desde el **teléfono**.
 
-El personaje del agente aún no tiene nombre propio: en UI y prompts se habla
-de **el agente** / **Agente**.
+En UI se habla de **el agente** / **Agente** (sin nombre de personaje todavía).
+
+## Quick Start
+
+### Producto Windows (PHASE 48 — designed/implemented; field not executed here)
+
+```bash
+npm run install:all
+npm run package:windows
+```
+
+Salida: `dist/windows/PersonalAgent/` + script Inno `installer/windows/personal-agent.iss`.
+
+En una **PC Windows**:
+
+1. Coloca `runtime/node/node.exe` (Node 22 portable) o usa `FETCH_NODE_WIN=1` al empaquetar.
+2. Compila `PersonalAgentSetup.exe` con Inno Setup.
+3. Instala → First Run → elige carpeta de trabajo → AGENT READY.
+4. En Android: `ws://IP:8787` + token (Copiar token en el Control Center).
+
+**WINDOWS FIELD VALIDATION = NOT EXECUTED** en el entorno de desarrollo Linux.  
+Detalle: [`docs/architecture/phase48-windows-installer-and-product-shell-implementation.md`](docs/architecture/phase48-windows-installer-and-product-shell-implementation.md).
+
+### Desarrollo (dev)
+
+#### 1. Configura la PC
+
+```bash
+cp hub/.env.example hub/.env
+```
+
+Edita al menos:
+
+- `ANTHROPIC_API_KEY`
+- `HUB_TOKEN` (elige un secreto largo)
+- `AGENT_FILESYSTEM_ROOT` (recomendado: carpeta que el agente podrá leer/escribir)
+
+```bash
+npm run install:all
+npm run dev
+```
+
+Deberías ver `[hub] READY` en la terminal (`http://localhost:8787`, `ws://localhost:8787/ws`).  
+Con `AGENT_FILESYSTEM_ROOT` definido, el boot lo reenvía al Local Node (`AGENT_FILESYSTEM_ROOT=configured` en stderr).
+
+#### 2. Conecta Android
+
+1. Abre la app (first-run → **Conecta tu agente**).
+2. Dirección del Hub + el mismo `HUB_TOKEN`.
+3. **Probar y conectar** → Chat.
+
+#### 3. Primera conversación
+
+1. **Nueva conversación** (o escribe en el hilo activo).
+2. Pregunta algo simple.
+3. Pide una acción que modifique la PC (p. ej. escribir un archivo).
+4. **Aprueba** o **rechaza** en el diálogo de autorización.
+
+#### 4. Empaquetado (opcional)
+
+```bash
+npm run package
+npm run smoke:package
+npm run package:windows   # layout instalable Windows + Desktop Shell
+```
+
+Ver también [`docs/runbook.md`](docs/runbook.md).
 
 ## Estructura
 
 ```
-hub/              Cerebro · AgentRuntime + HTTP/WebSocket (Node.js + TypeScript)
-agent/            Garras · proceso local multiplataforma (placeholder Fase 4)
-mobile/android/   Cliente · Kotlin + Compose
-packages/protocol Contrato WS clientes ↔ Hub — fuente de verdad
-db/               Esquema y migraciones (SQLite hoy, Postgres mañana)
-docs/             Arquitectura, roadmap y doctrina
+hub/              Gateway · Runtime + HTTP/WebSocket + SQLite + MCP client
+agent/            Local Node · MCP Server + Tools
+desktop/          Control Center Windows (tray; sin Chat)
+installer/windows Inno Setup (.iss)
+mobile/android/   Cliente Hub-first
+packages/protocol Contrato WS
+db/               Migraciones SQLite
+docs/             Arquitectura y runbook
 ```
 
-`hub/src/agent/` es el AgentRuntime del Hub; no es el programa `agent/`.
+`hub/src/agent/` es el Agent Runtime del Gateway; no es el programa `agent/`.
+`desktop/` no es un Runtime: solo observa/controla el Gateway.
 
-## Levantar Single Node (Gateway + Local Node)
+## Doctrina (resumen)
 
-El Hub **spawnea** el proceso `agent/` por MCP stdio. No hace falta `npm run agent` para el stack completo.
-
-```bash
-cp hub/.env.example hub/.env    # completa ANTHROPIC_API_KEY y HUB_TOKEN
-npm run install:all             # deps en packages/protocol, hub y agent
-npm run dev                     # http://localhost:8787  ·  ws://localhost:8787/ws
-```
-
-O por carpeta:
-
-```bash
-npm install --prefix packages/protocol
-npm install --prefix hub
-npm run dev --prefix hub
-```
-
-### Probar sin app (terminal)
-
-```bash
-npx wscat -c ws://localhost:8787/ws
-> {"type":"auth","token":"TU_HUB_TOKEN","deviceId":"terminal"}
-> {"type":"user_message","text":"hola, preséntate"}
-```
-
-Verás los `assistant_chunk` llegar en streaming. Reinicia el Hub y repite
-con el mismo `conversationId` del `assistant_done`: la memoria persiste.
-
-## Doctrina (resumen — completa en docs/architecture.md)
-
-1. Nada se conecta directo a nada: todo pasa por el Hub (`hub/`).
-2. **Hub = cerebro; Agent = garras.** Un Agent, varias
-   plataformas (Windows / Linux / macOS) vía adapters y empaquetado.
-3. Estructura plana por capacidad; la ceremonia se gana con crecimiento real.
-4. El protocolo (`packages/protocol/PROTOCOL.md`) manda; el código obedece.
-5. Identidad: **MX Ideass · Personal Agent** (marca); repo `personal-agent`;
-   namespaces `mx.ideass.personal.agent.*` / `@mxideass/*`; clases del
-   agente con prefijo `Agent`; UI neutra («Agente»).
+1. Todo pasa por el Gateway (`hub/`).
+2. Hub = cerebro; Local Node = garras en la PC.
+3. El protocolo (`packages/protocol/PROTOCOL.md`) manda.
+4. Identidad de instalación: `HUB_TOKEN` (sin User/ACL en el MVP).

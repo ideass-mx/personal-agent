@@ -75,14 +75,14 @@ class ConnectionPrefsPolicyTest {
     }
 
     @Test
-    fun firstRun_notConfigured_emptyForm() {
+    fun firstRun_notConfigured_defaultsToHub() {
         val backend = ConnectionPrefsPolicy.backendFromStored(
             storedBackend = null,
             gatewayUrl = null,
             hubAddress = null,
             hubToken = null,
         )
-        assertEquals(ConnectionBackend.GATEWAY, backend)
+        assertEquals(ConnectionBackend.HUB, backend)
         assertFalse(
             ConnectionPrefsPolicy.isConfigured(
                 backend,
@@ -103,9 +103,32 @@ class ConnectionPrefsPolicyTest {
             deviceName = null,
             fallbackDeviceName = "Android",
         )
+        assertEquals(ConnectionBackend.HUB, form.backend)
         assertEquals("", form.address)
         assertEquals("", form.token)
         assertFalse(form.hasSavedConfig)
+    }
+
+    @Test
+    fun explicitGatewayStored_keepsOpenClaw() {
+        val backend = ConnectionPrefsPolicy.backendFromStored(
+            storedBackend = "gateway",
+            gatewayUrl = "wss://host:18789",
+            hubAddress = null,
+            hubToken = null,
+        )
+        assertEquals(ConnectionBackend.GATEWAY, backend)
+    }
+
+    @Test
+    fun explicitHubStored_keepsHub() {
+        val backend = ConnectionPrefsPolicy.backendFromStored(
+            storedBackend = "hub",
+            gatewayUrl = "wss://ignored:18789",
+            hubAddress = "ws://10.0.2.2:8787",
+            hubToken = "tok",
+        )
+        assertEquals(ConnectionBackend.HUB, backend)
     }
 
     @Test

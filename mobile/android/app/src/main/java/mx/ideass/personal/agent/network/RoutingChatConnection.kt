@@ -21,9 +21,17 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Enruta al hub o al Gateway según preferencias.
+ * Enruta al Hub o al Gateway OpenClaw (legacy) según preferencias.
+ * Default / first paint: Hub (PHASE 37). OpenClaw solo si backend = GATEWAY.
  * La UI solo conoce [ChatConnection].
  */
+fun chatConnectionForBackend(
+    backend: ConnectionBackend,
+    hub: ChatConnection,
+    gateway: ChatConnection,
+): ChatConnection =
+    if (backend == ConnectionBackend.GATEWAY) gateway else hub
+
 @Singleton
 class RoutingChatConnection @Inject constructor(
     private val preferences: AppPreferences,
@@ -43,7 +51,7 @@ class RoutingChatConnection @Inject constructor(
     override val inbound: SharedFlow<ChatInbound> = _inbound.asSharedFlow()
 
     @Volatile
-    private var active: ChatConnection = gateway
+    private var active: ChatConnection = hub
     private var bridgeJobs: List<Job> = emptyList()
     private var started = false
 
@@ -54,7 +62,7 @@ class RoutingChatConnection @Inject constructor(
             preferences.connectionBackend
                 .distinctUntilChanged()
                 .collectLatest { backend ->
-                    val next = if (backend == ConnectionBackend.GATEWAY) gateway else hub
+                    val next = chatConnectionForBackend(backend, hub, gateway)
                     switchTo(next)
                     next.start()
                 }
@@ -71,11 +79,15 @@ class RoutingChatConnection @Inject constructor(
 
     override fun isConnected(): Boolean = active.isConnected()
 
+    /**
+     * Probe de auth Hub (dirección + token). No usa el adaptador OpenClaw:
+     * el flujo de Connection Hub lo invoca antes de persistir prefs.
+     */
     override suspend fun probe(
         address: String,
         token: String,
         deviceName: String,
-    ): Result<Long> = active.probe(address, token, deviceName)
+    ): Result<Long> = hub.probe(address, token, deviceName)
 
     private fun switchTo(next: ChatConnection) {
         bridgeJobs.forEach { it.cancel() }

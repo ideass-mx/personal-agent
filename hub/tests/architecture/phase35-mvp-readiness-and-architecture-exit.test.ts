@@ -14,17 +14,17 @@ function read(rel: string): string {
 }
 
 describe("PHASE 35 MVP readiness / architecture exit (audit)", () => {
-  it("docs: CLOSED; MVP-READY WITH DEBT; PHASE 36 not started; no productive code", () => {
+  it("docs: CLOSED; MVP-READY WITH DEBT; PHASE 36 closed; no productive code", () => {
     const doc = read(
       "docs/architecture/phase35-mvp-readiness-and-architecture-exit.md",
     );
     assert.match(doc, /PHASE 35 CLOSED/);
     assert.match(doc, /MVP-READY WITH DEBT/);
-    assert.match(doc, /PHASE 36 NOT STARTED/);
-    assert.match(doc, /Código productivo: \*\*NONE\*\*/);
+    assert.match(doc, /PHASE 36 CLOSED/);
+    assert.match(doc, /Código productivo PHASE 35: \*\*NONE\*\*|Código productivo: \*\*NONE\*\*/);
     assert.match(doc, /\*\*B:\*\* ninguno/);
     assert.match(doc, /\*\*C:\*\* ninguno/);
-    assert.match(doc, /NO iniciar PHASE 36/);
+    assert.match(doc, /PHASE 37 Hub-first|NO iniciar PHASE 37/);
     assert.doesNotMatch(doc, /Control Plane/i);
   });
 

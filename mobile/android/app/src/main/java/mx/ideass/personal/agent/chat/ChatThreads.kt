@@ -43,6 +43,11 @@ class ChatThreads {
         return state.streamingByRun.isNotEmpty() || state.pendingReplies > 0
     }
 
+    fun hasStreaming(sessionKey: String): Boolean {
+        val state = threads[sessionKey.trim()] ?: return false
+        return state.streamingByRun.isNotEmpty()
+    }
+
     fun appendUser(sessionKey: String, text: String, queued: Boolean): ChatMessage {
         val key = requireKey(sessionKey)
         val local = ChatMessage(
@@ -92,7 +97,7 @@ class ChatThreads {
                 threads[key] = state.copy(
                     messages = state.messages + ChatMessage(
                         id = UUID.randomUUID().toString(),
-                        text = "Error: ${msg.message}",
+                        text = OperationalCopy.humanizeInboundError(msg.code, msg.message),
                         fromUser = false,
                     ),
                 )

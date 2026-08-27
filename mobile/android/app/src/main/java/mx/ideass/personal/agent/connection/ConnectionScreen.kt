@@ -7,10 +7,8 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -70,7 +68,6 @@ import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ConnectionScreen(
     onConnected: () -> Unit,
@@ -115,52 +112,54 @@ fun ConnectionScreen(
         ) {
             Text(
                 text = if (ui.backend == ConnectionBackend.GATEWAY) {
-                    "Conecta el Gateway"
+                    "OpenClaw (legacy)"
                 } else {
-                    "Conecta tu hub"
+                    "Conecta tu agente"
                 },
                 color = AppColors.textPrimary,
                 fontSize = 28.sp,
-                modifier = Modifier.combinedClickable(
-                    onClick = {},
-                    onLongClick = { viewModel.toggleBackendSelector() },
-                ),
             )
             Text(
-                text = "Tu agente vive en tu servidor, no en la nube de nadie.",
+                text = if (ui.backend == ConnectionBackend.GATEWAY) {
+                    "Conexión avanzada a un Gateway OpenClaw. El camino recomendado es el agente en tu PC (Hub)."
+                } else {
+                    "Tu agente vive en tu PC. Usa tu teléfono para hablar con él y autorizar acciones."
+                },
                 color = AppColors.textMuted,
                 fontSize = 15.sp,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (ui.debugBuild && ui.showBackendSelector) {
-                Row(
+            if (ui.backend == ConnectionBackend.HUB) {
+                OutlinedButton(
+                    onClick = viewModel::toggleAdvanced,
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textMuted),
                 ) {
+                    Text(if (ui.showAdvanced) "Ocultar avanzado" else "Avanzado / Legacy")
+                }
+                if (ui.showAdvanced) {
+                    Text(
+                        text = "OpenClaw es un backend legacy. Solo úsalo si ya tienes un Gateway OpenClaw.",
+                        color = AppColors.textMuted,
+                        fontSize = 13.sp,
+                    )
                     OutlinedButton(
-                        onClick = { viewModel.onBackendChange(ConnectionBackend.HUB) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = if (ui.backend == ConnectionBackend.HUB) {
-                                AppColors.accent
-                            } else {
-                                AppColors.textMuted
-                            },
-                        ),
-                    ) { Text("Hub") }
-                    OutlinedButton(
-                        onClick = { viewModel.onBackendChange(ConnectionBackend.GATEWAY) },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = if (ui.backend == ConnectionBackend.GATEWAY) {
-                                AppColors.accent
-                            } else {
-                                AppColors.textMuted
-                            },
-                        ),
-                    ) { Text("Gateway") }
+                        onClick = viewModel::useOpenClawLegacy,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.warn),
+                    ) {
+                        Text("Usar OpenClaw (legacy)")
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = viewModel::useHubBackend,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.accent),
+                ) {
+                    Text("Volver al agente en la PC (Hub)")
                 }
             }
 
@@ -168,7 +167,15 @@ fun ConnectionScreen(
                 value = ui.address,
                 onValueChange = viewModel::onAddressChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Dirección") },
+                label = {
+                    Text(
+                        if (ui.backend == ConnectionBackend.GATEWAY) {
+                            "URL del Gateway"
+                        } else {
+                            "Dirección del Hub"
+                        },
+                    )
+                },
                 placeholder = {
                     Text(
                         if (ui.backend == ConnectionBackend.GATEWAY) {
@@ -188,7 +195,15 @@ fun ConnectionScreen(
                 value = ui.token,
                 onValueChange = viewModel::onTokenChange,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Token") },
+                label = {
+                    Text(
+                        if (ui.backend == ConnectionBackend.GATEWAY) {
+                            "Token"
+                        } else {
+                            "Token (HUB_TOKEN)"
+                        },
+                    )
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(AppRadii.card),
                 colors = fieldColors,
@@ -244,6 +259,16 @@ fun ConnectionScreen(
                     shape = RoundedCornerShape(AppRadii.card),
                     colors = fieldColors,
                     textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
+                )
+            }
+
+            if (ui.backend == ConnectionBackend.HUB) {
+                Text(
+                    text = "En tu PC, define la carpeta de trabajo con AGENT_FILESYSTEM_ROOT " +
+                        "(en hub/.env). Es la carpeta que el agente puede leer y modificar " +
+                        "cuando una herramienta lo requiera.",
+                    color = AppColors.textMuted,
+                    fontSize = 13.sp,
                 )
             }
 

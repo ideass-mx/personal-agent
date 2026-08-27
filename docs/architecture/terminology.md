@@ -32,7 +32,12 @@ Continuidad producto Conversation PHASE 31: [`phase31-conversation-product-conti
 Recuperación Hub + routing stream PHASE 32: [`phase32-conversation-recovery-and-stream-routing.md`](./phase32-conversation-recovery-and-stream-routing.md) (History API + `conversationId` en chunk/error).  
 Seguridad / aislamiento producto PHASE 33: [`phase33-security-product-isolation-audit.md`](./phase33-security-product-isolation-audit.md) (audit; READY WITH DEBT; HUB_TOKEN = instalación; sin C/B).  
 Completitud operacional producto PHASE 34: [`phase34-product-operational-completeness-audit.md`](./phase34-product-operational-completeness-audit.md) (audit; READY WITH DEBT; usable Single Node; sin instalador/health live).  
-Salida de arquitectura / MVP PHASE 35: [`phase35-mvp-readiness-and-architecture-exit.md`](./phase35-mvp-readiness-and-architecture-exit.md) (audit; MVP-READY WITH DEBT; fin de auditorías arquitectónicas; siguiente trabajo = producto).
+Salida de arquitectura / MVP PHASE 35: [`phase35-mvp-readiness-and-architecture-exit.md`](./phase35-mvp-readiness-and-architecture-exit.md) (audit; MVP-READY WITH DEBT; fin de auditorías arquitectónicas; siguiente trabajo = producto).  
+Definición de producto Hub-first PHASE 36: [`phase36-product-definition-and-hub-first-mvp.md`](./phase36-product-definition-and-hub-first-mvp.md) (definición; READY FOR PHASE 37; sin código productivo).  
+Hub-first UX plan + P0 PHASE 37: [`phase37-hub-first-ux.md`](./phase37-hub-first-ux.md) / [`phase37-hub-first-ux-implementation.md`](./phase37-hub-first-ux-implementation.md) (PASS; default HUB; OpenClaw legacy).  
+HITL global Android PHASE 38: [`phase38-hitl-global-product-ux.md`](./phase38-hitl-global-product-ux.md) (PASS; HubConfirmHost sobre AppNav; Gateway autoridad).  
+First-run / ops UX PHASE 39: [`phase39-first-run-operational-ux.md`](./phase39-first-run-operational-ux.md) (PASS; runbook + empty/history copy; FS root recomendado).  
+Capacidades / Tool UX PHASE 40: [`phase40-agent-capabilities-tool-ux.md`](./phase40-agent-capabilities-tool-ux.md) (audit; READY FOR IMPLEMENTATION; Conversation-first + Capacidades ligeras; sin CapabilityRegistry).
 El código ejecutable aún usa nombres históricos (`hub/`, `agent/`, `AgentTool`).
 No se introducen sinónimos extra ni abstracciones “por si acaso”.
 

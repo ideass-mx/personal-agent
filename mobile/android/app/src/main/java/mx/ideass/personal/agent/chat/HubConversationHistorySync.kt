@@ -3,6 +3,9 @@ package mx.ideass.personal.agent.chat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -33,6 +36,9 @@ class HubConversationHistorySync @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var started = false
 
+    private val _hydration = MutableStateFlow(HistoryHydrationUi())
+    val hydration: StateFlow<HistoryHydrationUi> = _hydration.asStateFlow()
+
     fun start() {
         if (started) return
         started = true
@@ -52,27 +58,45 @@ class HubConversationHistorySync @Inject constructor(
             }
                 .distinctUntilChanged()
                 .collectLatest { key ->
-                    if (!key.hubOk || !key.connected) return@collectLatest
+                    if (!key.hubOk || !key.connected) {
+                        _hydration.value = HistoryHydrationUi(HistoryHydrationStatus.Idle)
+                        return@collectLatest
+                    }
                     val conversationId = key.sessionKey?.trim().orEmpty()
-                    if (conversationId.isEmpty()) return@collectLatest
+                    if (conversationId.isEmpty()) {
+                        _hydration.value = HistoryHydrationUi(HistoryHydrationStatus.Idle)
+                        return@collectLatest
+                    }
                     key.hub?.let { workspaceGateway.configure(it.address, it.token) }
                     hydrateIfIdle(conversationId)
                 }
         }
     }
 
+    /** Reintento manual desde la UI (PHASE 39). */
+    fun retryActive() {
+        scope.launch {
+            val key = sessionProvider.activeSession.value?.sessionKey?.trim().orEmpty()
+            if (key.isEmpty()) return@launch
+            if (preferences.getConnectionBackend() != ConnectionBackend.HUB) return@launch
+            hydrateIfIdle(key, force = true)
+        }
+    }
+
     /** Visible para tests: carga historial si la sesión sigue activa y sin stream en vuelo. */
-    suspend fun hydrateIfIdle(conversationId: String) {
+    suspend fun hydrateIfIdle(conversationId: String, force: Boolean = false) {
         val key = conversationId.trim()
         if (key.isEmpty()) return
         if (sessionProvider.activeSession.value?.sessionKey != key) return
-        if (chatStore.hasAssistantWork(key)) return
+        if (!force && chatStore.hasAssistantWork(key)) return
+        _hydration.value = HistoryHydrationUi(HistoryHydrationStatus.Loading, key)
         try {
             val remote = workspaceGateway.getConversationMessages(key)
             if (sessionProvider.activeSession.value?.sessionKey != key) return
             chatStore.replaceThread(key, HubHistoryMapper.toChatMessages(remote))
+            _hydration.value = HistoryHydrationUi(HistoryHydrationStatus.Ready, key)
         } catch (_: WorkspaceHttpException) {
-            // 404 u otros: conservar cache local; no bloquear chat.
+            _hydration.value = HistoryHydrationUi(HistoryHydrationStatus.Error, key)
         }
     }
 

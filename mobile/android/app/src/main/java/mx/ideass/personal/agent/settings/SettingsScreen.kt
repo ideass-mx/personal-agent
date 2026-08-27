@@ -39,6 +39,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onOpenConnection: () -> Unit,
     onOpenVoice: () -> Unit,
+    onOpenCapabilities: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -66,6 +67,11 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_section_voice),
                 subtitle = stringResource(R.string.settings_section_voice_subtitle),
                 onClick = onOpenVoice,
+            )
+            SettingsSectionRow(
+                title = stringResource(R.string.settings_section_capabilities),
+                subtitle = stringResource(R.string.settings_section_capabilities_subtitle),
+                onClick = onOpenCapabilities,
             )
         }
     }

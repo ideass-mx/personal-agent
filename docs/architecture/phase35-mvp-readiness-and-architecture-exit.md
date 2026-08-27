@@ -9,7 +9,8 @@ La arquitectura Single Node está **suficientemente madura** para **dejar de hac
 
 No hay bloqueadores **B** ni **C**. El happy path Android↔Hub↔Runtime↔MCP↔Node↔Tools↔SQLite↔history es ejecutable. Las deudas restantes son producto, docs, pulido operativo o futuro de plataforma — **no** requieren nuevas abstracciones.
 
-**PHASE 36 NOT STARTED.** Código productivo: **NONE**.
+**PHASE 36 CLOSED** (ver [`phase36-product-definition-and-hub-first-mvp.md`](./phase36-product-definition-and-hub-first-mvp.md)). Código productivo PHASE 35: **NONE**.  
+**Siguiente trabajo de producto:** PHASE 37 Hub-first UX (no auditoría).
 
 ---
 
@@ -21,7 +22,7 @@ No hay bloqueadores **B** ni **C**. El happy path Android↔Hub↔Runtime↔MCP�
 | ¿MVP usable operador técnico? | **Sí**, con deuda de producto |
 | ¿Bloqueadores B/C? | **Ninguno** |
 | ¿Nueva abstracción antes del MVP? | **No** |
-| ¿Siguiente trabajo? | **Producto** (UX Hub-first, HITL, docs, FS root), no PHASE 36 |
+| ¿Siguiente trabajo? | **PHASE 37 Hub-first UX** (definición en PHASE 36) |
 
 ---
 
@@ -447,12 +448,5 @@ MVP-READY WITH DEBT
 
 **Sí.**
 
-**NO iniciar PHASE 36 automáticamente.**
-
-Primeros trabajos de producto (autorización explícita, fuera de “fase arquitectura”):
-
-1. Hub-first Android onboarding  
-2. HITL UX cuando Chat no está visible  
-3. Runbook + README + `AGENT_FILESYSTEM_ROOT` en first-run  
-
-Cualquier cambio de código posterior es **producto**, no continuación de la serie de auditorías 25–35.
+**PHASE 36 CLOSED** — ver [`phase36-product-definition-and-hub-first-mvp.md`](./phase36-product-definition-and-hub-first-mvp.md).  
+**NO iniciar PHASE 37 automáticamente** sin autorización explícita de implementación.

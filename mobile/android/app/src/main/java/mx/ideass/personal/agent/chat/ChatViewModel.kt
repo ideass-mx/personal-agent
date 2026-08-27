@@ -44,6 +44,7 @@ class ChatViewModel @Inject constructor(
     private val sessionProvider: SessionProvider,
     private val workspaceGateway: WorkspaceGateway,
     private val preferences: AppPreferences,
+    private val hubHistorySync: HubConversationHistorySync,
 ) : ViewModel() {
 
     private val _draft = MutableStateFlow("")
@@ -51,6 +52,12 @@ class ChatViewModel @Inject constructor(
     private val _workspace = MutableStateFlow(coordinator.state)
     val workspace: StateFlow<ConversationWorkspaceUiState> = _workspace.asStateFlow()
     val pendingHubConfirm: StateFlow<HubConfirmPending?> = chatStore.pendingHubConfirm
+    val toolActivity: StateFlow<ToolActivityState?> = chatStore.toolActivity
+    val historyHydration: StateFlow<HistoryHydrationUi> = hubHistorySync.hydration
+
+    fun retryHistory() {
+        hubHistorySync.retryActive()
+    }
 
     val ui: StateFlow<ChatUiState> = combine(
         chatStore.messages,
@@ -128,6 +135,7 @@ class ChatViewModel @Inject constructor(
 
     fun respondHubConfirm(approved: Boolean) {
         val pending = chatStore.pendingHubConfirm.value ?: return
+        chatStore.recordConfirmResponse(approved)
         chatConnection.sendConfirmResponse(pending.confirmationId, approved)
         chatStore.clearPendingHubConfirm()
     }

@@ -68,12 +68,14 @@
 
     <!-- Hub de ajustes (lista → secciones) -->
     <string name="settings_title">Ajustes</string>
-    <string name="settings_subtitle">Conexión, voz y más</string>
+    <string name="settings_subtitle">Agente en tu PC · teléfono como control</string>
     <string name="settings_back">Volver</string>
-    <string name="settings_section_connection">Conexión</string>
-    <string name="settings_section_connection_subtitle">Gateway, token y salud de la conexión</string>
+    <string name="settings_section_connection">Agente en tu PC</string>
+    <string name="settings_section_connection_subtitle">Conexión, token y carpeta de trabajo</string>
     <string name="settings_section_voice">Voz</string>
     <string name="settings_section_voice_subtitle">Voces neuronales offline</string>
+    <string name="settings_section_capabilities">Capacidades</string>
+    <string name="settings_section_capabilities_subtitle">Qué puede solicitar el agente</string>
     <string name="settings_open">Ajustes</string>
 
     <!-- Ajustes voces neuronales (sherpa-onnx) -->
@@ -148,9 +150,17 @@
         <item quantity="one">%d seleccionada</item>
         <item quantity="other">%d seleccionadas</item>
     </plurals>
-    <string name="hub_confirm_title">Confirmar operación</string>
-    <string name="hub_confirm_tool">Herramienta: %1$s</string>
+    <string name="hub_confirm_title">Autorización requerida</string>
+    <string name="hub_confirm_capability">Capacidad: %1$s</string>
+    <string name="hub_confirm_action">Acción: %1$s</string>
     <string name="hub_confirm_input">Datos: %1$s</string>
+    <string name="hub_confirm_side_effect">Esta acción puede cambiar datos en tu PC.</string>
+    <string name="hub_confirm_expires">Expira en %1$d s</string>
     <string name="hub_confirm_approve">Aprobar</string>
     <string name="hub_confirm_reject">Rechazar</string>
+    <string name="capabilities_title">Capacidades</string>
+    <string name="capabilities_subtitle">Disponibles para tu agente</string>
+    <string name="capabilities_intro">Esta lista es informativa. El agente puede solicitar autorización cuando sea necesario. Ver una capacidad no significa que ya esté autorizada.</string>
+    <string name="capabilities_status_available">Disponible para tu agente</string>
+    <string name="capabilities_status_requires_auth">Requiere autorización para realizar cambios</string>
 </resources>

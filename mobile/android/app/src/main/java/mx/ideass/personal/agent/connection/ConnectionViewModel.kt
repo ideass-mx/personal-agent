@@ -1,12 +1,9 @@
 package mx.ideass.personal.agent.connection
 
-import android.content.Context
-import android.content.pm.ApplicationInfo
 import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,7 +29,7 @@ import mx.ideass.personal.agent.service.ConnectionHealthTracker
 import javax.inject.Inject
 
 data class ConnectionUiState(
-    val backend: ConnectionBackend = ConnectionBackend.GATEWAY,
+    val backend: ConnectionBackend = ConnectionBackend.HUB,
     val address: String = "",
     val token: String = "",
     val bootstrapToken: String = "",
@@ -48,14 +45,12 @@ data class ConnectionUiState(
     val pairingDeviceIdShort: String? = null,
     val connected: Boolean = false,
     val hasSavedConfig: Boolean = false,
-    /** Selector Hub/Gateway solo en builds debuggables (toggle oculto). */
-    val debugBuild: Boolean = false,
-    val showBackendSelector: Boolean = false,
+    /** Sección Avanzado / Legacy (OpenClaw). Visible en release. */
+    val showAdvanced: Boolean = false,
 )
 
 @HiltViewModel
 class ConnectionViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val preferences: AppPreferences,
     private val chatConnection: ChatConnection,
     private val gatewayClient: GatewayClient,
@@ -63,9 +58,7 @@ class ConnectionViewModel @Inject constructor(
     healthTracker: ConnectionHealthTracker,
 ) : ViewModel() {
 
-    private val _ui = MutableStateFlow(
-        ConnectionUiState(debugBuild = isDebuggable(context)),
-    )
+    private val _ui = MutableStateFlow(ConnectionUiState())
     val ui: StateFlow<ConnectionUiState> = _ui.asStateFlow()
 
     val health: StateFlow<ConnectionHealth> = combine(
@@ -124,9 +117,24 @@ class ConnectionViewModel @Inject constructor(
         }
     }
 
-    fun toggleBackendSelector() {
-        if (!_ui.value.debugBuild) return
-        _ui.update { it.copy(showBackendSelector = !it.showBackendSelector) }
+    fun toggleAdvanced() {
+        _ui.update { it.copy(showAdvanced = !it.showAdvanced) }
+    }
+
+    /** Vuelve al camino feliz Hub desde OpenClaw legacy. */
+    fun useHubBackend() {
+        viewModelScope.launch {
+            applyPrefill(forceBackend = ConnectionBackend.HUB)
+            _ui.update { it.copy(showAdvanced = false, resultMessage = null) }
+        }
+    }
+
+    /** Activa OpenClaw (GATEWAY) solo desde Avanzado / Legacy. */
+    fun useOpenClawLegacy() {
+        viewModelScope.launch {
+            applyPrefill(forceBackend = ConnectionBackend.GATEWAY)
+            _ui.update { it.copy(showAdvanced = true, resultMessage = null) }
+        }
     }
 
     fun onAddressChange(value: String) = _ui.update { it.copy(address = value, resultMessage = null) }
@@ -397,8 +405,5 @@ class ConnectionViewModel @Inject constructor(
 
     private companion object {
         const val SOCKET_OPEN_BUFFER_MS = 5_000L
-
-        fun isDebuggable(context: Context): Boolean =
-            (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 }
