@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Agente personal</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="app">
+    <section id="first-run" class="panel hidden">
+      <div id="fr-welcome" class="fr-step">
+        <h1>Bienvenido a Personal Agent</h1>
+        <p class="lead">Tu agente vive en esta PC.</p>
+        <ul class="bullets">
+          <li>Android lo controla desde el teléfono (misma Wi‑Fi).</li>
+          <li><strong>Agent Console</strong> (navegador) es la interfaz principal.</li>
+          <li>Esta ventana solo inicia y supervisa el agente.</li>
+        </ul>
+        <button type="button" id="fr-next-1" class="primary">Continuar</button>
+      </div>
+
+      <div id="fr-workspace" class="fr-step hidden">
+        <h1>Carpeta de trabajo</h1>
+        <p>Elige dónde el agente puede leer y escribir archivos.</p>
+        <p id="workspace-label" class="muted">Ninguna carpeta seleccionada</p>
+        <button type="button" id="btn-choose">Elegir carpeta</button>
+        <div class="actions">
+          <button type="button" id="fr-back-2">Atrás</button>
+          <button type="button" id="fr-next-2" class="primary" disabled>Continuar</button>
+        </div>
+      </div>
+
+      <div id="fr-provider" class="fr-step hidden">
+        <h1>Proveedor de IA</h1>
+        <p>Se necesita una clave de Anthropic para que el agente responda.</p>
+        <label class="field">
+          Clave de API
+          <input type="password" id="api-key" autocomplete="off" placeholder="sk-ant-…" />
+        </label>
+        <p id="fr-provider-error" class="error"></p>
+        <div class="actions">
+          <button type="button" id="fr-back-3">Atrás</button>
+          <button type="button" id="fr-next-3" class="primary">Validar y continuar</button>
+        </div>
+      </div>
+
+      <div id="fr-boot" class="fr-step hidden">
+        <h1>Arrancando el agente</h1>
+        <p class="lead" id="fr-boot-msg">Guardando configuración e iniciando…</p>
+        <ul class="status-list">
+          <li><span>Gateway</span> <strong id="fr-st-gateway">…</strong></li>
+          <li><span>Node</span> <strong id="fr-st-node">…</strong></li>
+          <li><span>MCP</span> <strong id="fr-st-mcp">…</strong></li>
+          <li><span>Tools</span> <strong id="fr-st-tools">…</strong></li>
+          <li><span>Workspace</span> <strong id="fr-st-workspace">…</strong></li>
+        </ul>
+        <p id="fr-boot-error" class="error"></p>
+      </div>
+
+      <div id="fr-ready" class="fr-step hidden">
+        <h1>AGENT READY</h1>
+        <p class="lead">El agente está listo en esta PC.</p>
+        <p class="muted">Abre Agent Console para conversar, autorizar acciones y administrar.</p>
+        <button type="button" id="btn-open-console-fr" class="primary">Open Agent Console</button>
+        <button type="button" id="fr-done">Ir al panel</button>
+      </div>
+    </section>
+
+    <section id="main-panel" class="panel hidden">
+      <h1>Agente personal</h1>
+      <p id="status-badge" class="badge">…</p>
+      <ul class="status-list">
+        <li><span>Gateway</span> <strong id="st-gateway">—</strong></li>
+        <li><span>Node</span> <strong id="st-node">—</strong></li>
+        <li><span>MCP</span> <strong id="st-mcp">—</strong></li>
+        <li><span>Tools</span> <strong id="st-tools">—</strong></li>
+        <li><span>Workspace</span> <strong id="st-workspace">—</strong></li>
+        <li><span>Android</span> <strong id="st-android">Misma Wi‑Fi + token</strong></li>
+      </ul>
+      <p class="hint">Node/MCP/Tools reflejan el arranque (snapshot). No son liveness en tiempo real.</p>
+
+      <div class="actions">
+        <button type="button" id="btn-console" class="primary">Open Agent Console</button>
+        <button type="button" id="btn-connect">Conectar Android</button>
+        <button type="button" id="btn-restart">Reiniciar</button>
+        <button type="button" id="btn-stop">Detener</button>
+        <button type="button" id="btn-start">Iniciar</button>
+        <button type="button" id="btn-diag">Diagnóstico</button>
+        <button type="button" id="btn-logs">Logs</button>
+      </div>
+
+      <section id="pairing" class="pairing hidden">
+        <h2>Conectar Android</h2>
+        <p>El agente está listo. Conecta tu teléfono Android.</p>
+        <p class="muted" id="wifi-hint">Asegúrate de que ambos estén en la misma Wi‑Fi.</p>
+        <p><strong>Dirección (WebSocket)</strong></p>
+        <ul id="pairing-urls"></ul>
+        <p><strong>Agent Console (LAN)</strong></p>
+        <ul id="console-urls"></ul>
+        <p><strong>Token</strong> <span id="token-masked"></span>
+          <button type="button" id="btn-copy-token">Copiar token</button>
+        </p>
+        <p class="muted">No compartas el token. No aparece completo en logs.</p>
+      </section>
+
+      <p id="action-msg" class="muted"></p>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

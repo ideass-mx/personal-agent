@@ -1,0 +1,99 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f4ef;
+  --fg: #1c1917;
+  --muted: #78716c;
+  --accent: #0f766e;
+  --card: #ffffff;
+  --border: #e7e5e4;
+  --warn: #b45309;
+  --err: #b91c1c;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: linear-gradient(160deg, #ecfdf5 0%, var(--bg) 45%, #fff7ed 100%);
+  color: var(--fg);
+  min-height: 100vh;
+}
+.panel {
+  margin: 24px;
+  padding: 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  max-width: 480px;
+}
+.hidden { display: none !important; }
+h1 { margin: 0 0 8px; font-size: 1.5rem; }
+h2 { font-size: 1.1rem; }
+.lead { font-size: 1.05rem; }
+.muted, .hint { color: var(--muted); font-size: 0.9rem; }
+.error { color: var(--err); }
+.badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #ccfbf1;
+  color: var(--accent);
+  font-weight: 600;
+}
+.badge.error { background: #fee2e2; color: var(--err); }
+.badge.warn { background: #ffedd5; color: var(--warn); }
+.status-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.status-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.field {
+  display: block;
+  margin: 12px 0;
+  font-size: 0.9rem;
+}
+.field input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.pairing {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.bullets {
+  padding-left: 1.2rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.fr-step { margin-top: 4px; }
+

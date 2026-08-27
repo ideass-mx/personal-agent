@@ -1,0 +1,14 @@
+{
+  "name": "@mxideass/desktop-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows Desktop Control Center (tray) — no Chat, no Runtime",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

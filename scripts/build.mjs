@@ -14,7 +14,10 @@ const esbuild = require("esbuild");
 const dist = path.join(repoRoot, "dist");
 
 export async function build() {
-  rmSync(dist, { recursive: true, force: true });
+  // No borrar dist/ entero: preserva dist/windows/ (PHASE 48 package:windows).
+  rmSync(path.join(dist, "hub"), { recursive: true, force: true });
+  rmSync(path.join(dist, "agent"), { recursive: true, force: true });
+  // dist/web/ se regenera con npm run build:web / smoke:web (PHASE 50).
   mkdirSync(path.join(dist, "hub"), { recursive: true });
   mkdirSync(path.join(dist, "agent"), { recursive: true });
 

@@ -6,7 +6,7 @@ Single Node no duplica código: es Gateway + Agent Runtime + Local Node + MCP en
 Vocabulario: [`terminology.md`](./terminology.md). PHASE 3: [`phase3-contracts.md`](./phase3-contracts.md). PHASE 4: [`phase4-agent-node.md`](./phase4-agent-node.md). PHASE 5: [`phase5-workspace.md`](./phase5-workspace.md). PHASE 6: [`phase6-agent-definition.md`](./phase6-agent-definition.md). PHASE 7: [`phase7-single-node.md`](./phase7-single-node.md). PHASE 8: [`phase8-agent-node-configuration.md`](./phase8-agent-node-configuration.md). PHASE 10: [`phase10-agent-selection.md`](./phase10-agent-selection.md). PHASE 11: [`phase11-interaction-workspace.md`](./phase11-interaction-workspace.md). PHASE 14: [`phase14-workspace-context.md`](./phase14-workspace-context.md). PHASE 15: [`phase15-workspace-context.md`](./phase15-workspace-context.md). PHASE 16: [`phase16-workspace-http.md`](./phase16-workspace-http.md). PHASE 17: [`phase17-active-workspace.md`](./phase17-active-workspace.md). PHASE 18: [`phase18-workspace-client.md`](./phase18-workspace-client.md). PHASE 19: [`phase19-workspace-ui.md`](./phase19-workspace-ui.md). PHASE 20: [`phase20-workspace-continuity.md`](./phase20-workspace-continuity.md). **Tool** es el concepto canónico.
 
 ```text
-Clientes (Android Hub protocol | OpenClaw opcional | otros)
+Clientes (Android Hub protocol | Agent Console Web | OpenClaw opcional | otros)
         │  WS  packages/protocol
         ▼
 ┌──────────────────────────────────────────┐
@@ -108,6 +108,40 @@ PHASE 33: perímetro Single Node = `HUB_TOKEN` de instalación + policy + confir
 PHASE 34: Single Node operable (arranque fail-closed, packaging, Conversation recovery, HITL). Deuda ops: health snapshot, shutdown WS, sin instalador/CI, FS root opcional, docs. Ver [`phase34-product-operational-completeness-audit.md`](./phase34-product-operational-completeness-audit.md).
 
 PHASE 35: exit de arquitectura — **MVP-READY WITH DEBT**. Criterios A–G PASS; sin B/C; no nuevas abstracciones; siguiente trabajo = producto (Hub-first UX, HITL, docs). Ver [`phase35-mvp-readiness-and-architecture-exit.md`](./phase35-mvp-readiness-and-architecture-exit.md).
+
+PHASE 36: definición de producto Hub-first MVP — **READY FOR PHASE 37**. OpenClaw = legacy de producto; Conversation = unidad de trabajo; HITL global pendiente (38). Ver [`phase36-product-definition-and-hub-first-mvp.md`](./phase36-product-definition-and-hub-first-mvp.md).
+
+PHASE 37: Hub-first UX P0 **PASS** — default HUB; first-run Connection; OpenClaw Avanzado/Legacy; sin tocar Runtime/MCP/DB. Ver [`phase37-hub-first-ux-implementation.md`](./phase37-hub-first-ux-implementation.md).
+
+PHASE 38: HITL global Android **PASS** — `HubConfirmHost` en AppNav; estado `ChatStore`; countdown UX; disconnect clear; sin PermissionManager / sin frames nuevos. Ver [`phase38-hitl-global-product-ux.md`](./phase38-hitl-global-product-ux.md).
+
+PHASE 39: first-run / ops UX **PASS** — empty/history/error copy; FS root documentado (no obligatorio en código); runbook. Ver [`phase39-first-run-operational-ux.md`](./phase39-first-run-operational-ux.md).
+
+PHASE 40: capacidades Tool UX audit — **READY FOR IMPLEMENTATION** (cerrado). Ver [`phase40-agent-capabilities-tool-ux.md`](./phase40-agent-capabilities-tool-ux.md).
+
+PHASE 41: capacidades UX Android **PASS** — mapping estático `AgentCapabilityUx`; Settings → Capacidades; HITL labels humanos; sin CapabilityRegistry / PermissionManager / protocolo. Ver [`phase41-agent-capabilities-ux-implementation.md`](./phase41-agent-capabilities-ux-implementation.md).
+
+PHASE 42: resultados Tool en conversación **PASS** — `ToolActivityUx` + `ToolResultUx`; banner en hilo; sanitización; sin frames WS nuevos. Ver [`phase42-conversation-first-tool-results-ux.md`](./phase42-conversation-first-tool-results-ux.md).
+
+PHASE 43: validación producto / agent experience lab **READY WITH DEBT** — laboratorio A–K documentado; MVP **READY WITH DEBT**; productive **NONE**. Ver [`phase43-product-validation-and-agent-experience.md`](./phase43-product-validation-and-agent-experience.md).
+
+PHASE 44: field test protocol **BLOCKED** (ejecución campo pendiente: Windows + Android físico); checklist + preflight entregados; productive **NONE**. Ver [`phase44-field-test-protocol.md`](./phase44-field-test-protocol.md).
+
+PHASE 45: validación campo hardware real **BLOCKED** — entorno sesión Linux sin Android/Gateway LAN; preflight FAIL; Labs K/D no ejecutados; productive **NONE**. Ver [`phase45-real-field-validation.md`](./phase45-real-field-validation.md).
+
+PHASE 46: ejecución field test real **BLOCKED** — mismas precondiciones fallidas (Linux, 0 Android, Gateway unreachable, preflight FAIL); sin PASS simulados; productive **NONE**. Ver [`phase46-real-field-test-execution.md`](./phase46-real-field-test-execution.md).
+
+PHASE 47: Windows Product Shell & Installer **READY FOR IMPLEMENTATION** — definición designed (installer Inno + Node portable + Shell tray Electron mínimo); E-47-01 FS root documentado; productive **NONE**. Ver [`phase47-windows-product-shell-and-installer.md`](./phase47-windows-product-shell-and-installer.md).
+
+PHASE 48: Windows installer & Desktop Shell **READY WITH DEBT** — 48A FS root boot fix; `package:windows` + Inno source + Electron Control Center; **WINDOWS FIELD VALIDATION = NOT EXECUTED**. Ver [`phase48-windows-installer-and-product-shell-implementation.md`](./phase48-windows-installer-and-product-shell-implementation.md).
+
+PHASE 49: Agent Console product definition **READY FOR IMPLEMENTATION** — Web USE+MANAGE; Windows→tray; API/WS inventory; security boundary; productive **NONE**. Ver [`phase49-agent-console-product-definition.md`](./phase49-agent-console-product-definition.md).
+
+PHASE 50: Agent Console Web MVP — cliente Vite/React en `web/`; Chat/HITL/Overview; Hub sirve static same-origin (R-49-01); sin Runtime/MCP/policy en frontend; `desktop/` conservado. Ver [`phase50-agent-console-web-implementation.md`](./phase50-agent-console-web-implementation.md).
+
+PHASE 51: Windows installer + Agent Console integration — package con `console/` + Electron/Node embebidos (sin npm en target); first-run → AGENT READY → Open Console; tray infra; **Windows/Android field = NOT EXECUTED**. Ver [`phase51-windows-installer-and-console-integration.md`](./phase51-windows-installer-and-console-integration.md).
+
+CI packaging: GitHub Actions `windows-latest` compila `PersonalAgent-Setup.exe` (artifact; sin field test). Ver [`windows-installer-ci.md`](./windows-installer-ci.md).
 
 ## Seguridad que no se toca
 

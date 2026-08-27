@@ -18,7 +18,9 @@
 |------|---------------------|---------------------------|
 | `hub/` (`@mxideass/hub`) | Proceso único: WS, auth, Agent Runtime, policy, MCP Client, SQLite, spawn del proceso local | **Gateway** (mismo proceso; fronteras internas) + **Agent Runtime** alojado |
 | `agent/` (`@mxideass/agent`) | Proceso MCP stdio: extensions, filesystem, process, Excel COM | Precursor de **Local Node** + **MCP Server** in-process (no es un Agent) |
-| `mobile/android/` | Cliente Compose; backend Hub **o** OpenClaw | UI; no es Gateway |
+| `mobile/android/` | Cliente Compose; backend Hub **o** OpenClaw | UI móvil; no es Gateway |
+| `web/` (`@mxideass/agent-console`) | Agent Console SPA (Vite/React); cliente USE+MANAGE | UI Web principal (PHASE 50); no Runtime/MCP |
+| `desktop/` | Electron tray / first-run / Control Center (PHASE 48–51) | Launcher mínimo; Agent Console = UI principal; sin Chat |
 | `packages/protocol/` | Contrato WS clientes ↔ Hub | Contrato clientes ↔ **Gateway** (rename de protocolo: más tarde) |
 | `db/migrations/` | Schema SQLite conversaciones/dispositivos | Precursor de persistencia de **Conversation**; **Workspace** no existe aún |
 | `scripts/build.mjs`, `package.mjs`, `smoke-package.mjs` | `dist/hub/hub.cjs` + `dist/agent/agent.cjs` | Empaquetado **Single Node** |
@@ -485,6 +487,6 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 | **Workspace** | Contexto persistente de trabajo. Store PHASE 12; FK PHASE 13; resolver PHASE 14; HTTP Gateway PHASE 16 (incl. `POST /conversations` PHASE 21, `GET /workspaces/:id/conversations` PHASE 22); cliente `@mxideass/workspace-http` PHASE 18. Sin ConversationContext. Sin Active Workspace. |
 | **Conversation** | Interacción humana. SQLite Gateway: user/assistant; `conversationId` en WS. `GET /conversations/:id/messages` (PHASE 32). Cliente Android: rehidratación Hub + DataStore cache + `GET /conversations/:id/workspace`. Aislamiento = instalación `HUB_TOKEN` (PHASE 33); sin User/ownership. |
 | **Context** | Información dinámica de un turno. No persistente. |
-| **Single Node** | Perfil de despliegue: Gateway + Runtime + Local Node + MCP local + SQLite + filesystem. Arquitectura exit (PHASE 35): MVP-READY WITH DEBT; deuda ops/producto (health snapshot, Hub-first UX, HITL fuera de Chat); sin User/ACL/multi-node. |
+| **Single Node** | Gateway + Runtime + Local Node + MCP + SQLite. Producto: Hub-first (37), HITL global (38), onboarding (39). Tools → capacidades UX (40 audit; impl pendiente). OpenClaw legacy. Sin User/ACL / CapabilityRegistry. |
 | **AgentTool** | Representación interna actual de una Tool. Conservar. |
 | **ToolRegistry** | Registry interno actual. No es el registry de plataforma. Conservar. |
