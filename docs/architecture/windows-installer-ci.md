@@ -116,6 +116,30 @@ El workflow **no** imprime estos valores.
 
 ---
 
+## Cómo saber si un run es el bug viejo (ciclo)
+
+Si el log dice exactamente:
+
+```text
+v33.2.1
+electron-v33.2.1-win-x64.zip
+Electron download failed: 404
+```
+
+…es un run **anterior al fix** (`4b96bec`). Ignóralo.
+
+Un run válido en `main` actual debe mostrar en Diagnostics:
+
+```text
+ELECTRON_WIN_VERSION=v33.4.11
+ELECTRON_ASSET_URL=.../electron-v33.4.11-win32-x64.zip
+commit: <SHA >= 4b96bec / posterior a este cambio de workflow>
+```
+
+Si el mensaje de error incluye `win32-x64` y aún así 404, entonces sí es un fallo nuevo (no el ciclo).
+
+---
+
 ## Relación con PHASE 51 / 52
 
 - PHASE 51: packaging + Inno source + tray/Console integration  

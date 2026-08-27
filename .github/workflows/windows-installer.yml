@@ -30,6 +30,9 @@ jobs:
       FETCH_NODE_WIN: "1"
       FETCH_ELECTRON_WIN: "1"
       REQUIRE_WINDOWS_RUNTIMES: "1"
+      # Must match a real GitHub Electron release asset: electron-<tag>-win32-x64.zip
+      # (NOT win-x64 — that 404s). Do not use v33.2.1 (never published).
+      ELECTRON_WIN_VERSION: "v33.4.11"
       # Dummy values so hub config can load during smoke only — not production secrets.
       # Never echo these in logs.
       ANTHROPIC_API_KEY: "sk-ant-ci-placeholder-not-a-real-key"
@@ -51,7 +54,7 @@ jobs:
             packages/protocol/package-lock.json
             packages/workspace-http/package-lock.json
 
-      - name: Diagnostics (pre)
+      - name: Diagnostics (pre) + Electron URL preflight
         shell: pwsh
         run: |
           Write-Host "node: $(node -v)"
@@ -60,6 +63,28 @@ jobs:
           Write-Host "ref: $($env:GITHUB_REF)"
           Write-Host "runner: $($env:RUNNER_OS) $($env:RUNNER_ARCH)"
           Write-Host "FETCH_NODE_WIN=$env:FETCH_NODE_WIN FETCH_ELECTRON_WIN=$env:FETCH_ELECTRON_WIN"
+          Write-Host "ELECTRON_WIN_VERSION=$env:ELECTRON_WIN_VERSION"
+
+          $script = Get-Content -Raw "scripts/package-windows.mjs"
+          if ($script -match 'electron-\$\{version\}-win-x64\.zip') {
+            throw "STALE SCRIPT: package-windows.mjs still uses win-x64 (must be win32-x64). Wrong commit checked out?"
+          }
+          if ($script -notmatch 'win32-x64') {
+            throw "STALE SCRIPT: package-windows.mjs missing win32-x64. Wrong commit checked out?"
+          }
+          if ($script -match 'v33\.2\.1') {
+            throw "STALE SCRIPT: package-windows.mjs still defaults to v33.2.1. Wrong commit checked out?"
+          }
+
+          $ver = $env:ELECTRON_WIN_VERSION
+          $url = "https://github.com/electron/electron/releases/download/$ver/electron-$ver-win32-x64.zip"
+          Write-Host "ELECTRON_ASSET_URL=$url"
+
+          $resp = Invoke-WebRequest -Method Head -Uri $url -MaximumRedirection 5 -UseBasicParsing
+          Write-Host "ELECTRON_ASSET_HEAD_STATUS=$($resp.StatusCode)"
+          if ($resp.StatusCode -lt 200 -or $resp.StatusCode -ge 400) {
+            throw "Electron asset HEAD failed: $($resp.StatusCode) for $url"
+          }
 
       - name: Install dependencies (npm ci)
         shell: pwsh
