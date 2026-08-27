@@ -58,6 +58,50 @@ function flattenOnceIfSingleChild(dir) {
   }
 }
 
+const DOWNLOAD_UA = "personal-agent-package-windows/0.1 (+https://github.com/ideass-mx/personal-agent)";
+
+async function downloadBinary(url, label) {
+  process.stderr.write(`[package-windows] downloading ${label}: ${url}\n`);
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": DOWNLOAD_UA,
+      Accept: "application/octet-stream",
+    },
+    redirect: "follow",
+  });
+  if (!res.ok) {
+    throw new Error(`${label} download failed: ${res.status} (${url})`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+async function resolveElectronWinZipUrl(version) {
+  const assetName = `electron-${version}-win32-x64.zip`;
+  const direct = `https://github.com/electron/electron/releases/download/${version}/${assetName}`;
+  // Prefer GitHub API asset URL (handles redirects / CDN); fall back to direct.
+  try {
+    const api = `https://api.github.com/repos/electron/electron/releases/tags/${version}`;
+    const res = await fetch(api, {
+      headers: {
+        "User-Agent": DOWNLOAD_UA,
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (res.ok) {
+      const json = (await res.json());
+      const asset = Array.isArray(json.assets)
+        ? json.assets.find((a) => a && a.name === assetName)
+        : null;
+      if (asset?.browser_download_url) {
+        return asset.browser_download_url;
+      }
+    }
+  } catch {
+    /* fall through to direct URL */
+  }
+  return direct;
+}
+
 async function fetchNodeWin(destDir) {
   const version = process.env.NODE_WIN_VERSION || "v22.14.0";
   const url = `https://nodejs.org/dist/${version}/node-${version}-win-x64.zip`;
@@ -80,9 +124,7 @@ async function fetchNodeWin(destDir) {
   }
 
   const zipPath = path.join(destDir, "node-win.zip");
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Node download failed: ${res.status}`);
-  writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
+  writeFileSync(zipPath, await downloadBinary(url, "Node"));
   const extracted = tryUnzip(zipPath, destDir);
   if (extracted) flattenOnceIfSingleChild(destDir);
   const hasNodeExe = existsSync(path.join(destDir, "node.exe"));
@@ -95,14 +137,17 @@ async function fetchNodeWin(destDir) {
 }
 
 async function fetchElectronWin(destDir) {
-  // Electron release assets use win32-x64 (not win-x64). Tag must exist on GitHub.
+  // Electron release assets use win32-x64 (NOT win-x64 — that 404s).
   const version = process.env.ELECTRON_WIN_VERSION || "v33.4.11";
-  const url = `https://github.com/electron/electron/releases/download/${version}/electron-${version}-win32-x64.zip`;
+  const assetName = `electron-${version}-win32-x64.zip`;
+  const url = await resolveElectronWinZipUrl(version);
   mkdirSync(destDir, { recursive: true });
   writeFileSync(
     path.join(destDir, "FETCH.txt"),
     [
       "Embedded Electron for Windows tray shell (PHASE 51).",
+      `Version: ${version}`,
+      `Asset: ${assetName}`,
       `Download: ${url}`,
       "Required layout: runtime/electron/electron.exe",
       "Set FETCH_ELECTRON_WIN=1 when packaging with network.",
@@ -122,18 +167,12 @@ async function fetchElectronWin(destDir) {
   }
 
   const zipPath = path.join(destDir, "electron-win.zip");
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(
-      `Electron download failed: ${res.status} (${url}). Set ELECTRON_WIN_VERSION to a published tag.`,
-    );
-  }
-  writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
+  writeFileSync(zipPath, await downloadBinary(url, "Electron"));
   const extracted = tryUnzip(zipPath, destDir);
   const hasElectronExe = existsSync(path.join(destDir, "electron.exe"));
   writeFileSync(
     path.join(destDir, "ELECTRON_ZIP.txt"),
-    `zip=${path.basename(zipPath)}\nversion=${version}\nextracted=${extracted}\nhasElectronExe=${hasElectronExe}\n`,
+    `zip=${path.basename(zipPath)}\nversion=${version}\nasset=${assetName}\nextracted=${extracted}\nhasElectronExe=${hasElectronExe}\nurl=${url}\n`,
     "utf8",
   );
   return { fetched: true, extracted, url, hasElectronExe, zipPath };
