@@ -1,15 +1,23 @@
+import "dotenv/config";
 import { createDefaultAgentDefinition } from "./agent/definition.ts";
 import { ToolRegistry } from "./tools/registry.ts";
 import { attachLocalAgent } from "./runtime/attach-agent.ts";
+import { resolveAgentFilesystemRoot } from "./runtime/resolve-filesystem-root.ts";
 
 async function main(): Promise<void> {
   const agentDefinition = createDefaultAgentDefinition();
   const tools = new ToolRegistry();
+  const filesystemRoot = resolveAgentFilesystemRoot();
 
   process.stderr.write("[hub] spawn Agent (MCP stdio)\n");
+  if (filesystemRoot) {
+    // No imprimir la ruta completa (evita filtrar paths personales en logs).
+    process.stderr.write("[hub] AGENT_FILESYSTEM_ROOT=configured\n");
+  }
   const agent = await attachLocalAgent({
     registry: tools,
     toolPolicy: agentDefinition.toolPolicy,
+    filesystemRoot,
   });
 
   const handshakeOnly = process.env.HUB_HANDSHAKE_ONLY === "1";

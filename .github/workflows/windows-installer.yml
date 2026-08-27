@@ -1,0 +1,158 @@
+# Windows Installer — GitHub Actions (CI packaging)
+#
+# Compiles PersonalAgent-Setup.exe on windows-latest.
+# Does NOT perform real Windows field installation validation.
+#
+name: Windows Installer
+
+on:
+  workflow_dispatch:
+  # Optional version-tag builds (artifact only — no GitHub Release).
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-installer:
+    name: Package + Inno Setup
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    env:
+      # Packaging embeds portable Windows runtimes (PHASE 51).
+      FETCH_NODE_WIN: "1"
+      FETCH_ELECTRON_WIN: "1"
+      REQUIRE_WINDOWS_RUNTIMES: "1"
+      # Dummy values so hub config can load during smoke only — not production secrets.
+      # Never echo these in logs.
+      ANTHROPIC_API_KEY: "sk-ant-ci-placeholder-not-a-real-key"
+      HUB_TOKEN: "ci-hub-token-placeholder-do-not-use-prod"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            hub/package-lock.json
+            agent/package-lock.json
+            web/package-lock.json
+            packages/protocol/package-lock.json
+            packages/workspace-http/package-lock.json
+
+      - name: Diagnostics (pre)
+        shell: pwsh
+        run: |
+          Write-Host "node: $(node -v)"
+          Write-Host "npm: $(npm -v)"
+          Write-Host "commit: $($env:GITHUB_SHA)"
+          Write-Host "ref: $($env:GITHUB_REF)"
+          Write-Host "runner: $($env:RUNNER_OS) $($env:RUNNER_ARCH)"
+          Write-Host "FETCH_NODE_WIN=$env:FETCH_NODE_WIN FETCH_ELECTRON_WIN=$env:FETCH_ELECTRON_WIN"
+
+      - name: Install dependencies (npm ci)
+        shell: pwsh
+        run: |
+          npm ci --prefix packages/protocol
+          npm ci --prefix packages/workspace-http
+          npm ci --prefix hub
+          npm ci --prefix agent
+          npm ci --prefix web
+
+      - name: Package Windows layout
+        shell: pwsh
+        run: npm run package:windows
+
+      - name: Diagnostics (package layout)
+        shell: pwsh
+        run: |
+          $root = "dist/windows/PersonalAgent"
+          if (-not (Test-Path $root)) { throw "Missing $root" }
+          Write-Host "layout: $root"
+          Write-Host "node.exe: $(Test-Path "$root/runtime/node/node.exe")"
+          Write-Host "electron.exe: $(Test-Path "$root/runtime/electron/electron.exe")"
+          Write-Host "console: $(Test-Path "$root/console/index.html")"
+          Write-Host "gateway: $(Test-Path "$root/gateway/hub.cjs")"
+          Write-Host "agent: $(Test-Path "$root/agent/agent.cjs")"
+          Write-Host "launcher: $(Test-Path "$root/AgentePersonal.bat")"
+          Get-ChildItem $root | Select-Object Name, Mode | Format-Table -AutoSize
+
+      - name: Validate Windows package (strict runtimes)
+        shell: pwsh
+        run: npm run validate:windows-package
+
+      - name: PHASE 51 architecture tests
+        working-directory: hub
+        shell: pwsh
+        run: npx tsx --test tests/architecture/phase51-windows-installer-and-console-integration.test.ts
+
+      - name: Smoke package (compatible)
+        shell: pwsh
+        run: npm run smoke:package
+        # Uses placeholder env above; does not print secrets.
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found after Inno Setup install" }
+          Write-Host "ISCC=$iscc"
+          cmd /c "`"$iscc`" /?" | Select-Object -First 5
+          exit 0
+
+      - name: Compile PersonalAgent-Setup.exe
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          }
+          $iss = Join-Path $pwd "installer\windows\personal-agent.iss"
+          if (-not (Test-Path $iss)) { throw "Missing $iss" }
+          & $iscc $iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
+
+      - name: Verify Setup.exe
+        id: verify_exe
+        shell: pwsh
+        run: |
+          $exe = "dist/windows/PersonalAgent-Setup.exe"
+          if (-not (Test-Path $exe)) {
+            Write-Host "Listing dist/windows:"
+            Get-ChildItem "dist/windows" -ErrorAction SilentlyContinue | Format-Table -AutoSize
+            throw "PersonalAgent-Setup.exe not found at $exe"
+          }
+          $item = Get-Item $exe
+          $size = $item.Length
+          Write-Host "setup_path=$($item.FullName)"
+          Write-Host "setup_size_bytes=$size"
+          if ($size -lt 1000000) {
+            throw "Setup.exe suspiciously small ($size bytes)"
+          }
+          Get-ChildItem "dist/windows" | Select-Object Name, Length | Format-Table -AutoSize
+          "path=$($item.FullName)" >> $env:GITHUB_OUTPUT
+          "size=$size" >> $env:GITHUB_OUTPUT
+          "name=$($item.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PersonalAgent-Windows-Installer
+          path: dist/windows/PersonalAgent-Setup.exe
+          if-no-files-found: error
+          retention-days: 30

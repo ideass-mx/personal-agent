@@ -44,7 +44,10 @@ export const config: GatewayConfig = {
     ? packagedMigrations
     : sourceMigrations,
 
-  dbFile: path.resolve(here, "../data/personal-agent.db"),
+  dbFile: path.resolve(
+    process.env.PERSONAL_AGENT_DB ||
+      path.resolve(here, "../data/personal-agent.db"),
+  ),
 
   maxTokens: 1024,
   historyWindow: 30,
