@@ -5,7 +5,7 @@
  *
  * Opcional:
  *   FETCH_NODE_WIN=1     descarga Node 22 win-x64
- *   FETCH_ELECTRON_WIN=1 descarga Electron win-x64
+ *   FETCH_ELECTRON_WIN=1 descarga Electron win32-x64
  */
 import {
   cpSync,
@@ -95,8 +95,9 @@ async function fetchNodeWin(destDir) {
 }
 
 async function fetchElectronWin(destDir) {
-  const version = process.env.ELECTRON_WIN_VERSION || "v33.2.1";
-  const url = `https://github.com/electron/electron/releases/download/${version}/electron-${version}-win-x64.zip`;
+  // Electron release assets use win32-x64 (not win-x64). Tag must exist on GitHub.
+  const version = process.env.ELECTRON_WIN_VERSION || "v33.4.11";
+  const url = `https://github.com/electron/electron/releases/download/${version}/electron-${version}-win32-x64.zip`;
   mkdirSync(destDir, { recursive: true });
   writeFileSync(
     path.join(destDir, "FETCH.txt"),
@@ -122,7 +123,11 @@ async function fetchElectronWin(destDir) {
 
   const zipPath = path.join(destDir, "electron-win.zip");
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Electron download failed: ${res.status}`);
+  if (!res.ok) {
+    throw new Error(
+      `Electron download failed: ${res.status} (${url}). Set ELECTRON_WIN_VERSION to a published tag.`,
+    );
+  }
   writeFileSync(zipPath, Buffer.from(await res.arrayBuffer()));
   const extracted = tryUnzip(zipPath, destDir);
   const hasElectronExe = existsSync(path.join(destDir, "electron.exe"));

@@ -41,6 +41,9 @@ describe("PHASE 51 Windows installer + Agent Console integration", () => {
     const batSnippet = pkg;
     assert.match(batSnippet, /electron\.exe/);
     assert.doesNotMatch(pkg, /Ejecuta npm install en desktop/);
+    // Electron GitHub assets are win32-x64 (not win-x64); tag must exist.
+    assert.match(pkg, /electron-\$\{version\}-win32-x64\.zip/);
+    assert.doesNotMatch(pkg, /electron-\$\{version\}-win-x64\.zip/);
   });
 
   it("Inno produces PersonalAgent-Setup and checks runtimes", () => {

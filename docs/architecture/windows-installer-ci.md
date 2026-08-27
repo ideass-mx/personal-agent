@@ -102,7 +102,7 @@ PASS **no** implica:
 | Variable | Uso |
 |----------|-----|
 | `FETCH_NODE_WIN=1` | Descarga Node portable win-x64 (script existente) |
-| `FETCH_ELECTRON_WIN=1` | Descarga Electron win-x64 (script existente) |
+| `FETCH_ELECTRON_WIN=1` | Descarga Electron win32-x64 (script existente; asset `electron-v*-win32-x64.zip`) |
 | `REQUIRE_WINDOWS_RUNTIMES=1` | Hace fallar `validate:windows-package` si faltan runtimes |
 | `ANTHROPIC_API_KEY` / `HUB_TOKEN` | Placeholders solo para smoke/config load en CI |
 
