@@ -59,7 +59,13 @@ const iss = readFileSync(
   "utf8",
 );
 if (!iss.includes("PersonalAgent-Setup")) fail("Inno OutputBaseFilename");
-if (!iss.includes("InitializeSetup")) fail("Inno InitializeSetup runtime checks");
+if (!iss.includes("#if !FileExists(SourceRoot")) {
+  fail("Inno must ISPP-check SourceRoot runtimes at compile time");
+}
+if (!iss.includes("#error")) fail("Inno must #error when runtimes missing at compile");
+if (iss.includes("InitializeSetup")) {
+  fail("Inno must not FileExists(SourceRoot) in InitializeSetup (breaks end-user install)");
+}
 if (/npm install/i.test(iss)) fail("Inno must not run npm install");
 
 process.stdout.write("[validate-windows-package] layout OK\n");

@@ -29,7 +29,7 @@ Agent Console Web = UI principal. Electron = tray/launcher mínimo.
 | Área | Cambio |
 |------|--------|
 | **51A Packaging** | `package-windows.mjs` incluye `console/` + `web/dist`, Electron runtime slot, Node runtime slot, bat sin npm |
-| **51B Inno** | `PersonalAgent-Setup.exe`; `InitializeSetup` exige node.exe + electron.exe + console; sin secretos |
+| **51B Inno** | `PersonalAgent-Setup.exe`; ISPP `#error` exige node.exe + electron.exe + console **al compilar**; `CurStepChanged` verifica `{app}` post-install; sin secretos. **No** usar `InitializeSetup` + `FileExists(SourceRoot)` (rompe en la PC del usuario). |
 | **51C First-run** | Wizard: Welcome → Workspace → API key → Boot status → AGENT READY → Open Console |
 | **51D Workspace** | Persiste en AppData `product.json`; spawn con `AGENT_FILESYSTEM_ROOT` (48A) |
 | **51E Console** | Static en paquete; `AGENT_CONSOLE_STATIC` + `../console` desde Gateway cwd |

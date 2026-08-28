@@ -15,6 +15,7 @@ import {
   rmSync,
   readdirSync,
   renameSync,
+  statSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
@@ -176,13 +177,19 @@ async function fetchNodeWin(destDir) {
   const zipPath = path.join(destDir, "node-win.zip");
   writeFileSync(zipPath, await downloadBinary(url, "Node"));
   unzipExeInto(zipPath, destDir, "node.exe");
-  const hasNodeExe = existsSync(path.join(destDir, "node.exe"));
+  rmSync(zipPath, { force: true });
+  const nodeExe = path.join(destDir, "node.exe");
+  const hasNodeExe = existsSync(nodeExe);
+  const nodeBytes = hasNodeExe ? statSync(nodeExe).size : 0;
+  if (hasNodeExe && nodeBytes < 1_000_000) {
+    throw new Error(`node.exe too small (${nodeBytes} bytes) under ${destDir}`);
+  }
   writeFileSync(
     path.join(destDir, "NODE_ZIP.txt"),
-    `zip=${path.basename(zipPath)}\nversion=${version}\nextracted=true\nhasNodeExe=${hasNodeExe}\n`,
+    `version=${version}\nextracted=true\nhasNodeExe=${hasNodeExe}\nnodeBytes=${nodeBytes}\nzipRemoved=true\n`,
     "utf8",
   );
-  return { fetched: true, extracted: true, url, hasNodeExe, zipPath };
+  return { fetched: true, extracted: true, url, hasNodeExe, nodeBytes };
 }
 
 async function fetchElectronWin(destDir) {
@@ -218,13 +225,21 @@ async function fetchElectronWin(destDir) {
   const zipPath = path.join(destDir, "electron-win.zip");
   writeFileSync(zipPath, await downloadBinary(url, "Electron"));
   unzipExeInto(zipPath, destDir, "electron.exe");
-  const hasElectronExe = existsSync(path.join(destDir, "electron.exe"));
+  rmSync(zipPath, { force: true });
+  const electronExe = path.join(destDir, "electron.exe");
+  const hasElectronExe = existsSync(electronExe);
+  const electronBytes = hasElectronExe ? statSync(electronExe).size : 0;
+  if (hasElectronExe && electronBytes < 1_000_000) {
+    throw new Error(
+      `electron.exe too small (${electronBytes} bytes) under ${destDir}`,
+    );
+  }
   writeFileSync(
     path.join(destDir, "ELECTRON_ZIP.txt"),
-    `zip=${path.basename(zipPath)}\nversion=${version}\nasset=${assetName}\nextracted=true\nhasElectronExe=${hasElectronExe}\nurl=${url}\n`,
+    `version=${version}\nasset=${assetName}\nextracted=true\nhasElectronExe=${hasElectronExe}\nelectronBytes=${electronBytes}\nurl=${url}\nzipRemoved=true\n`,
     "utf8",
   );
-  return { fetched: true, extracted: true, url, hasElectronExe, zipPath };
+  return { fetched: true, extracted: true, url, hasElectronExe, electronBytes };
 }
 
 function buildWebConsole() {

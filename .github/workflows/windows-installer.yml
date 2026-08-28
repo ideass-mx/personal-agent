@@ -105,12 +105,35 @@ jobs:
           $root = "dist/windows/PersonalAgent"
           if (-not (Test-Path $root)) { throw "Missing $root" }
           Write-Host "layout: $root"
-          Write-Host "node.exe: $(Test-Path "$root/runtime/node/node.exe")"
-          Write-Host "electron.exe: $(Test-Path "$root/runtime/electron/electron.exe")"
+          $node = "$root/runtime/node/node.exe"
+          $electron = "$root/runtime/electron/electron.exe"
+          Write-Host "node.exe: $(Test-Path $node)"
+          Write-Host "electron.exe: $(Test-Path $electron)"
+          if (Test-Path $node) {
+            $nb = (Get-Item $node).Length
+            Write-Host "node.exe_bytes=$nb"
+            if ($nb -lt 1000000) { throw "node.exe too small ($nb bytes)" }
+          } else {
+            throw "Missing $node after package:windows"
+          }
+          if (Test-Path $electron) {
+            $eb = (Get-Item $electron).Length
+            Write-Host "electron.exe_bytes=$eb"
+            if ($eb -lt 1000000) { throw "electron.exe too small ($eb bytes)" }
+          } else {
+            throw "Missing $electron after package:windows"
+          }
+          if (Test-Path "$root/runtime/node/node-win.zip") {
+            throw "Leftover node-win.zip must not ship (delete after extract)"
+          }
+          if (Test-Path "$root/runtime/electron/electron-win.zip") {
+            throw "Leftover electron-win.zip must not ship (delete after extract)"
+          }
           Write-Host "console: $(Test-Path "$root/console/index.html")"
           Write-Host "gateway: $(Test-Path "$root/gateway/hub.cjs")"
           Write-Host "agent: $(Test-Path "$root/agent/agent.cjs")"
           Write-Host "launcher: $(Test-Path "$root/AgentePersonal.bat")"
+          Get-ChildItem "$root/runtime/node" | Select-Object Name, Length | Format-Table -AutoSize
           Get-ChildItem $root | Select-Object Name, Mode | Format-Table -AutoSize
 
       - name: Validate Windows package (strict runtimes)
@@ -166,8 +189,9 @@ jobs:
           $size = $item.Length
           Write-Host "setup_path=$($item.FullName)"
           Write-Host "setup_size_bytes=$size"
-          if ($size -lt 1000000) {
-            throw "Setup.exe suspiciously small ($size bytes)"
+          # Node (~30MB+ compressed) + Electron + Hub must land well above 40MB.
+          if ($size -lt 40000000) {
+            throw "Setup.exe too small to contain embedded runtimes ($size bytes; need >= 40MB)"
           }
           Get-ChildItem "dist/windows" | Select-Object Name, Length | Format-Table -AutoSize
           "path=$($item.FullName)" >> $env:GITHUB_OUTPUT

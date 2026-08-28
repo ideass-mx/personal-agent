@@ -46,10 +46,16 @@ describe("PHASE 51 Windows installer + Agent Console integration", () => {
     assert.doesNotMatch(pkg, /electron-\$\{version\}-win-x64\.zip/);
   });
 
-  it("Inno produces PersonalAgent-Setup and checks runtimes", () => {
+  it("Inno produces PersonalAgent-Setup and checks runtimes at compile time", () => {
     const iss = read("installer/windows/personal-agent.iss");
     assert.match(iss, /PersonalAgent-Setup/);
-    assert.match(iss, /InitializeSetup/);
+    // Compile-time ISPP #error — NOT InitializeSetup FileExists on SourceRoot
+    // (that path only exists on the build machine; it broke end-user installs).
+    assert.match(iss, /#if !FileExists\(SourceRoot/);
+    assert.match(iss, /#error/);
+    assert.doesNotMatch(iss, /InitializeSetup/);
+    assert.match(iss, /CurStepChanged/);
+    assert.match(iss, /\{app\}\\runtime\\node\\node\.exe/);
     assert.match(iss, /node\.exe/);
     assert.match(iss, /electron\.exe/);
     assert.match(iss, /console\\index\.html|console\\\\index\.html|console/);

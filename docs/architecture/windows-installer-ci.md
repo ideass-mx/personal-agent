@@ -86,7 +86,7 @@ PASS implica:
 - Layout `dist/windows/PersonalAgent/` generado  
 - Node + Electron Windows embebidos presentes  
 - Validación de package en modo estricto  
-- `PersonalAgent-Setup.exe` generado y subido como artifact  
+- `PersonalAgent-Setup.exe` generado (≥ ~40 MB; runtimes embebidos) y subido como artifact  
 
 PASS **no** implica:
 
@@ -94,6 +94,14 @@ PASS **no** implica:
 - AGENT READY en campo  
 - Android / LAN / Excel  
 - PHASE 52 field testing  
+
+---
+
+## Bug corregido: `InitializeSetup` + `FileExists(SourceRoot)`
+
+`InitializeSetup` corre **en la PC del usuario**, no en el compilador. El script antiguo hacía `FileExists(..\..\dist\windows\PersonalAgent\runtime\node\node.exe)`, ruta que **solo existe en la máquina de build**. Resultado: Setup abortaba con «Falta runtime\node\node.exe» aunque el EXE ya trajera Node embebido.
+
+Corrección: comprobaciones **ISPP `#error` al compilar** + verificación post-install bajo `{app}\runtime\...`.
 
 ---
 

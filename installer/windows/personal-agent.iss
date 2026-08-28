@@ -2,7 +2,7 @@
 ; Compile on Windows with Inno Setup 6+.
 ; Source root: dist\windows\PersonalAgent\ (from: node scripts/package-windows.mjs)
 ;
-; Prerequisites before compiling:
+; Prerequisites BEFORE compiling (ISPP checks below):
 ;   - runtime\node\node.exe
 ;   - runtime\electron\electron.exe
 ;   - console\index.html (Agent Console)
@@ -16,7 +16,18 @@
 #define MyAppVersion "0.1.0"
 #define MyAppPublisher "Ideass"
 #define MyAppExeName "AgentePersonal.bat"
-#define SourceRoot "..\..\dist\windows\PersonalAgent"
+; SourcePath = directory of this .iss (trailing backslash). Resolve package layout from there.
+#define SourceRoot SourcePath + "..\..\dist\windows\PersonalAgent"
+
+#if !FileExists(SourceRoot + "\runtime\node\node.exe")
+  #error "Falta runtime\node\node.exe — ejecuta FETCH_NODE_WIN=1 npm run package:windows antes de ISCC."
+#endif
+#if !FileExists(SourceRoot + "\runtime\electron\electron.exe")
+  #error "Falta runtime\electron\electron.exe — ejecuta FETCH_ELECTRON_WIN=1 npm run package:windows antes de ISCC."
+#endif
+#if !FileExists(SourceRoot + "\console\index.html")
+  #error "Falta Agent Console (console\index.html) en el paquete."
+#endif
 
 [Setup]
 AppId={{A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51}}
@@ -68,36 +79,23 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Abrir Agente personal"; Flags: 
 Type: filesandordirs; Name: "{app}\desktop\node_modules"
 
 [Code]
-function InitializeSetup(): Boolean;
-var
-  NodePath, ElectronPath, ConsolePath: String;
+procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  Result := True;
-  NodePath := ExpandConstant('{#SourceRoot}\runtime\node\node.exe');
-  ElectronPath := ExpandConstant('{#SourceRoot}\runtime\electron\electron.exe');
-  ConsolePath := ExpandConstant('{#SourceRoot}\console\index.html');
-  if not FileExists(NodePath) then
+  // Post-install: confirm runtimes under the install dir (not the build SourceRoot).
+  if CurStep = ssPostInstall then
   begin
-    MsgBox('Falta runtime\node\node.exe en el paquete.' + #13#10 +
-           'Ejecuta package-windows con FETCH_NODE_WIN=1 antes de compilar.',
-           mbError, MB_OK);
-    Result := False;
-    exit;
-  end;
-  if not FileExists(ElectronPath) then
-  begin
-    MsgBox('Falta runtime\electron\electron.exe en el paquete.' + #13#10 +
-           'Ejecuta package-windows con FETCH_ELECTRON_WIN=1 antes de compilar.' + #13#10 +
-           'El usuario final NO debe usar npm.',
-           mbError, MB_OK);
-    Result := False;
-    exit;
-  end;
-  if not FileExists(ConsolePath) then
-  begin
-    MsgBox('Falta Agent Console (console\index.html) en el paquete.', mbError, MB_OK);
-    Result := False;
-    exit;
+    if not FileExists(ExpandConstant('{app}\runtime\node\node.exe')) then
+    begin
+      MsgBox('Instalación incompleta: falta runtime\node\node.exe bajo la carpeta de instalación.' + #13#10 +
+             'Reinstala con el instalador oficial.',
+             mbError, MB_OK);
+    end
+    else if not FileExists(ExpandConstant('{app}\runtime\electron\electron.exe')) then
+    begin
+      MsgBox('Instalación incompleta: falta runtime\electron\electron.exe bajo la carpeta de instalación.' + #13#10 +
+             'Reinstala con el instalador oficial. No uses npm.',
+             mbError, MB_OK);
+    end;
   end;
 end;
 
