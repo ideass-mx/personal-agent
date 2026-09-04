@@ -25,4 +25,12 @@ interface ChatConnection {
         token: String,
         deviceName: String,
     ): Result<Long>
+
+    /** QR pairing (Hub). Gateway: failure. */
+    suspend fun pairFromQr(
+        endpoint: String,
+        pairingSessionId: String,
+        pairingSecret: String,
+        deviceName: String,
+    ): Result<String> = Result.failure(UnsupportedOperationException("pairing_qr_unsupported"))
 }

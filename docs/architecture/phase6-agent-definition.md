@@ -9,7 +9,7 @@ Configuración que estaba **mezclada**:
 
 | Dónde | Qué | Debería ser |
 |-------|-----|-------------|
-| `hub/src/agent/prompts.ts` | `SYSTEM_PROMPT`, `AGENT_NAME` | **Agent** |
+| `hub/src/agents/prompts.ts` | `SYSTEM_PROMPT`, `AGENT_NAME` | **Agent** |
 | `hub/src/config.ts` `model` | modelo LLM | **Agent** (estaba junto a puerto, token, SQLite) |
 | `DEFAULT_TOOL_POLICY` | tools permitidas + executionMode | **Agent** (se aplicaba en discovery del Gateway) |
 | `config.maxTokens`, API key | proveedor | **Gateway** / proveedor |
@@ -61,7 +61,7 @@ Nunca Agent → MCP → Agent como A2A.
 
 ## Contratos
 
-`hub/src/agent/definition.ts`:
+`hub/src/agents/definition.ts`:
 
 - `prompt`, `model`, `toolPolicy`
 - Sin `agentId`, `workspaceId`, `conversationId`, `nodeId`, root, port, process

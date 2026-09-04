@@ -26,7 +26,7 @@ Las Tools existentes pueden presentarse como **capacidades de producto** sin cam
 
 ## 2. Real Tool Inventory
 
-Evidencia: `hub/src/tools/tool-policy.ts` (`DEFAULT_TOOL_POLICY`), `agent/src/extensions/defaults.ts`, tools en `agent/src/tools/*`.
+Evidencia: `hub/src/tools/policy.ts` (`DEFAULT_TOOL_POLICY`), `agent/src/extensions/defaults.ts`, tools en `agent/src/tools/*`.
 
 | Tool | Policy | Side effect | Plataforma | Product class |
 |------|--------|-------------|------------|---------------|

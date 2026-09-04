@@ -76,6 +76,9 @@ fun ConnectionScreen(
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val health by viewModel.health.collectAsStateWithLifecycle()
+    var showScanner by remember { mutableStateOf(false) }
+    var showManualUri by remember { mutableStateOf(false) }
+    var qrUri by remember { mutableStateOf("") }
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = AppColors.textPrimary,
         unfocusedTextColor = AppColors.textPrimary,
@@ -87,6 +90,21 @@ fun ConnectionScreen(
         focusedLabelColor = AppColors.textMuted,
         unfocusedLabelColor = AppColors.textMuted,
     )
+
+    if (showScanner && ui.backend == ConnectionBackend.HUB) {
+        PairingQrScanScreen(
+            onValidUri = { uri ->
+                showScanner = false
+                viewModel.pairWithQrUri(uri, onConnected)
+            },
+            onEnterManually = {
+                showScanner = false
+                showManualUri = true
+            },
+            onBack = { showScanner = false },
+        )
+        return
+    }
 
     Column(
         modifier = Modifier
@@ -130,6 +148,59 @@ fun ConnectionScreen(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            if (ui.backend == ConnectionBackend.HUB) {
+                Button(
+                    onClick = { showScanner = true },
+                    enabled = !ui.testing,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                ) {
+                    Text(
+                        if (ui.pairingPending) {
+                            "Esperando aprobación en el PC…"
+                        } else {
+                            "Escanear código QR"
+                        },
+                    )
+                }
+                Text(
+                    text = "Abre Personal Agent en el PC y escanea el código QR de emparejamiento.",
+                    color = AppColors.textMuted,
+                    fontSize = 13.sp,
+                )
+                OutlinedButton(
+                    onClick = { showManualUri = !showManualUri },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.textMuted),
+                ) {
+                    Text(
+                        if (showManualUri) {
+                            "Ocultar entrada manual"
+                        } else {
+                            "Introducir código manualmente"
+                        },
+                    )
+                }
+                if (showManualUri) {
+                    OutlinedTextField(
+                        value = qrUri,
+                        onValueChange = { qrUri = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("URI del QR (personalagent://pair?…)") },
+                        colors = fieldColors,
+                        singleLine = true,
+                    )
+                    Button(
+                        onClick = { viewModel.pairWithQrUri(qrUri, onConnected) },
+                        enabled = !ui.testing && qrUri.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.accent),
+                    ) {
+                        Text(if (ui.pairingPending) "Esperando PC…" else "Emparejar con URI")
+                    }
+                }
+            }
 
             if (ui.backend == ConnectionBackend.HUB) {
                 OutlinedButton(

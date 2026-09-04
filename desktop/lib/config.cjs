@@ -29,12 +29,23 @@ function paths() {
     logsDir: path.join(root, "logs"),
     runtimeDir: path.join(root, "runtime"),
     dbDir: path.join(root, "data"),
+    /** LocalObjectStorage root (PHASE 57) — no workspace. */
+    objectsDir: path.join(root, "objects"),
+    /** Encrypted SecretStore fallback root (PHASE 59) — no secrets.json. */
+    credentialsDir: path.join(root, "credentials"),
   };
 }
 
 function ensureDirs() {
   const p = paths();
-  for (const dir of [p.configDir, p.logsDir, p.runtimeDir, p.dbDir]) {
+  for (const dir of [
+    p.configDir,
+    p.logsDir,
+    p.runtimeDir,
+    p.dbDir,
+    p.objectsDir,
+    p.credentialsDir,
+  ]) {
     fs.mkdirSync(dir, { recursive: true });
   }
   return p;
@@ -144,6 +155,8 @@ module.exports = {
   ensureDirs,
   loadConfig,
   saveConfig,
+  loadSecrets,
+  saveSecrets,
   ensureHubToken,
   getHubToken,
   setAnthropicApiKey,

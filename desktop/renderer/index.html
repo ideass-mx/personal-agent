@@ -11,13 +11,55 @@
     <section id="first-run" class="panel hidden">
       <div id="fr-welcome" class="fr-step">
         <h1>Bienvenido a Personal Agent</h1>
-        <p class="lead">Tu agente vive en esta PC.</p>
+        <p class="lead">Estamos preparando este equipo para ser un nodo de agente de IA seguro.</p>
         <ul class="bullets">
-          <li>Android lo controla desde el teléfono (misma Wi‑Fi).</li>
-          <li><strong>Agent Console</strong> (navegador) es la interfaz principal.</li>
-          <li>Esta ventana solo inicia y supervisa el agente.</li>
+          <li>Primero la red privada cifrada (Tailscale).</li>
+          <li>Después el Agent Runtime en esta PC.</li>
+          <li>Luego el emparejamiento con Android.</li>
         </ul>
-        <button type="button" id="fr-next-1" class="primary">Continuar</button>
+        <button type="button" id="fr-begin" class="primary">Begin Setup</button>
+      </div>
+
+      <div id="fr-preflight" class="fr-step hidden">
+        <h1>System Check</h1>
+        <ul class="status-list">
+          <li><span>Windows / sistema</span> <strong id="pf-os">…</strong></li>
+          <li><span>Arquitectura</span> <strong id="pf-arch">…</strong></li>
+          <li><span>Acceso administrador</span> <strong id="pf-admin">…</strong></li>
+          <li><span>Internet</span> <strong id="pf-net">…</strong></li>
+          <li><span>Escenario</span> <strong id="pf-scenario">…</strong></li>
+        </ul>
+        <p class="muted" id="pf-msg">Preparando red segura…</p>
+        <p id="pf-error" class="error"></p>
+        <div class="actions">
+          <button type="button" id="pf-retry">Reintentar</button>
+          <button type="button" id="pf-next" class="primary" disabled>Continuar</button>
+        </div>
+      </div>
+
+      <div id="fr-network" class="fr-step hidden">
+        <h1>Secure Network</h1>
+        <p class="lead">Personal Agent requiere una red privada cifrada.</p>
+        <p><strong>Tailscale</strong></p>
+        <p class="muted">No guardamos credenciales de Tailscale. Usa el inicio de sesión oficial.</p>
+        <p id="net-status" class="muted">Comprobando…</p>
+        <p id="net-error" class="error"></p>
+        <div class="actions">
+          <button type="button" id="net-download">Instalar Tailscale</button>
+          <button type="button" id="net-login">Connect Secure Network</button>
+          <button type="button" id="net-verify" class="primary">Verificar</button>
+        </div>
+      </div>
+
+      <div id="fr-network-ready" class="fr-step hidden">
+        <h1>Secure Network</h1>
+        <ul class="status-list">
+          <li><span>Tailscale instalado</span> <strong>✓ Listo</strong></li>
+          <li><span>Cuenta autenticada</span> <strong>✓ Listo</strong></li>
+          <li><span>Dispositivo conectado</span> <strong>✓ Listo</strong></li>
+          <li><span>Red segura</span> <strong>✓ Lista</strong></li>
+        </ul>
+        <button type="button" id="net-ready-next" class="primary">Continuar</button>
       </div>
 
       <div id="fr-workspace" class="fr-step hidden">
@@ -26,8 +68,8 @@
         <p id="workspace-label" class="muted">Ninguna carpeta seleccionada</p>
         <button type="button" id="btn-choose">Elegir carpeta</button>
         <div class="actions">
-          <button type="button" id="fr-back-2">Atrás</button>
-          <button type="button" id="fr-next-2" class="primary" disabled>Continuar</button>
+          <button type="button" id="fr-back-ws">Atrás</button>
+          <button type="button" id="fr-next-ws" class="primary" disabled>Continuar</button>
         </div>
       </div>
 
@@ -40,28 +82,74 @@
         </label>
         <p id="fr-provider-error" class="error"></p>
         <div class="actions">
-          <button type="button" id="fr-back-3">Atrás</button>
-          <button type="button" id="fr-next-3" class="primary">Validar y continuar</button>
+          <button type="button" id="fr-back-prov">Atrás</button>
+          <button type="button" id="fr-next-prov" class="primary">Validar y continuar</button>
         </div>
       </div>
 
       <div id="fr-boot" class="fr-step hidden">
-        <h1>Arrancando el agente</h1>
-        <p class="lead" id="fr-boot-msg">Guardando configuración e iniciando…</p>
+        <h1>Installing Personal Agent</h1>
+        <p class="lead" id="fr-boot-msg">Instalando e iniciando el Agent Runtime…</p>
         <ul class="status-list">
-          <li><span>Gateway</span> <strong id="fr-st-gateway">…</strong></li>
-          <li><span>Node</span> <strong id="fr-st-node">…</strong></li>
-          <li><span>MCP</span> <strong id="fr-st-mcp">…</strong></li>
+          <li><span>Agent Runtime</span> <strong id="fr-st-gateway">…</strong></li>
+          <li><span>Proceso supervisado</span> <strong id="fr-st-node">…</strong></li>
+          <li><span>Base de datos local</span> <strong id="fr-st-mcp">…</strong></li>
+          <li><span>Device identity</span> <strong id="fr-st-identity">…</strong></li>
           <li><span>Tools</span> <strong id="fr-st-tools">…</strong></li>
           <li><span>Workspace</span> <strong id="fr-st-workspace">…</strong></li>
         </ul>
         <p id="fr-boot-error" class="error"></p>
       </div>
 
+      <div id="fr-pairing" class="fr-step hidden">
+        <h1>Connect Android</h1>
+        <p class="lead">Abre Personal Agent en Android y escanea este código QR.</p>
+        <p class="muted" id="pair-hint">El código expira; no contiene HUB_TOKEN.</p>
+        <img id="pair-qr" alt="QR de pairing" width="220" height="220" class="hidden" />
+        <p id="pair-ttl" class="muted"></p>
+        <p id="pair-wait" class="muted">Waiting for your phone…</p>
+        <div id="pair-confirm" class="hidden">
+          <p><strong>Phone detected</strong></p>
+          <p id="pair-device-name">Device</p>
+          <div class="actions">
+            <button type="button" id="pair-reject">Reject</button>
+            <button type="button" id="pair-approve" class="primary">Connect</button>
+          </div>
+        </div>
+        <p id="pair-error" class="error"></p>
+        <div class="actions">
+          <button type="button" id="pair-refresh">Nuevo QR</button>
+          <button type="button" id="pair-skip">Más tarde</button>
+          <button type="button" id="pair-done" class="primary" disabled>Continuar</button>
+        </div>
+      </div>
+
+      <div id="fr-capabilities" class="fr-step hidden">
+        <h1>Capabilities</h1>
+        <p class="muted">La red segura no autoriza Tools por sí sola.</p>
+        <ul class="status-list" id="cap-list"></ul>
+        <button type="button" id="cap-next" class="primary">Continuar</button>
+      </div>
+
+      <div id="fr-security" class="fr-step hidden">
+        <h1>Security Verification</h1>
+        <ul class="status-list">
+          <li><span>Secure network</span> <strong id="sec-net">…</strong></li>
+          <li><span>Agent identity</span> <strong id="sec-id">…</strong></li>
+          <li><span>Device pairing</span> <strong id="sec-pair">…</strong></li>
+          <li><span>Runtime</span> <strong id="sec-rt">…</strong></li>
+        </ul>
+        <button type="button" id="sec-next" class="primary">Continuar</button>
+      </div>
+
       <div id="fr-ready" class="fr-step hidden">
-        <h1>AGENT READY</h1>
-        <p class="lead">El agente está listo en esta PC.</p>
-        <p class="muted">Abre Agent Console para conversar, autorizar acciones y administrar.</p>
+        <h1>Personal Agent is ready.</h1>
+        <p class="lead">AGENT READY</p>
+        <ul class="status-list">
+          <li><span>PC</span> <strong>● Online</strong></li>
+          <li><span>Android</span> <strong id="ready-android">○ Pendiente / conectado</strong></li>
+          <li><span>Secure Network</span> <strong>● Connected</strong></li>
+        </ul>
         <button type="button" id="btn-open-console-fr" class="primary">Open Agent Console</button>
         <button type="button" id="fr-done">Ir al panel</button>
       </div>
@@ -70,15 +158,17 @@
     <section id="main-panel" class="panel hidden">
       <h1>Agente personal</h1>
       <p id="status-badge" class="badge">…</p>
+      <p class="muted" id="onboarding-badge"></p>
       <ul class="status-list">
+        <li><span>Red segura</span> <strong id="st-network">—</strong></li>
         <li><span>Gateway</span> <strong id="st-gateway">—</strong></li>
         <li><span>Node</span> <strong id="st-node">—</strong></li>
         <li><span>MCP</span> <strong id="st-mcp">—</strong></li>
         <li><span>Tools</span> <strong id="st-tools">—</strong></li>
         <li><span>Workspace</span> <strong id="st-workspace">—</strong></li>
-        <li><span>Android</span> <strong id="st-android">Misma Wi‑Fi + token</strong></li>
+        <li><span>Android</span> <strong id="st-android">Pairing + token</strong></li>
       </ul>
-      <p class="hint">Node/MCP/Tools reflejan el arranque (snapshot). No son liveness en tiempo real.</p>
+      <p class="hint">Node/MCP/Tools reflejan el arranque (snapshot). Tailscale ≠ autorización de Tools.</p>
 
       <div class="actions">
         <button type="button" id="btn-console" class="primary">Open Agent Console</button>
@@ -93,10 +183,10 @@
       <section id="pairing" class="pairing hidden">
         <h2>Conectar Android</h2>
         <p>El agente está listo. Conecta tu teléfono Android.</p>
-        <p class="muted" id="wifi-hint">Asegúrate de que ambos estén en la misma Wi‑Fi.</p>
+        <p class="muted" id="wifi-hint">Preferible: red Tailscale.</p>
         <p><strong>Dirección (WebSocket)</strong></p>
         <ul id="pairing-urls"></ul>
-        <p><strong>Agent Console (LAN)</strong></p>
+        <p><strong>Agent Console (LAN / Tailscale)</strong></p>
         <ul id="console-urls"></ul>
         <p><strong>Token</strong> <span id="token-masked"></span>
           <button type="button" id="btn-copy-token">Copiar token</button>

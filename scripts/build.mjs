@@ -1,25 +1,25 @@
 /**
- * Compila Hub y Agent a JavaScript de producción (esbuild).
- * No empaqueta native addons ni launchers; eso es `package`.
+ * Compila Gateway y Node a JavaScript de producción (esbuild).
+ * Emite nombres canónicos + alias legacy (hub.cjs / agent.cjs).
  */
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const require = createRequire(path.join(repoRoot, "hub/package.json"));
+const require = createRequire(path.join(repoRoot, "gateway/package.json"));
 const esbuild = require("esbuild");
 
 const dist = path.join(repoRoot, "dist");
 
 export async function build() {
   // No borrar dist/ entero: preserva dist/windows/ (PHASE 48 package:windows).
-  rmSync(path.join(dist, "hub"), { recursive: true, force: true });
-  rmSync(path.join(dist, "agent"), { recursive: true, force: true });
-  // dist/web/ se regenera con npm run build:web / smoke:web (PHASE 50).
-  mkdirSync(path.join(dist, "hub"), { recursive: true });
-  mkdirSync(path.join(dist, "agent"), { recursive: true });
+  for (const dir of ["gateway", "node", "hub", "agent"]) {
+    rmSync(path.join(dist, dir), { recursive: true, force: true });
+  }
+  mkdirSync(path.join(dist, "gateway"), { recursive: true });
+  mkdirSync(path.join(dist, "node"), { recursive: true });
 
   const common = {
     bundle: true,
@@ -30,19 +30,42 @@ export async function build() {
     logLevel: "info",
   };
 
+  const gatewayOut = path.join(dist, "gateway", "gateway.cjs");
+  const nodeOut = path.join(dist, "node", "node.cjs");
+
   await esbuild.build({
     ...common,
-    entryPoints: [path.join(repoRoot, "hub/src/index.ts")],
-    outfile: path.join(dist, "hub/hub.cjs"),
+    entryPoints: [path.join(repoRoot, "gateway/src/index.ts")],
+    outfile: gatewayOut,
     external: ["better-sqlite3"],
   });
 
   await esbuild.build({
     ...common,
-    entryPoints: [path.join(repoRoot, "agent/src/index.ts")],
-    outfile: path.join(dist, "agent/agent.cjs"),
+    entryPoints: [path.join(repoRoot, "node/src/index.ts")],
+    outfile: nodeOut,
     external: ["winax"],
   });
+
+  // Legacy aliases = thin shims (una implementación, varios entrypoints).
+  writeFileSync(
+    path.join(dist, "gateway", "hub.cjs"),
+    '"use strict";\nrequire("./gateway.cjs");\n',
+  );
+  writeFileSync(
+    path.join(dist, "node", "agent.cjs"),
+    '"use strict";\nrequire("./node.cjs");\n',
+  );
+  mkdirSync(path.join(dist, "hub"), { recursive: true });
+  mkdirSync(path.join(dist, "agent"), { recursive: true });
+  writeFileSync(
+    path.join(dist, "hub", "hub.cjs"),
+    '"use strict";\nrequire("../gateway/gateway.cjs");\n',
+  );
+  writeFileSync(
+    path.join(dist, "agent", "agent.cjs"),
+    '"use strict";\nrequire("../node/node.cjs");\n',
+  );
 }
 
 const isMain = process.argv[1] === fileURLToPath(import.meta.url);

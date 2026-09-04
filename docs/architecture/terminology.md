@@ -45,8 +45,9 @@ No se introducen sinónimos extra ni abstracciones “por si acaso”.
 
 | Término | Significado |
 |---------|-------------|
-| **Agent** | Actor lógico. Hoy: una `AgentDefinition` en memoria (prompt, model, toolPolicy), sin `agentId` persistente. |
-| **Agent Runtime** | Motor común. Código: `hub/src/agent/runtime.ts`. Recibe `AgentDefinition`. |
+| **Agent** | Actor lógico. `AgentDefinition` (`id`, name, prompt, model, toolPolicy, skills?, …). ≠ proceso; ≠ `agentId` de instalación. Ver PHASE 55–56. |
+| **Skill** | Conocimiento/instrucciones reutilizables (`SkillDefinition`). No ejecuta Tools ni concede permisos. PHASE 56. |
+| **Agent Runtime** | Motor común. Código: `gateway/src/agents/runtime.ts`. Recibe `AgentDefinition` (+ Skills resueltas). |
 | **Tool** | Acción invocable por un Agent. Concepto canónico. |
 | **Tool catalog** / **Tool set** | Conjunto de Tools disponibles en un momento dado. No es una clase ni un registry de plataforma. |
 | **MCP** | Protocolo para descubrir e invocar Tools. |
@@ -61,15 +62,16 @@ No se introducen sinónimos extra ni abstracciones “por si acaso”.
 | **Node** | Entorno de ejecución (máquina/dispositivo) que hospeda MCP Servers y Tools. Hoy: el proceso `agent/` es el **Local Node** implícito. |
 | **Agent Platform** | El producto completo (repo, runtime, clientes). |
 
-**Prohibido como concepto arquitectónico independiente:** Capability, CapabilityRegistry, CapabilityManager, CapabilityProvider, CapabilityCatalog, ToolLookup.
+**Prohibido como capa excesiva:** managers/catalogs de capabilities y ToolLookup/NodeRegistry. Usar `CapabilityIndex` mínimo (PHASE 63).
+**Capability (PHASE 63/64):** identidad lógica de operación (`filesystem.read`). Distinta de ToolImplementation, ExecutionTarget y MCP. Ejecución: `CapabilityExecutor` (PHASE 64). Ver `PHASE_64_DESIGN.md`.
 
-**Single Node** es una *topología* de despliegue (una máquina: Gateway + Agent Runtime + Local Node + MCP). Comando: `npm run hub` / `npm run dev`. Distributed es la misma arquitectura con varios Nodes; **no implementado**. Detalle: [`phase7-single-node.md`](./phase7-single-node.md).
+**Single Node** es una *topología* de despliegue válida (Gateway + Agent Runtime + Local Node + MCP), **no** la arquitectura canónica exclusiva. Comando: `npm run hub` / `npm run dev`. Multi-Node es representable vía ExecutionTarget; routing inteligente **no implementado**. Detalle: [`phase7-single-node.md`](./phase7-single-node.md).
 
 ## Código actual (nombres históricos, no el modelo de plataforma)
 
 | En código | Cómo documentarlo |
 |-----------|-------------------|
-| `AgentDefinition` | Configuración lógica del Agent (`hub/src/agent/definition.ts`). No ejecuta. |
+| `AgentDefinition` | Configuración lógica del Agent (`hub/src/agents/definition.ts`). No ejecuta. |
 | `GatewayConfig` | Infraestructura del Gateway (`hub/src/config.ts`): puerto, token, SQLite, API key, maxTokens. |
 | `NodeConfig` | Infraestructura del Local Node (`agent/src/config.ts`): `filesystem.root`. |
 | `WorkspaceStore` | Puerto de persistencia de Workspace. Runtime no lo importa. |
@@ -78,30 +80,34 @@ No se introducen sinónimos extra ni abstracciones “por si acaso”.
 | `RemoteAgentTool` | Adapter actual: `AgentTool.execute` que llama al MCP Adapter. En producción es el único camino. |
 | `AgentRuntimeTools` | Puerto de invocación que el Runtime usa (get/list). Implementado por `ToolRegistry`. No es ToolLookup. |
 | `ConfirmationPort` | Contrato del Agent Runtime: `wait(request)`. Sin transporte. |
-| `ConfirmationWaiter` | Implementación del Gateway (`http/confirmation-waiter.ts`): pending, timeout, binding. |
+| `ConfirmationWaiter` | Implementación del Gateway (`sessions/confirmation-waiter.ts`): pending, timeout, binding. |
 | `LocalAgent` / `startLocalAgent` / `attachLocalAgent` | Lifecycle del **Local Node** / MCP Server. Nombre histórico; no es un Agent lógico. |
 | `AgentConfig` (paquete `agent/`) | Config de infraestructura del Node (`filesystem.root`), no definición de Agent. |
 
 El Agent Runtime **no** ejecuta Tools de negocio en su proceso. Descubre e invoca vía MCP (`RemoteAgentTool`). `AgentTool.execute` en el Runtime es el puerto interno; en producción siempre acaba en el MCP Adapter.
 
-## Mapa físico actual (no rename)
+## Mapa físico (PHASE 53)
 
 | En disco | En arquitectura |
 |----------|-----------------|
-| `hub/` | Implementación actual del **Gateway**. Aloja el Agent Runtime y el MCP Client en el mismo proceso. Eso es aceptable. |
-| `hub/src/agent/runtime.ts` | **Agent Runtime** |
-| `agent/` | Precursor del **Local Node** + un **MCP Server** in-process. No es un Agent (no razona). |
-| `packages/protocol/` | Contrato WS clientes ↔ Gateway (el documento del protocolo aún dice Hub) |
+| `gateway/` | **Gateway** (Agents, Tools/MCP, Memory, HTTP/WS, Pairing) |
+| `gateway/src/agents/runtime.ts` | **Agent Runtime** (módulo) |
+| `node/` | **Node** + MCP Server + Native Tools |
+| `hub.cjs` / `@mxideass/hub` / `HUB_TOKEN` | **LEGACY** aliases del Gateway / install credential |
+| `agent.cjs` / `@mxideass/agent` | **LEGACY** aliases del Node |
 
-No hay carpeta `node/` a propósito. No hay `nodeId`, heartbeat ni fleet.
+Comando: `npm run gateway` / `npm run hub` (alias) / `npm run dev`.
+Detalle: [`phase53-gateway-agents-tools-node.md`](./phase53-gateway-agents-tools-node.md).  
+Modelo Agent PHASE 55: [`phase55-agent-model.md`](./phase55-agent-model.md).  
+Skills PHASE 56: [`phase56-skills-capabilities.md`](./phase56-skills-capabilities.md).
 
 ## Colisión de la palabra Gateway
 
 | Nombre | Qué es |
 |--------|--------|
-| **Platform Gateway** | Componente de Agent Platform. Hoy: proceso/`hub/`. |
+| **Platform Gateway** | Componente de Agent Platform. Hoy: proceso/`gateway/`. |
 | **OpenClaw Gateway** | Backend **externo y opcional**. Cliente Android en `mobile/android/.../gateway/`. No fusionar. |
-| **`attachGateway`** | Función en `hub/src/http/ws.ts`: transporte WebSocket. No es el componente Gateway. Deuda de nomenclatura. |
+| **`attachGateway`** | Función en `gateway/src/ws/index.ts`: transporte WebSocket. Deuda de nomenclatura. |
 
 ## Agent vs Agent Runtime
 
@@ -124,27 +130,64 @@ Un Agent **no** es un MCP Server. Un Agent puede consumir MCP, exponer MCP, o am
 | Agent ≠ Agent Runtime | El Runtime es el motor común; el Agent es el actor configurado. |
 | Agent ≠ MCP Server | El Agent razona; el MCP Server provee Tools. |
 | MCP ≠ A2A | MCP es Agent → Tool. A2A es Agent → Agent (no implementado). |
-| Tool ≠ Capability | Tool es el concepto canónico. Capability está cancelado. |
+| Tool ≠ Capability | Capability = identidad lógica; Tool Implementation = ejecución concreta (PHASE 63). |
+| Capability ≠ Node | ExecutionTarget puede ser Node u otro; Capability no lleva nodeId. |
+| Capability ≠ MCP | MCP es protocol/integration; puede proveer Tool Implementations. |
+| native ≠ Gateway | ImplementationKind native puede residir en Gateway o en cualquier Node. |
+| MCP ≠ Node | Node es ExecutionTarget; MCP es protocol/transport de integración. |
+| remote ≠ transport | `remote` (target o kind) no implica HTTP ni MCP. |
+| ExecutionTarget ⊄ Node | Todo Node es un target posible; no todo target es un Node. |
 | Node ≠ Agent | El Node es infraestructura; no razona. El proceso `agent/` es Local Node + MCP Server. |
 | Workspace ≠ Session | Session es conexión/cliente; Workspace es trabajo persistente. |
 | Workspace ≠ Conversation | Conversation es el diálogo humano. |
 
-## Tool (canónico) — no Capability
+## Tool y Capability (PHASE 63 / 63.1)
 
-Una Tool es una acción. Un MCP Server puede proporcionar muchas Tools. Un Agent puede consumir Tools de múltiples MCP Servers.
+Una **Capability** es una operación lógica (`office.excel.write`). Una **Tool Implementation**
+(`implementationKind`: native | mcp | remote) la ejecuta en un **ExecutionTarget**;
+el **Transport** describe cómo el Gateway alcanza ese target.
+
+`enabledTools` / keys de `toolPolicy` = CapabilityIds (nombre histórico retained).
+
+Matriz canónica (PHASE 63.1):
+
+| Dimension       | Answers          | Example              |
+| --------------- | ---------------- | -------------------- |
+| Capability      | WHAT             | `office.excel.write` |
+| Implementation  | HOW implemented  | `native`             |
+| ExecutionTarget | WHERE            | `node-b`             |
+| Transport       | HOW reached      | `MCP/stdio`          |
+| Credential      | WITH WHAT secret | credential reference |
+| Artifact        | managed output   | `artifactId`         |
+
+```text
+native ≠ Gateway · MCP ≠ Node · remote ≠ transport · Capability ≠ execution target
+```
 
 ```text
                     Agent Runtime
                            │
-                      MCP Adapter
+                      Capability
                            │
-                       MCP Client
-                           │ MCP
+                   CapabilityIndex.resolve
+                           │
+                   Tool Implementation
+                           │
+                    ExecutionTarget
+                           │
+                      Transport (hoy: MCP/stdio al Node local)
+                           │
                            v
-                      MCP Server
-                           │
-                         Tools
+                      Native / MCP / remote tools
 ```
+
+Topology actual:
+
+```text
+Gateway (Agent Runtime / coordinación) --stdio--> node-local --MCP--> Native Tools
+```
+
+Gateway **no** es Universal Tool Host. Ver `PHASE_63_1_DESIGN.md`.
 
 A2A (no implementado):
 

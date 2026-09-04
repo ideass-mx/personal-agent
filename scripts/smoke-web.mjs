@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const require = createRequire(path.join(repoRoot, "hub/package.json"));
+const require = createRequire(path.join(repoRoot, "gateway/package.json"));
 const { WebSocketServer } = require("ws");
 const WebSocket = globalThis.WebSocket;
 

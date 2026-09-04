@@ -20,7 +20,7 @@
 
 **Contexto nuestro (código actual + docs de producto):**
 
-- Runtime: `hub/src/agent/runtime.ts` — LLM → tool_call → `ToolRegistry` → `execute` → tool_result → LLM
+- Runtime: `hub/src/agents/runtime.ts` — LLM → tool_call → `ToolRegistry` → `execute` → tool_result → LLM
 - Tools: `AgentTool` + `ToolExecutionMode` (`automatic` | `confirm`) en `hub/src/tools/`
 - Arquitectura de producto: `docs/architecture.md` — Hub + Agent vía MCP
 - Protocolo: `packages/protocol/PROTOCOL.md` — reserva `confirm_*` y `agent_hello` (Fase 4)

@@ -77,4 +77,17 @@ class HubChatConnection @Inject constructor(
         token: String,
         deviceName: String,
     ): Result<Long> = hubClient.probe(address, token, deviceName)
+
+    override suspend fun pairFromQr(
+        endpoint: String,
+        pairingSessionId: String,
+        pairingSecret: String,
+        deviceName: String,
+    ): Result<String> =
+        hubClient.completePairingFromQr(
+            endpoint = endpoint,
+            pairingSessionId = pairingSessionId,
+            pairingSecret = pairingSecret,
+            deviceName = deviceName,
+        )
 }

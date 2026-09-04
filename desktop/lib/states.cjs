@@ -3,6 +3,7 @@
 /** Estados de producto del Shell (sin falsa precisión de liveness mid-run). */
 const AgentUiState = {
   NOT_CONFIGURED: "NOT_CONFIGURED",
+  WAITING_NETWORK: "WAITING_NETWORK",
   STARTING: "STARTING",
   READY: "READY",
   DEGRADED: "DEGRADED",
@@ -15,6 +16,8 @@ function labelForState(state) {
   switch (state) {
     case AgentUiState.NOT_CONFIGURED:
       return "Sin configurar";
+    case AgentUiState.WAITING_NETWORK:
+      return "Red segura pendiente";
     case AgentUiState.STARTING:
       return "Arrancando…";
     case AgentUiState.READY:
@@ -34,7 +37,12 @@ function labelForState(state) {
 
 /**
  * Mapea evidencia observable a estado UI.
- * No inventa liveness de Node mid-run.
+ * networkReady=false ⇒ no READY (Tailscale es prerrequisito del Runtime operable).
+ *
+ * nodeStatus del Gateway (/health):
+ *   READY → UI READY (si healthOk)
+ *   DISCONNECTED | DEGRADED → UI DEGRADED (Gateway vivo, Node caído)
+ *   STOPPING → STOPPED
  */
 function mapAgentState({
   workspaceConfigured,
@@ -43,12 +51,37 @@ function mapAgentState({
   healthOk,
   lastError,
   androidConnected,
+  networkReady,
+  nodeStatus,
+  agentReady,
 }) {
+  if (networkReady === false) return AgentUiState.WAITING_NETWORK;
   if (!workspaceConfigured) return AgentUiState.NOT_CONFIGURED;
   if (lastError && !processRunning) return AgentUiState.ERROR;
   if (!processRunning) return AgentUiState.STOPPED;
   if (processRunning && !bootReady) return AgentUiState.STARTING;
-  if (bootReady && healthOk) {
+
+  if (nodeStatus === "STOPPING") return AgentUiState.STOPPED;
+  if (
+    processRunning &&
+    bootReady &&
+    (nodeStatus === "DISCONNECTED" || nodeStatus === "DEGRADED")
+  ) {
+    return AgentUiState.DEGRADED;
+  }
+
+  // agentReady false with explicit READY expectation after health probe
+  if (
+    processRunning &&
+    bootReady &&
+    agentReady === false &&
+    (nodeStatus === "READY" || nodeStatus === "UNKNOWN")
+  ) {
+    // Transient UNKNOWN before first probe: stay STARTING; false+READY is inconsistent → DEGRADED
+    if (nodeStatus === "READY") return AgentUiState.DEGRADED;
+  }
+
+  if (bootReady && healthOk && agentReady !== false) {
     if (androidConnected === false) return AgentUiState.READY;
     return AgentUiState.READY;
   }

@@ -89,6 +89,14 @@ class RoutingChatConnection @Inject constructor(
         deviceName: String,
     ): Result<Long> = hub.probe(address, token, deviceName)
 
+    override suspend fun pairFromQr(
+        endpoint: String,
+        pairingSessionId: String,
+        pairingSecret: String,
+        deviceName: String,
+    ): Result<String> =
+        hub.pairFromQr(endpoint, pairingSessionId, pairingSecret, deviceName)
+
     private fun switchTo(next: ChatConnection) {
         bridgeJobs.forEach { it.cancel() }
         active = next

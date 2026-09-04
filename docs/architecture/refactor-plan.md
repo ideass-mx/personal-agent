@@ -55,8 +55,8 @@ OpenClaw **no** es un servidor de este repo: el cliente vive en `mobile/android/
 **Sigue siendo cierto:**
 
 - Dos procesos Node (Hub padre, Agent hijo) + MCP stdio.
-- Agent Runtime en `hub/src/agent/runtime.ts`; no importa Hono, `ws`, SQLite, MCP SDK ni Excel.
-- Confirmación fail-closed en el Hub; policy deny-by-default (`hub/src/tools/tool-policy.ts`).
+- Agent Runtime en `hub/src/agents/runtime.ts`; no importa Hono, `ws`, SQLite, MCP SDK ni Excel.
+- Confirmación fail-closed en el Hub; policy deny-by-default (`hub/src/tools/policy.ts`).
 - Tools de OS/Excel y `math.*` detrás de MCP en el proceso `agent/`; `office.excel.write` es extensión + policy `confirm`.
 - Sin calculator in-process en el Gateway.
 - Un Agent Runtime; no hay definiciones Book/Research.
@@ -180,7 +180,7 @@ Modelo de Tools (canónico):
 
 **Definición:** motor común de todos los Agents. Razonamiento, turnos, contexto, selección de Tools y coordinación.
 
-**Hoy:** `createAgentRuntime` en `hub/src/agent/runtime.ts`.
+**Hoy:** `createAgentRuntime` en `hub/src/agents/runtime.ts`.
 
 **Responsabilidades:** input de turno, historial vía `TurnMemory`, LLM stream, tool calls, `ConfirmationPort`, eventos (`text_delta`, `confirm_request`, `done`, `error`).
 
@@ -357,7 +357,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 
 **PHASE 2.2 (MCP-first, hecho):**
 
-- `AgentRuntimeTools` en `hub/src/agent/runtime.ts` (el Runtime no importa `registry.ts`)
+- `AgentRuntimeTools` en `hub/src/agents/runtime.ts` (el Runtime no importa `registry.ts`)
 - SDK MCP solo en `mcp-stdio.ts` + `mcp-executor.ts`; `discover.ts` sin SDK
 - Tests: `hub/tests/architecture/mcp-execution-boundary.test.ts`
 - Comentarios en `agent/src`: Local Node / MCP Server, no Agent lógico
@@ -365,8 +365,8 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 
 **PHASE 2.3 (hecho):**
 
-- Contrato en `hub/src/agent/confirmation.ts` (`ConfirmationPort`)
-- `createConfirmationWaiter` en `hub/src/http/confirmation-waiter.ts`
+- Contrato en `hub/src/agents/confirmation.ts` (`ConfirmationPort`)
+- `createConfirmationWaiter` en `hub/src/sessions/confirmation-waiter.ts`
 - Tests: `hub/tests/architecture/confirmation-boundary.test.ts`
 - **No tocado:** protocolo, timeout 60s, códigos de error, Android
 
@@ -397,7 +397,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 
 **PHASE 6 (hecho):**
 
-- `hub/src/agent/definition.ts` + Runtime consume prompt/model
+- `hub/src/agents/definition.ts` + Runtime consume prompt/model
 - Tests: `hub/tests/architecture/phase6-agent-definition.test.ts`
 - Sin AgentRegistry, sin agentId persistente
 
@@ -413,7 +413,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 - `NodeConfig` / `loadNodeConfig` (alias `AgentConfig`)
 - Tests: `hub/tests/architecture/phase8-agent-node-configuration.test.ts`
 
-**Fases posteriores (lista de impacto, no trabajo):** `hub/src/index.ts`, `hub/src/http/*`, `hub/src/agent/*`, `hub/src/runtime/*`, `hub/src/tools/*`, `agent/src/lifecycle.ts`, `scripts/*`, cliente Hub Android (`network/`), no el paquete OpenClaw `gateway/` salvo docs que desambigüen.
+**Fases posteriores (lista de impacto, no trabajo):** `hub/src/index.ts`, `hub/src/http/*`, `hub/src/agents/*`, `hub/src/runtime/*`, `hub/src/tools/*`, `agent/src/lifecycle.ts`, `scripts/*`, cliente Hub Android (`network/`), no el paquete OpenClaw `gateway/` salvo docs que desambigüen.
 
 ---
 
@@ -475,7 +475,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 | **Agent Platform** | Producto completo (repo + runtime + clientes). |
 | **Gateway** | Clientes, identidad, sesiones, policy, routing, lifecycle, confirmaciones, coordinación. Hoy: mayor parte de `hub/`. |
 | **Agent** | Actor que razona, decide y ejecuta. Hoy: uno solo, implícito. |
-| **Agent Runtime** | Motor único (`hub/src/agent/runtime.ts`). |
+| **Agent Runtime** | Motor único (`hub/src/agents/runtime.ts`). |
 | **Tool** | Acción invocable. Canónico. |
 | **Tool catalog / tool set** | Conjunto de Tools disponibles. No una clase nueva. |
 | **MCP Adapter** | Capa que conoce el SDK/transporte. Hoy: `mcp-stdio.ts` + `mcp-executor.ts`. |

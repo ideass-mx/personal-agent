@@ -1,11 +1,13 @@
 /**
- * Validación automática del layout Windows (PHASE 51) — NO es field test.
+ * Validación automática del layout Windows (PHASE 51 + 64.1) — NO es field test.
  * Comprueba artefactos de package-windows sin compilar Inno ni instalar en Windows.
+ * PHASE 64.1: native *.node must be PE (fail-closed).
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageWindows } from "./package-windows.mjs";
+import { validateWindowsNativeModules } from "./windows-native-modules.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -18,7 +20,9 @@ const result = await packageWindows();
 const root = result.outRoot;
 
 const required = [
+  "gateway/gateway.cjs",
   "gateway/hub.cjs",
+  "node/node.cjs",
   "agent/agent.cjs",
   "console/index.html",
   "web/dist/index.html",
@@ -55,7 +59,7 @@ if (manifest.installerOutput !== "PersonalAgent-Setup.exe") {
 }
 
 const iss = readFileSync(
-  path.join(repoRoot, "installer/windows/personal-agent.iss"),
+  path.join(repoRoot, "installer", "windows", "personal-agent.iss"),
   "utf8",
 );
 if (!iss.includes("PersonalAgent-Setup")) fail("Inno OutputBaseFilename");
@@ -100,5 +104,14 @@ if (requireRuntimes && (!hasNode || !hasElectron || !result.runtimeReady)) {
     `REQUIRED Windows runtimes missing (node.exe=${hasNode} electron.exe=${hasElectron}). Set FETCH_NODE_WIN=1 FETCH_ELECTRON_WIN=1`,
   );
 }
+
+// Defense in depth: packageWindows already asserted; re-scan for clear CI log.
+const natives = validateWindowsNativeModules(root);
+if (!natives.ok) {
+  fail(`native modules incompatible: ${natives.errors.join("; ")}`);
+}
+process.stdout.write(
+  `[validate-windows-package] nativeModules=${natives.modules.length} PE validation PASS\n`,
+);
 
 process.stdout.write("[validate-windows-package] PASS\n");

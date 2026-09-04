@@ -17,7 +17,7 @@ Clientes (Android Hub protocol | Agent Console Web | OpenClaw opcional | otros)
 │  SQLite historial (Conversation)         │
 │  ┌────────────────────────────────────┐  │
 │  │  AGENT RUNTIME                     │  │
-│  │  hub/src/agent/runtime.ts          │  │
+│  │  hub/src/agents/runtime.ts          │  │
 │  └────────────────────────────────────┘  │
 └────────────────────┬─────────────────────┘
                      │ MCP Client → stdio
@@ -65,8 +65,8 @@ Acoplamiento residual:
 
 - `AgentRuntimeTools` / `AgentTool` (el Runtime no importa la clase `ToolRegistry` ni el SDK MCP).
 - En producción, `execute` es siempre RemoteAgentTool → MCP Adapter. No hay calculator in-process.
-- `ConfirmationPort` (`hub/src/agent/confirmation.ts`): contrato del Runtime.
-- `ConfirmationWaiter` (`hub/src/http/confirmation-waiter.ts`): Gateway; `ws.ts` traduce frames.
+- `ConfirmationPort` (`hub/src/agents/confirmation.ts`): contrato del Runtime.
+- `ConfirmationWaiter` (`hub/src/sessions/confirmation-waiter.ts`): Gateway; `ws.ts` traduce frames.
 - `TurnMemory` (PHASE 2.1): contrato en `memory/types.ts`; adapter `SqliteTurnMemory` en `sqlite-turn-memory.ts`. El Runtime no importa SQLite.
 
 No crear runtimes por Agent (`BookAgentRuntime`, etc.).
@@ -140,6 +140,8 @@ PHASE 49: Agent Console product definition **READY FOR IMPLEMENTATION** — Web 
 PHASE 50: Agent Console Web MVP — cliente Vite/React en `web/`; Chat/HITL/Overview; Hub sirve static same-origin (R-49-01); sin Runtime/MCP/policy en frontend; `desktop/` conservado. Ver [`phase50-agent-console-web-implementation.md`](./phase50-agent-console-web-implementation.md).
 
 PHASE 51: Windows installer + Agent Console integration — package con `console/` + Electron/Node embebidos (sin npm en target); first-run → AGENT READY → Open Console; tray infra; **Windows/Android field = NOT EXECUTED**. Ver [`phase51-windows-installer-and-console-integration.md`](./phase51-windows-installer-and-console-integration.md).
+PHASE 51B: Onboarding con Tailscale como prerrequisito del Runtime operable; máquina de estados persistente; identidad/pairing preservados en UPDATE/REPAIR/RECOVERY; **sin Windows Service**; field = NOT EXECUTED. Ver [`phase51b-onboarding-secure-network.md`](./phase51b-onboarding-secure-network.md).
+PHASE 53: Nomenclatura canónica Gateway / Agents / Tools / Node (`hub/`→`gateway/`, `agent/`→`node/`); MCP bajo `tools/mcp`; field = NOT EXECUTED. Ver [`phase53-gateway-agents-tools-node.md`](./phase53-gateway-agents-tools-node.md).
 
 CI packaging: GitHub Actions `windows-latest` compila `PersonalAgent-Setup.exe` (artifact; sin field test). Ver [`windows-installer-ci.md`](./windows-installer-ci.md).
 

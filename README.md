@@ -30,22 +30,22 @@ Detalle: [`docs/architecture/phase48-windows-installer-and-product-shell-impleme
 #### 1. Configura la PC
 
 ```bash
-cp hub/.env.example hub/.env
+cp gateway/.env.example gateway/.env
 ```
 
 Edita al menos:
 
 - `ANTHROPIC_API_KEY`
-- `HUB_TOKEN` (elige un secreto largo)
-- `AGENT_FILESYSTEM_ROOT` (recomendado: carpeta que el agente podrá leer/escribir)
+- `HUB_TOKEN` (elige un secreto largo; legacy installation credential)
+- `AGENT_FILESYSTEM_ROOT` (recomendado: carpeta que el Node podrá leer/escribir)
 
 ```bash
 npm run install:all
 npm run dev
 ```
 
-Deberías ver `[hub] READY` en la terminal (`http://localhost:8787`, `ws://localhost:8787/ws`).  
-Con `AGENT_FILESYSTEM_ROOT` definido, el boot lo reenvía al Local Node (`AGENT_FILESYSTEM_ROOT=configured` en stderr).
+Deberías ver `[gateway] READY` (y legacy `[hub] READY`) en la terminal (`http://localhost:8787`, `ws://localhost:8787/ws`).  
+Con `AGENT_FILESYSTEM_ROOT` definido, el boot lo reenvía al Node (`AGENT_FILESYSTEM_ROOT=configured` en stderr).
 
 #### 2. Conecta Android
 
@@ -83,7 +83,7 @@ db/               Migraciones SQLite
 docs/             Arquitectura y runbook
 ```
 
-`hub/src/agent/` es el Agent Runtime del Gateway; no es el programa `agent/`.
+`hub/src/agents/` es el Agent Runtime del Gateway; no es el programa `agent/`.
 `desktop/` no es un Runtime: solo observa/controla el Gateway.
 
 ## Doctrina (resumen)

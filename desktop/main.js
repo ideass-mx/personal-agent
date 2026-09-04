@@ -1,5 +1,9 @@
 "use strict";
 
+/**
+ * Desktop shell — onboarding state machine + Tailscale gate + Hub supervisor.
+ * Inno Setup only copies binaries; this process owns post-install onboarding.
+ */
 const {
   app,
   BrowserWindow,
@@ -21,6 +25,35 @@ const {
   sanitizeDiagnostics,
 } = require("./lib/diagnostics.cjs");
 const { createAgentSupervisor } = require("./lib/agent-process.cjs");
+const {
+  OnboardingState,
+  loadOnboarding,
+  setOnboardingState,
+  setOnboardingError,
+  migrateLegacyIfNeeded,
+  canStartAgentRuntime,
+} = require("./lib/onboarding.cjs");
+const { runPreflight } = require("./lib/preflight.cjs");
+const {
+  probeTailscale,
+  startTailscaleLogin,
+  openTailscaleDownload,
+  canSkipTailscale,
+} = require("./lib/tailscale.cjs");
+const {
+  ensureAgentId,
+  getAgentId,
+  hasPersistedInstallCredential,
+  hasPersistedPairingAuth,
+} = require("./lib/agent-identity.cjs");
+const {
+  ensurePairingCredentials,
+  preserveExistingPairing,
+  getPairingStatus,
+  getInstallAuthBearer,
+} = require("./lib/pairing.cjs");
+const { InstallScenario } = require("./lib/install-scenario.cjs");
+const { logOnboarding } = require("./lib/onboarding-log.cjs");
 
 function resolveProductRoot() {
   if (process.env.PERSONAL_AGENT_PRODUCT_ROOT) {
@@ -28,6 +61,7 @@ function resolveProductRoot() {
   }
   const beside = path.resolve(__dirname, "..");
   if (
+    fs.existsSync(path.join(beside, "gateway", "gateway.cjs")) ||
     fs.existsSync(path.join(beside, "gateway", "hub.cjs")) ||
     fs.existsSync(path.join(beside, "hub", "hub.cjs"))
   ) {
@@ -40,11 +74,17 @@ function resolveProductRoot() {
     "windows",
     "PersonalAgent",
   );
-  if (fs.existsSync(path.join(distWin, "gateway", "hub.cjs"))) {
+  if (
+    fs.existsSync(path.join(distWin, "gateway", "gateway.cjs")) ||
+    fs.existsSync(path.join(distWin, "gateway", "hub.cjs"))
+  ) {
     return distWin;
   }
   const dist = path.resolve(__dirname, "..", "dist");
-  if (fs.existsSync(path.join(dist, "hub", "hub.cjs"))) {
+  if (
+    fs.existsSync(path.join(dist, "gateway", "gateway.cjs")) ||
+    fs.existsSync(path.join(dist, "hub", "hub.cjs"))
+  ) {
     return dist;
   }
   return beside;
@@ -78,15 +118,22 @@ function gatewayEnv() {
   const token = config.getHubToken();
   const apiKey = config.getAnthropicApiKey();
   const data = config.ensureDirs();
+  const hostId = getAgentId();
   const env = {
     HUB_TOKEN: token,
     HUB_PORT: String(cfg.hubPort || 8787),
   };
+  if (hostId) {
+    env.PERSONAL_AGENT_ID = hostId;
+    env.PERSONAL_AGENT_HOST_ID = hostId;
+  }
   if (cfg.workspaceRoot) {
     env.AGENT_FILESYSTEM_ROOT = cfg.workspaceRoot;
   }
   if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
   env.PERSONAL_AGENT_DB = path.join(data.dbDir, "personal-agent.db");
+  env.PERSONAL_AGENT_OBJECTS_DIR = data.objectsDir;
+  env.PERSONAL_AGENT_CREDENTIALS_DIR = data.credentialsDir;
   const consoleDir = resolveConsoleStaticDir(productRoot);
   if (consoleDir) {
     env.AGENT_CONSOLE_STATIC = consoleDir;
@@ -105,7 +152,101 @@ let tray = null;
 let supervisor = null;
 let productRoot = null;
 let quitting = false;
-let lastHealth = { ok: false, agentReady: false, agentTools: 0, devices: [] };
+let lastHealth = {
+  ok: false,
+  agentReady: false,
+  agentTools: 0,
+  devices: [],
+  nodeStatus: "UNKNOWN",
+};
+/** Trusted devices known via Gateway HTTP (not install HUB_TOKEN). */
+let lastTrustedDeviceCount = 0;
+let lastNetworkReady = false;
+let lastPreflight = null;
+/** @type {null | { substatus: string, sessionId?: string, uri?: string, qrDataUrl?: string, expiresAt?: string, deviceName?: string, deviceId?: string }} */
+let lastPairingUi = null;
+
+function hubHttpBase() {
+  const cfg = config.loadConfig();
+  return `http://127.0.0.1:${cfg.hubPort || 8787}`;
+}
+
+async function hubPairingFetch(pathname, options = {}) {
+  const token = getInstallAuthBearer();
+  const res = await fetch(`${hubHttpBase()}${pathname}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  const json = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, json };
+}
+
+/**
+ * PHASE 58 — HEAD /artifacts/:id (install Bearer). No expone paths de storage.
+ */
+async function hubArtifactHead(artifactId) {
+  const id = encodeURIComponent(String(artifactId || "").trim());
+  const token = getInstallAuthBearer();
+  const res = await fetch(`${hubHttpBase()}/artifacts/${id}`, {
+    method: "HEAD",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return {
+    ok: res.ok,
+    status: res.status,
+    contentType: res.headers.get("content-type"),
+    contentLength: res.headers.get("content-length"),
+    contentDisposition: res.headers.get("content-disposition"),
+  };
+}
+
+/**
+ * PHASE 58 — GET streaming a archivo local (install Bearer).
+ */
+async function hubArtifactDownload(artifactId, destPath) {
+  const id = encodeURIComponent(String(artifactId || "").trim());
+  const token = getInstallAuthBearer();
+  const res = await fetch(`${hubHttpBase()}/artifacts/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    return {
+      ok: false,
+      status: res.status,
+      error: errJson?.error?.code || "download_failed",
+      message: errJson?.error?.message || `HTTP ${res.status}`,
+    };
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  fs.writeFileSync(destPath, buf);
+  return {
+    ok: true,
+    status: res.status,
+    bytes: buf.length,
+    destPath,
+    contentType: res.headers.get("content-type"),
+  };
+}
+
+function preferredPairingEndpoint() {
+  const cfg = config.loadConfig();
+  const port = cfg.hubPort || 8787;
+  const ts = probeTailscale({ isDevelopment: !app.isPackaged });
+  if (ts.ready && ts.ipv4) return `ws://${ts.ipv4}:${port}/ws`;
+  if (ts.ready && ts.selfDnsName) {
+    const host = String(ts.selfDnsName).replace(/\.$/, "");
+    return `ws://${host}:${port}/ws`;
+  }
+  const ips = lanAddresses();
+  if (ips[0]) return `ws://${ips[0]}:${port}/ws`;
+  return `ws://127.0.0.1:${port}/ws`;
+}
 
 function publishState() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -115,18 +256,23 @@ function publishState() {
 
 function getUiSnapshot() {
   const cfg = config.loadConfig();
+  const onboarding = loadOnboarding();
   const snap = supervisor?.snapshot() || {
     running: false,
     bootReady: false,
     lastError: null,
   };
+  const networkReady = lastNetworkReady;
   const state = mapAgentState({
     workspaceConfigured: Boolean(cfg.workspaceRoot && cfg.firstRunComplete),
     processRunning: snap.running,
     bootReady: snap.bootReady,
-    healthOk: snap.bootReady || lastHealth.ok,
+    healthOk: snap.bootReady && lastHealth.ok && lastHealth.agentReady !== false,
     lastError: snap.lastError,
     androidConnected: null,
+    networkReady,
+    nodeStatus: lastHealth.nodeStatus,
+    agentReady: lastHealth.agentReady,
   });
   return {
     state,
@@ -144,23 +290,89 @@ function getUiSnapshot() {
     consoleUrl: consoleUrl(),
     agentTools: lastHealth.agentTools,
     devices: lastHealth.devices || [],
+    nodeStatus: lastHealth.nodeStatus || "UNKNOWN",
+    onboarding,
+    networkReady,
+    agentHostId: getAgentId(),
+    agentId: getAgentId(),
+    /** @deprecated equiv. install credential — NOT trusted device */
+    pairingAuthPresent: hasPersistedInstallCredential(),
+    installCredentialPresent: hasPersistedInstallCredential(),
+    trustedDevicePresent: lastTrustedDeviceCount > 0,
+    pairingSubstatus: lastPairingUi?.substatus || null,
+    scenario: onboarding.scenario || lastPreflight?.scenario?.scenario || null,
+    preflight: lastPreflight,
+    needsOnboarding:
+      onboarding.state !== OnboardingState.READY ||
+      !cfg.firstRunComplete ||
+      !networkReady,
   };
 }
 
 async function refreshHealth() {
   const cfg = config.loadConfig();
   if (!supervisor?.isRunning()) {
-    lastHealth = { ok: false, agentReady: false, agentTools: 0, devices: [] };
+    lastHealth = {
+      ok: false,
+      agentReady: false,
+      agentTools: 0,
+      devices: [],
+      nodeStatus: "UNKNOWN",
+    };
     return lastHealth;
   }
   lastHealth = await supervisor.probeHealth(cfg.hubPort || 8787);
+  // Best-effort trusted-device count (install credential ≠ trusted device).
+  try {
+    const td = await hubPairingFetch("/v1/pairing/trusted-devices");
+    if (td.ok && Array.isArray(td.json?.devices)) {
+      lastTrustedDeviceCount = td.json.devices.filter(
+        (d) => d && d.status === "ACTIVE",
+      ).length;
+    }
+  } catch {
+    /* ignore */
+  }
   return lastHealth;
+}
+
+async function refreshNetwork() {
+  const ts = probeTailscale({
+    isDevelopment: !app.isPackaged,
+  });
+  lastNetworkReady = Boolean(ts.ready) && ts.phase === "READY";
+  return ts;
+}
+
+async function startAgentIfAllowed() {
+  const onboarding = loadOnboarding();
+  const ts = await refreshNetwork();
+  if (!ts.ready || ts.phase !== "READY") {
+    logOnboarding("AGENT_PROVISIONING", "blocked_network_not_ready", {
+      state: onboarding.state,
+      phase: ts.phase,
+    });
+    return {
+      ok: false,
+      error: "NETWORK_NOT_READY",
+      message:
+        "La red segura (Tailscale) debe estar READY antes de arrancar el Agent Runtime.",
+    };
+  }
+  if (!canStartAgentRuntime(onboarding, { networkReady: true })) {
+    return {
+      ok: false,
+      error: "ONBOARDING_STATE",
+      message: `Estado de onboarding no permite arranque: ${onboarding.state}`,
+    };
+  }
+  return supervisor.start();
 }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 560,
-    height: 780,
+    height: 820,
     show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -185,11 +397,15 @@ function buildTrayTemplate() {
       label: `Estado: ${snap.stateLabel}`,
       enabled: false,
     },
+    {
+      label: `Onboarding: ${snap.onboarding?.state || "—"}`,
+      enabled: false,
+    },
     { type: "separator" },
     {
       label: "Iniciar agente",
       click: async () => {
-        await supervisor.start();
+        await startAgentIfAllowed();
         await refreshHealth();
         publishState();
       },
@@ -205,7 +421,8 @@ function buildTrayTemplate() {
     {
       label: "Reiniciar agente",
       click: async () => {
-        await supervisor.restart();
+        await supervisor.stop();
+        await startAgentIfAllowed();
         await refreshHealth();
         publishState();
       },
@@ -264,6 +481,7 @@ function createTray() {
 async function copyDiagnosticsToClipboard() {
   const cfg = config.loadConfig();
   const snap = supervisor.snapshot();
+  const onboarding = loadOnboarding();
   const health = snap.running
     ? await supervisor.probeHealth(cfg.hubPort || 8787)
     : { ok: false, agentReady: false, agentTools: 0, devices: [] };
@@ -284,14 +502,106 @@ async function copyDiagnosticsToClipboard() {
       ? `${health.devices.length} device(s) in /health snapshot`
       : "check Android app (not tracked live on PC)",
   });
-  clipboard.writeText(sanitizeDiagnostics(report));
+  const extra = [
+    "",
+    `onboardingState=${onboarding.state}`,
+    `scenario=${onboarding.scenario || "—"}`,
+    `networkReady=${lastNetworkReady}`,
+    `agentHostIdSet=${Boolean(getAgentId())}`,
+    `pairingAuthSet=${hasPersistedPairingAuth()}`,
+    `tailscaleSkipActive=${canSkipTailscale({ isDevelopment: !app.isPackaged })}`,
+  ].join("\n");
+  clipboard.writeText(sanitizeDiagnostics(report + extra));
   return { ok: true, report };
+}
+
+function userErrorMessage(code) {
+  switch (code) {
+    case "TAILSCALE_NOT_INSTALLED":
+      return "Hay que instalar Tailscale para la red segura.";
+    case "TAILSCALE_AUTH_REQUIRED":
+      return "Inicia sesión en Tailscale y vuelve a comprobar.";
+    case "TAILSCALE_NOT_CONNECTED":
+      return "Tailscale está instalado pero no conectado.";
+    case "NETWORK_NOT_READY":
+      return "La red segura aún no está lista.";
+    case "NO_DOWNGRADE":
+      return "Hay una versión más nueva instalada. Este instalador no hará downgrade.";
+    case "AGENT_START_FAILED":
+      return "No se pudo iniciar el Agent Runtime.";
+    case "PAIRING_TIMEOUT":
+      return "Aún no hay un dispositivo Android emparejado.";
+    default:
+      return "Algo falló. Revisa Diagnóstico o reintenta.";
+  }
 }
 
 function wireIpc() {
   ipcMain.handle("get-state", async () => {
+    await refreshNetwork();
     await refreshHealth();
     return getUiSnapshot();
+  });
+
+  ipcMain.handle("run-preflight", async () => {
+    setOnboardingState(OnboardingState.PREFLIGHT);
+    const processHealthy = supervisor?.isRunning()
+      ? Boolean(supervisor.snapshot().bootReady || lastHealth.ok)
+      : null;
+    lastPreflight = await runPreflight({
+      productRoot,
+      onboardingState: loadOnboarding().state,
+      processHealthy,
+    });
+    const scenario = lastPreflight.scenario;
+    setOnboardingState(OnboardingState.PREFLIGHT, {
+      scenario: scenario.scenario,
+    });
+    if (scenario.scenario === InstallScenario.NO_DOWNGRADE) {
+      setOnboardingError("NO_DOWNGRADE", userErrorMessage("NO_DOWNGRADE"));
+    }
+    lastNetworkReady = lastPreflight.networkReady;
+    publishState();
+    return lastPreflight;
+  });
+
+  ipcMain.handle("get-tailscale-status", async () => {
+    const ts = await refreshNetwork();
+    publishState();
+    return ts;
+  });
+
+  ipcMain.handle("open-tailscale-download", () => {
+    setOnboardingState(OnboardingState.NETWORK_INSTALLING);
+    return openTailscaleDownload((url) => shell.openExternal(url));
+  });
+
+  ipcMain.handle("start-tailscale-login", () => {
+    setOnboardingState(OnboardingState.NETWORK_AUTHENTICATION);
+    const r = startTailscaleLogin();
+    if (!r.ok) {
+      setOnboardingError("TAILSCALE_AUTH_REQUIRED", userErrorMessage("TAILSCALE_AUTH_REQUIRED"));
+    }
+    publishState();
+    return r;
+  });
+
+  ipcMain.handle("verify-secure-network", async () => {
+    setOnboardingState(OnboardingState.NETWORK_VERIFYING);
+    const ts = await refreshNetwork();
+    if (!ts.ready || ts.phase !== "READY") {
+      const code = ts.error || "NETWORK_NOT_READY";
+      setOnboardingError(code, userErrorMessage(code));
+      publishState();
+      return { ok: false, tailscale: ts, message: userErrorMessage(code) };
+    }
+    setOnboardingState(OnboardingState.NETWORK_READY, {
+      networkReadyAt: new Date().toISOString(),
+      lastError: null,
+      lastErrorCode: null,
+    });
+    publishState();
+    return { ok: true, tailscale: ts };
   });
 
   ipcMain.handle("choose-workspace", async () => {
@@ -303,7 +613,7 @@ function wireIpc() {
     return result.filePaths[0];
   });
 
-  ipcMain.handle("complete-first-run", (_e, payload) => {
+  ipcMain.handle("complete-first-run", async (_e, payload) => {
     const workspaceRoot = String(payload?.workspaceRoot || "").trim();
     const apiKey = String(payload?.anthropicApiKey || "").trim();
     if (!workspaceRoot) return { ok: false, error: "workspace_required" };
@@ -315,38 +625,90 @@ function wireIpc() {
     } catch {
       return { ok: false, error: "workspace_inaccessible" };
     }
-    if (!apiKey) {
+    if (!apiKey && !config.getAnthropicApiKey()) {
       return { ok: false, error: "api_key_required" };
     }
-    config.setAnthropicApiKey(apiKey);
+
+    const onboarding = loadOnboarding();
+    const ts = await refreshNetwork();
+    if (!ts.ready || ts.phase !== "READY") {
+      return { ok: false, error: "NETWORK_NOT_READY" };
+    }
+    if (!canStartAgentRuntime(onboarding, { networkReady: true })) {
+      return { ok: false, error: "NETWORK_NOT_READY" };
+    }
+
+    setOnboardingState(OnboardingState.AGENT_PROVISIONING, {
+      lastError: null,
+      lastErrorCode: null,
+    });
+
+    // Preserve identity + pairing on UPDATE/REPAIR/RECOVERY
+    const identity = ensureAgentId();
+    preserveExistingPairing();
+    ensurePairingCredentials();
+    if (apiKey) config.setAnthropicApiKey(apiKey);
     const cfg = config.loadConfig();
     cfg.workspaceRoot = workspaceRoot;
     cfg.firstRunComplete = true;
     cfg.hubPort = Number(payload?.hubPort) || cfg.hubPort || 8787;
-    config.ensureHubToken();
     config.saveConfig(cfg);
-    return { ok: true, tokenMasked: config.maskToken(config.getHubToken()) };
+
+    logOnboarding("IDENTITY", identity.created ? "created" : "reused", {
+      created: identity.created,
+    });
+    logOnboarding("AGENT_PROVISIONING", "config_saved", {
+      identityCreated: identity.created,
+      pairing: getPairingStatus().present,
+    });
+
+    return {
+      ok: true,
+      tokenMasked: config.maskToken(config.getHubToken()),
+      agentHostId: identity.id,
+      identityCreated: identity.created,
+    };
   });
 
   ipcMain.handle("start-agent", async () => {
-    const r = await supervisor.start();
-    // Poll health briefly for READY UI
+    setOnboardingState(OnboardingState.AGENT_INITIALIZING);
+    const r = await startAgentIfAllowed();
+    if (!r.ok && !r.already) {
+      setOnboardingError(
+        r.error || "AGENT_START_FAILED",
+        r.message || userErrorMessage("AGENT_START_FAILED"),
+      );
+      publishState();
+      return r;
+    }
     for (let i = 0; i < 20; i++) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((x) => setTimeout(x, 500));
       await refreshHealth();
       if (supervisor.snapshot().bootReady || lastHealth.agentReady) break;
     }
+    if (supervisor.snapshot().bootReady || lastHealth.agentReady) {
+      setOnboardingState(OnboardingState.AGENT_READY, {
+        agentReadyAt: new Date().toISOString(),
+        lastError: null,
+        lastErrorCode: null,
+      });
+    } else {
+      setOnboardingError("AGENT_START_FAILED", userErrorMessage("AGENT_START_FAILED"));
+    }
     publishState();
-    return { ...r, health: lastHealth };
+    return { ...r, health: lastHealth, onboarding: loadOnboarding() };
   });
+
   ipcMain.handle("stop-agent", async () => {
     await supervisor.stop();
     await refreshHealth();
     publishState();
     return { ok: true };
   });
+
   ipcMain.handle("restart-agent", async () => {
-    const r = await supervisor.restart();
+    await supervisor.stop();
+    const r = await startAgentIfAllowed();
     for (let i = 0; i < 20; i++) {
       await new Promise((x) => setTimeout(x, 500));
       await refreshHealth();
@@ -355,6 +717,216 @@ function wireIpc() {
     publishState();
     return { ...r, health: lastHealth };
   });
+
+  ipcMain.handle("begin-pairing", async () => {
+    const ts = await refreshNetwork();
+    if (!ts.ready || ts.phase !== "READY") {
+      lastPairingUi = { substatus: "EXPIRED" };
+      return {
+        ok: false,
+        error: "NETWORK_NOT_READY",
+        message:
+          "Tailscale debe estar READY antes de crear una sesión de pairing. No se permite fallback LAN.",
+      };
+    }
+    const port = config.loadConfig().hubPort || 8787;
+    let pairingEndpoint;
+    if (ts.ipv4) pairingEndpoint = `ws://${ts.ipv4}:${port}/ws`;
+    else if (ts.selfDnsName) {
+      const host = String(ts.selfDnsName).replace(/\.$/, "");
+      pairingEndpoint = `ws://${host}:${port}/ws`;
+    } else {
+      return {
+        ok: false,
+        error: "NETWORK_NOT_READY",
+        message: "No hay endpoint Tailscale para el QR de pairing.",
+      };
+    }
+
+    setOnboardingState(OnboardingState.PAIRING);
+    ensureAgentId();
+    preserveExistingPairing();
+    ensurePairingCredentials();
+    const created = await hubPairingFetch("/v1/pairing/sessions", {
+      method: "POST",
+      body: JSON.stringify({ endpoint: pairingEndpoint }),
+    });
+    if (!created.ok || !created.json?.ok) {
+      lastPairingUi = { substatus: "EXPIRED" };
+      return {
+        ok: false,
+        error: created.json?.error || "pairing_create_failed",
+        message: "No se pudo crear la sesión de pairing.",
+      };
+    }
+    const j = created.json;
+    if (j.containsHubToken === true) {
+      return { ok: false, error: "security", message: "QR inválido." };
+    }
+    lastPairingUi = {
+      substatus: "QR_READY",
+      sessionId: j.pairingSessionId,
+      uri: j.uri,
+      qrDataUrl: j.qrDataUrl,
+      expiresAt: j.expiresAt,
+    };
+    publishState();
+    return {
+      ok: true,
+      mode: "qr",
+      pairingSessionId: j.pairingSessionId,
+      uri: j.uri,
+      qrDataUrl: j.qrDataUrl,
+      expiresAt: j.expiresAt,
+      ttlMs: j.ttlMs,
+      containsHubToken: false,
+      substatus: "QR_READY",
+    };
+  });
+
+  ipcMain.handle("poll-pairing", async () => {
+    if (!lastPairingUi?.sessionId) return { ok: false, error: "no_session" };
+    const st = await hubPairingFetch(
+      `/v1/pairing/sessions/${lastPairingUi.sessionId}`,
+    );
+    if (!st.ok) return { ok: false, error: "poll_failed" };
+    const row = st.json;
+    if (row.status === "AWAITING_CONFIRMATION") {
+      lastPairingUi = {
+        ...lastPairingUi,
+        substatus: "CONFIRMING",
+        deviceId: row.deviceId,
+        deviceName: row.deviceName,
+      };
+    } else if (row.status === "EXPIRED") {
+      lastPairingUi = { ...lastPairingUi, substatus: "EXPIRED" };
+    } else if (row.status === "REJECTED") {
+      lastPairingUi = { ...lastPairingUi, substatus: "REJECTED" };
+    } else if (row.status === "CONSUMED") {
+      lastPairingUi = { ...lastPairingUi, substatus: "APPROVED" };
+    } else if (row.status === "PENDING") {
+      lastPairingUi = { ...lastPairingUi, substatus: "QR_READY" };
+    }
+    publishState();
+    return {
+      ok: true,
+      status: row.status,
+      substatus: lastPairingUi.substatus,
+      deviceId: row.deviceId,
+      deviceName: row.deviceName,
+      expiresAt: row.expiresAt,
+    };
+  });
+
+  ipcMain.handle("approve-pairing", async () => {
+    if (!lastPairingUi?.sessionId) return { ok: false, error: "no_session" };
+    const r = await hubPairingFetch(
+      `/v1/pairing/sessions/${lastPairingUi.sessionId}/approve`,
+      { method: "POST", body: "{}" },
+    );
+    if (!r.ok || !r.json?.ok) {
+      return { ok: false, error: r.json?.code || "approve_failed" };
+    }
+    lastPairingUi = {
+      ...lastPairingUi,
+      substatus: "APPROVED",
+      deviceId: r.json.deviceId,
+      deviceName: r.json.deviceName,
+    };
+    publishState();
+    return { ok: true, deviceId: r.json.deviceId, deviceName: r.json.deviceName };
+  });
+
+  ipcMain.handle("reject-pairing", async () => {
+    if (!lastPairingUi?.sessionId) return { ok: false, error: "no_session" };
+    await hubPairingFetch(
+      `/v1/pairing/sessions/${lastPairingUi.sessionId}/reject`,
+      { method: "POST", body: "{}" },
+    );
+    lastPairingUi = { ...lastPairingUi, substatus: "REJECTED" };
+    publishState();
+    return { ok: true };
+  });
+
+  ipcMain.handle("list-trusted-devices", async () => {
+    const r = await hubPairingFetch("/v1/pairing/trusted-devices");
+    if (!r.ok || !r.json?.ok) {
+      return { ok: false, error: "list_failed", devices: [] };
+    }
+    return { ok: true, devices: r.json.devices || [] };
+  });
+
+  ipcMain.handle("revoke-trusted-device", async (_e, payload) => {
+    const deviceId = String(payload?.deviceId || "").trim();
+    if (!deviceId) return { ok: false, error: "device_id_required" };
+    const r = await hubPairingFetch(
+      `/v1/pairing/trusted-devices/${encodeURIComponent(deviceId)}/revoke`,
+      { method: "POST", body: "{}" },
+    );
+    if (!r.ok || !r.json?.ok) {
+      return { ok: false, error: r.json?.code || "revoke_failed" };
+    }
+    await refreshHealth();
+    publishState();
+    return {
+      ok: true,
+      deviceId,
+      status: r.json.status,
+      alreadyRevoked: r.json.alreadyRevoked,
+    };
+  });
+
+  ipcMain.handle("confirm-pairing-or-skip", async (_e, payload) => {
+    const skip = Boolean(payload?.skip);
+    if (skip) {
+      setOnboardingState(OnboardingState.CONFIGURING, {
+        pairingSkipped: true,
+        pairingConfirmedAt: null,
+      });
+      lastPairingUi = null;
+      publishState();
+      return { ok: true, skipped: true };
+    }
+    if (lastPairingUi?.substatus === "APPROVED") {
+      setOnboardingState(OnboardingState.CONFIGURING, {
+        pairingSkipped: false,
+        pairingConfirmedAt: new Date().toISOString(),
+      });
+      publishState();
+      return { ok: true, skipped: false };
+    }
+    return {
+      ok: false,
+      error: "PAIRING_TIMEOUT",
+      message: userErrorMessage("PAIRING_TIMEOUT"),
+    };
+  });
+
+  ipcMain.handle("complete-onboarding", async () => {
+    const cfg = config.loadConfig();
+    const ts = await refreshNetwork();
+    if (!ts.ready || ts.phase !== "READY") {
+      return { ok: false, error: "NETWORK_NOT_READY" };
+    }
+    if (!cfg.firstRunComplete || !cfg.workspaceRoot) {
+      return { ok: false, error: "AGENT_NOT_CONFIGURED" };
+    }
+    if (!canStartAgentRuntime(loadOnboarding(), { networkReady: true })) {
+      return { ok: false, error: "NETWORK_NOT_READY" };
+    }
+    setOnboardingState(OnboardingState.READY, {
+      lastError: null,
+      lastErrorCode: null,
+    });
+    logOnboarding("HEALTH", "ready", {
+      networkReady: true,
+      agentId: Boolean(getAgentId()),
+      pairing: hasPersistedPairingAuth(),
+    });
+    publishState();
+    return { ok: true };
+  });
+
   ipcMain.handle("open-logs", () => {
     shell.openPath(config.paths().logsDir);
     return { ok: true };
@@ -366,23 +938,61 @@ function wireIpc() {
   ipcMain.handle("copy-diagnostics", async () => copyDiagnosticsToClipboard());
   ipcMain.handle("reveal-token-once", () => ({
     token: config.getHubToken(),
+    kind: "LEGACY_INSTALL_CREDENTIAL",
   }));
-  ipcMain.handle("get-pairing", () => {
+  ipcMain.handle("get-pairing", async () => {
+    if (lastPairingUi?.uri && lastPairingUi.qrDataUrl) {
+      return {
+        mode: "qr",
+        uri: lastPairingUi.uri,
+        qrDataUrl: lastPairingUi.qrDataUrl,
+        expiresAt: lastPairingUi.expiresAt,
+        pairingSessionId: lastPairingUi.sessionId,
+        substatus: lastPairingUi.substatus,
+        deviceName: lastPairingUi.deviceName,
+        deviceId: lastPairingUi.deviceId,
+        containsHubToken: false,
+        wifiHint: "Escanea el QR con Personal Agent en Android.",
+        tokenMasked: null,
+        urls: [],
+        consoleUrls: [],
+        port: config.loadConfig().hubPort || 8787,
+        agentId: getAgentId(),
+        pairing: getPairingStatus(),
+      };
+    }
     const cfg = config.loadConfig();
     const ips = lanAddresses();
     const port = cfg.hubPort || 8787;
+    const ts = probeTailscale({ isDevelopment: !app.isPackaged });
+    const urls = [];
+    if (ts.ipv4) urls.push(`ws://${ts.ipv4}:${port}/ws`);
+    if (ts.selfDnsName) {
+      const host = String(ts.selfDnsName).replace(/\.$/, "");
+      urls.push(`ws://${host}:${port}/ws`);
+    }
+    for (const ip of ips) urls.push(`ws://${ip}:${port}/ws`);
     return {
-      urls: ips.map((ip) => `ws://${ip}:${port}`),
+      mode: "legacy",
+      urls: [...new Set(urls)],
       consoleUrls: [
         `http://127.0.0.1:${port}/`,
+        ...(ts.ipv4 ? [`http://${ts.ipv4}:${port}/`] : []),
         ...ips.map((ip) => `http://${ip}:${port}/`),
       ],
       port,
-      tokenMasked: config.maskToken(config.getHubToken()),
-      wifiHint:
-        "Usa la misma red Wi‑Fi en el PC y el teléfono. Internet remoto no está disponible.",
+      tokenMasked:
+        getPairingStatus().tokenMasked ||
+        config.maskToken(config.getHubToken()),
+      wifiHint: "Compatibilidad legacy: URL + credencial de instalación.",
+      tailscaleReady: Boolean(ts.ready && ts.phase === "READY"),
+      agentId: getAgentId(),
+      agentHostId: getAgentId(),
+      pairing: getPairingStatus(),
+      containsHubToken: true,
     };
   });
+
   ipcMain.handle("validate-config", (_e, payload) => {
     const workspaceRoot = String(payload?.workspaceRoot || "").trim();
     const apiKey = String(payload?.anthropicApiKey || "").trim();
@@ -396,14 +1006,45 @@ function wireIpc() {
         errors.push("workspace_inaccessible");
       }
     }
-    if (!apiKey) errors.push("api_key_required");
+    if (!apiKey && !config.getAnthropicApiKey()) errors.push("api_key_required");
     return { ok: errors.length === 0, errors };
+  });
+
+  ipcMain.handle("get-capabilities-summary", () => ({
+    // Network security ≠ tool authorization
+    note: "Tailscale asegura la red; no autoriza Tools por sí solo.",
+    capabilities: [
+      { id: "files", label: "Archivos", status: "Enabled" },
+      { id: "applications", label: "Aplicaciones", status: "Enabled" },
+      { id: "terminal", label: "Terminal", status: "Ask" },
+      { id: "browser", label: "Navegador", status: "Ask" },
+      { id: "mcp", label: "MCP", status: "Configure" },
+    ],
+  }));
+
+  ipcMain.handle("artifact-head", async (_e, payload) => {
+    const artifactId = String(payload?.artifactId || "").trim();
+    if (!artifactId) return { ok: false, error: "artifact_id_required" };
+    return hubArtifactHead(artifactId);
+  });
+
+  ipcMain.handle("artifact-download", async (_e, payload) => {
+    const artifactId = String(payload?.artifactId || "").trim();
+    if (!artifactId) return { ok: false, error: "artifact_id_required" };
+    const dest =
+      String(payload?.destPath || "").trim() ||
+      path.join(config.paths().runtimeDir, "downloads", `${artifactId}.bin`);
+    return hubArtifactDownload(artifactId, dest);
   });
 }
 
 app.whenReady().then(async () => {
+  if (app.isPackaged) {
+    process.env.ELECTRON_IS_PACKAGED = "1";
+  }
   config.ensureDirs();
   productRoot = resolveProductRoot();
+  migrateLegacyIfNeeded();
   supervisor = createAgentSupervisor({
     productRoot,
     getEnv: gatewayEnv,
@@ -413,12 +1054,42 @@ app.whenReady().then(async () => {
   wireIpc();
   createWindow();
   createTray();
+
+  const ts = await refreshNetwork();
+  lastPreflight = await runPreflight({
+    productRoot,
+    onboardingState: loadOnboarding().state,
+    processHealthy: null,
+  });
+
   const cfg = config.loadConfig();
-  if (cfg.firstRunComplete && cfg.workspaceRoot) {
-    await supervisor.start();
+  const onboarding = loadOnboarding();
+  // Never auto-start Agent without Tailscale READY.
+  if (
+    cfg.firstRunComplete &&
+    cfg.workspaceRoot &&
+    ts.ready &&
+    ts.phase === "READY" &&
+    canStartAgentRuntime(onboarding, { networkReady: true })
+  ) {
+    await startAgentIfAllowed();
     await refreshHealth();
-    publishState();
+  } else if (cfg.firstRunComplete && !(ts.ready && ts.phase === "READY")) {
+    logOnboarding("AGENT_PROVISIONING", "defer_start_network", {
+      state: onboarding.state,
+      phase: ts.phase,
+    });
+    if (
+      onboarding.state === OnboardingState.READY ||
+      onboarding.state === OnboardingState.AGENT_READY ||
+      onboarding.state === OnboardingState.PAIRING
+    ) {
+      setOnboardingState(OnboardingState.NETWORK_VERIFYING, {
+        scenario: onboarding.scenario || "RECOVERY",
+      });
+    }
   }
+  publishState();
 });
 
 app.on("before-quit", () => {

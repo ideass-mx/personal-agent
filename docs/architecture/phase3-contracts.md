@@ -10,10 +10,10 @@ No introduce abstracciones nuevas (`Capability`, `ToolLookup`, A2A, Workspace, f
 
 | Componente | Dónde | Depende de | No conoce |
 |------------|--------|------------|-----------|
-| **Agent Runtime** | `hub/src/agent/runtime.ts` | `AgentDefinition`, `LLMProvider`, `AgentRuntimeTools`, `TurnMemory`, `ConfirmationPort` | MCP SDK, Hono, `ws`, SQLite, fs, Excel, `ToolRegistry` (clase) |
-| **AgentDefinition** | `hub/src/agent/definition.ts` | prompt, model, `ToolPolicy` | ejecución, Node, MCP, HTTP |
-| **ConfirmationPort** | `hub/src/agent/confirmation.ts` | tipos ToolResult | waiter, WS, Hono |
-| **ConfirmationWaiter** | `hub/src/http/confirmation-waiter.ts` | ConfirmationPort | — (Gateway) |
+| **Agent Runtime** | `hub/src/agents/runtime.ts` | `AgentDefinition`, `LLMProvider`, `AgentRuntimeTools`, `TurnMemory`, `ConfirmationPort` | MCP SDK, Hono, `ws`, SQLite, fs, Excel, `ToolRegistry` (clase) |
+| **AgentDefinition** | `hub/src/agents/definition.ts` | prompt, model, `ToolPolicy` | ejecución, Node, MCP, HTTP |
+| **ConfirmationPort** | `hub/src/agents/confirmation.ts` | tipos ToolResult | waiter, WS, Hono |
+| **ConfirmationWaiter** | `hub/src/sessions/confirmation-waiter.ts` | ConfirmationPort | — (Gateway) |
 | **TurnMemory** | `hub/src/memory/types.ts` | — | SQLite |
 | **SqliteTurnMemory** | `hub/src/memory/sqlite-turn-memory.ts` | TurnMemory, history.ts | Runtime |
 | **ToolRegistry** | `hub/src/tools/registry.ts` | AgentTool | MCP, policy |

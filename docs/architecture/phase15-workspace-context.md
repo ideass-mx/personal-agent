@@ -18,8 +18,8 @@ PHASE 14 ya entrega `resolveWorkspaceForConversation`. Esta fase decide si el Ga
 | `resolve-workspace-for-conversation.ts` | `conversationId` → `Workspace \| null`. Fail-closed si la Conversation no existe o la FK está huérfana. |
 | `index.ts` | Compone `createSqliteWorkspaceStore()` → `startServer({ workspaces })`. No pasa el store al Runtime. |
 | `http/server.ts` | Conserva `workspaces` en el handle HTTP. `attachGateway` no lo recibe. |
-| `http/ws.ts` | `runTurn({ conversationId, deviceId, sessionId, userMessage, confirmation })`. No resuelve Workspace. |
-| `http/sessions.ts` | Sin Workspace. |
+| `ws/index.ts` | `runTurn({ conversationId, deviceId, sessionId, userMessage, confirmation })`. No resuelve Workspace. |
+| `sessions/index.ts` | Sin Workspace. |
 | `agent/runtime.ts` | `AgentTurnInput` / `runTurn` / deps sin Workspace. |
 | `memory/types.ts` (`TurnMemory`) | Conversation id + historial. Sin `workspace_id`. |
 | `tools/types.ts` (`ToolContext`) | `conversationId` + `deviceId`. Envelope de Tools/MCP, **no** es Workspace ni Context entidad. |

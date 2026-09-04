@@ -48,8 +48,8 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: |
-            hub/package-lock.json
-            agent/package-lock.json
+            gateway/package-lock.json
+            node/package-lock.json
             web/package-lock.json
             packages/protocol/package-lock.json
             packages/workspace-http/package-lock.json
@@ -91,8 +91,8 @@ jobs:
         run: |
           npm ci --prefix packages/protocol
           npm ci --prefix packages/workspace-http
-          npm ci --prefix hub
-          npm ci --prefix agent
+          npm ci --prefix gateway
+          npm ci --prefix node
           npm ci --prefix web
 
       - name: Package Windows layout
@@ -130,18 +130,25 @@ jobs:
             throw "Leftover electron-win.zip must not ship (delete after extract)"
           }
           Write-Host "console: $(Test-Path "$root/console/index.html")"
-          Write-Host "gateway: $(Test-Path "$root/gateway/hub.cjs")"
-          Write-Host "agent: $(Test-Path "$root/agent/agent.cjs")"
+          Write-Host "gateway_cjs: $(Test-Path "$root/gateway/gateway.cjs")"
+          Write-Host "gateway_hub_alias: $(Test-Path "$root/gateway/hub.cjs")"
+          Write-Host "node_cjs: $(Test-Path "$root/node/node.cjs")"
+          Write-Host "agent_alias: $(Test-Path "$root/agent/agent.cjs")"
           Write-Host "launcher: $(Test-Path "$root/AgentePersonal.bat")"
           Get-ChildItem "$root/runtime/node" | Select-Object Name, Length | Format-Table -AutoSize
           Get-ChildItem $root | Select-Object Name, Mode | Format-Table -AutoSize
 
-      - name: Validate Windows package (strict runtimes)
+      - name: Validate Windows package (strict runtimes + native PE)
         shell: pwsh
         run: npm run validate:windows-package
 
+      - name: PHASE 64.1 native modules gate (explicit before Inno)
+        shell: pwsh
+        run: |
+          node --input-type=module -e "import { assertWindowsNativeModules } from './scripts/windows-native-modules.mjs'; assertWindowsNativeModules('dist/windows/PersonalAgent');"
+
       - name: PHASE 51 architecture tests
-        working-directory: hub
+        working-directory: gateway
         shell: pwsh
         run: npx tsx --test tests/architecture/phase51-windows-installer-and-console-integration.test.ts
 

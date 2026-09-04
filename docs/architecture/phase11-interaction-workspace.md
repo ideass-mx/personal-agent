@@ -11,7 +11,7 @@ Solo diseño. Sin protocolo, schema, store, Runtime, MCP, A2A ni multi-Agent.
 
 | Superficie | Qué hay |
 |------------|---------|
-| Session | `hub/src/http/sessions.ts`: `id` (`ws_*`), `ws`, auth, `deviceId`, `replying`, waiter. Map in-memory. Muere al disconnect. |
+| Session | `hub/src/sessions/index.ts`: `id` (`ws_*`), `ws`, auth, `deviceId`, `replying`, waiter. Map in-memory. Muere al disconnect. |
 | Conversation | SQLite `conversations(id, title, created_at)`, `messages(...)`. `ensureConversation` crea `c_*` si falta id. `getHistory` = últimos N (`historyWindow`). |
 | Protocolo | `user_message.conversationId` opcional. Sin workspace, Agent, project, resource. |
 | Runtime | `runTurn({ conversationId, sessionId, deviceId, text })`. Una `AgentDefinition`. |

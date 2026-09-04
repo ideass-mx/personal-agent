@@ -57,7 +57,7 @@ es local; quien lo ejecute a mano obtiene las mismas tools.
 
 ## 2. Confirmation bypass (Hub)
 
-Código: `hub/src/agent/confirmation.ts`, `runtime.ts`, `http/ws.ts`,
+Código: `hub/src/agents/confirmation.ts`, `runtime.ts`, `ws/index.ts`,
 protocolo `confirm_response` = `{ confirmationId, approved }`.
 
 | Caso | Resultado |

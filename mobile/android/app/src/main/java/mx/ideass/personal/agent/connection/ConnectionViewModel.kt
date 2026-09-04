@@ -139,6 +139,67 @@ class ConnectionViewModel @Inject constructor(
 
     fun onAddressChange(value: String) = _ui.update { it.copy(address = value, resultMessage = null) }
     fun onTokenChange(value: String) = _ui.update { it.copy(token = value, resultMessage = null) }
+
+    fun pairWithQrUri(raw: String, onSuccess: () -> Unit) {
+        val parsed = PairingQrParser.parse(raw)
+        if (parsed.isFailure) {
+            _ui.update {
+                it.copy(resultOk = false, resultMessage = "QR inválido: ${parsed.exceptionOrNull()?.message}")
+            }
+            return
+        }
+        val payload = parsed.getOrThrow()
+        connectJob?.cancel()
+        connectJob = viewModelScope.launch {
+            _ui.update {
+                it.copy(
+                    testing = true,
+                    pairingPending = true,
+                    resultOk = false,
+                    resultMessage = "Emparejando… confirma en el PC",
+                )
+            }
+            val result = chatConnection.pairFromQr(
+                endpoint = payload.endpoint,
+                pairingSessionId = payload.pairingSessionId,
+                pairingSecret = payload.pairingSecret,
+                deviceName = _ui.value.deviceName,
+            )
+            result.fold(
+                onSuccess = { credential ->
+                    preferences.saveHubConfig(
+                        address = payload.endpoint,
+                        token = credential,
+                        deviceName = _ui.value.deviceName,
+                        authKind = "device",
+                    )
+                    _ui.update {
+                        it.copy(
+                            testing = false,
+                            pairingPending = false,
+                            resultOk = true,
+                            connected = true,
+                            hasSavedConfig = true,
+                            address = payload.endpoint,
+                            resultMessage = "Dispositivo emparejado",
+                        )
+                    }
+                    onSuccess()
+                },
+                onFailure = { err ->
+                    _ui.update {
+                        it.copy(
+                            testing = false,
+                            pairingPending = false,
+                            resultOk = false,
+                            resultMessage = err.message ?: "Error de pairing",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
     fun onBootstrapChange(value: String) =
         _ui.update { it.copy(bootstrapToken = value, resultMessage = null) }
     fun onAgentIdChange(value: String) = _ui.update { it.copy(agentId = value) }

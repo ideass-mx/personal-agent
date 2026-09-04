@@ -4,15 +4,15 @@ Guía operacional honesta del MVP. No inventa capacidades que el código no tien
 
 ## Modelo mental
 
-- **PC:** ejecuta el Gateway (`hub/`) que spawnea el Local Node (`agent/`) por MCP stdio.
-- **Teléfono:** cliente Android Hub-first; conversa y autoriza acciones.
-- **Identidad:** `HUB_TOKEN` = instalación (no hay User/ACL).
+- **PC:** ejecuta el Gateway (`gateway/`) que spawnea el Node (`node/`) por MCP stdio.
+- **Teléfono:** cliente Android (Gateway Client); conversa y autoriza acciones.
+- **Identidad de instalación:** `HUB_TOKEN` = legacy installation credential (no hay User/ACL).
 
 ## Instalación (dev)
 
 ```bash
 git clone <repo> && cd personal-agent
-cp hub/.env.example hub/.env
+cp gateway/.env.example gateway/.env
 # Edita ANTHROPIC_API_KEY, HUB_TOKEN, AGENT_FILESYSTEM_ROOT
 npm run install:all
 ```
@@ -24,7 +24,7 @@ Requisito empaquetado: **Node 22+** (ver `dist/README.txt` tras `npm run package
 | Variable | Obligatoria | Notas |
 |----------|-------------|-------|
 | `ANTHROPIC_API_KEY` | sí (arranque completo) | LLM |
-| `HUB_TOKEN` | sí | Auth WS + HTTP Bearer |
+| `HUB_TOKEN` | sí | Auth WS + HTTP Bearer (legacy name) |
 | `HUB_PORT` | no (8787) | |
 | `AGENT_FILESYSTEM_ROOT` | **recomendada** | Carpeta que el Node puede leer/escribir. Sin ella: legacy menos contenido. **No obligatoria en código** (haría falta cambiar fail-fast del Node). |
 
@@ -32,7 +32,7 @@ Requisito empaquetado: **Node 22+** (ver `dist/README.txt` tras `npm run package
 
 ```bash
 npm run dev
-# o: npm run hub
+# o: npm run gateway   # alias legacy: npm run hub
 ```
 
 Orden: spawn Node → MCP handshake → tools/list → migraciones SQLite → HTTP/WS **READY**.

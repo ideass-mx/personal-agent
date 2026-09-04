@@ -23,6 +23,8 @@ data class HubConfig(
     val address: String,
     val token: String,
     val deviceName: String,
+    /** "install" (legacy HUB_TOKEN) or "device" (Trusted Device credential). */
+    val authKind: String = "install",
 )
 
 enum class ConnectionBackend {
@@ -37,6 +39,7 @@ class AppPreferences @Inject constructor(
     private object Keys {
         val HubAddress = stringPreferencesKey("hub_address")
         val HubToken = stringPreferencesKey("hub_token")
+        val HubAuthKind = stringPreferencesKey("hub_auth_kind")
         val DeviceName = stringPreferencesKey("device_name")
         val DeviceId = stringPreferencesKey("device_id")
         val ConversationId = stringPreferencesKey("conversation_id")
@@ -62,6 +65,7 @@ class AppPreferences @Inject constructor(
                 address = address,
                 token = token,
                 deviceName = prefs[Keys.DeviceName].orEmpty(),
+                authKind = prefs[Keys.HubAuthKind]?.takeIf { it == "device" || it == "install" } ?: "install",
             )
         }
     }
@@ -103,11 +107,17 @@ class AppPreferences @Inject constructor(
 
     suspend fun getConnectionBackend(): ConnectionBackend = connectionBackend.first()
 
-    suspend fun saveHubConfig(address: String, token: String, deviceName: String) {
+    suspend fun saveHubConfig(
+        address: String,
+        token: String,
+        deviceName: String,
+        authKind: String = "install",
+    ) {
         context.dataStore.edit { prefs ->
             prefs[Keys.Backend] = "hub"
             prefs[Keys.HubAddress] = address.trim()
             prefs[Keys.HubToken] = token.trim()
+            prefs[Keys.HubAuthKind] = if (authKind == "device") "device" else "install"
             prefs[Keys.DeviceName] = deviceName.trim()
         }
     }

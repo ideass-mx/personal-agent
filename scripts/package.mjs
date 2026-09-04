@@ -1,6 +1,6 @@
 /**
  * Prepara dist/ para distribución: JS compilado + better-sqlite3 + launchers.
- * v1 requiere runtime Node.js (no SEA: Hub usa better-sqlite3).
+ * Emite gateway/ + node/ (canónico) y hub/ + agent/ (legacy).
  */
 import {
   chmodSync,
@@ -16,18 +16,27 @@ import { build } from "./build.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(repoRoot, "dist");
 
+const GATEWAY_UNIX = `#!/bin/sh
+exec node "$(dirname "$0")/gateway.cjs" "$@"
+`;
 const HUB_UNIX = `#!/bin/sh
 exec node "$(dirname "$0")/hub.cjs" "$@"
 `;
-
+const NODE_UNIX = `#!/bin/sh
+exec node "$(dirname "$0")/node.cjs" "$@"
+`;
 const AGENT_UNIX = `#!/bin/sh
 exec node "$(dirname "$0")/agent.cjs" "$@"
 `;
-
+const GATEWAY_CMD = `@echo off
+node "%~dp0gateway.cjs" %*
+`;
 const HUB_CMD = `@echo off
 node "%~dp0hub.cjs" %*
 `;
-
+const NODE_CMD = `@echo off
+node "%~dp0node.cjs" %*
+`;
 const AGENT_CMD = `@echo off
 node "%~dp0agent.cjs" %*
 `;
@@ -39,38 +48,38 @@ function writeLauncher(file, body, unixExecutable) {
   }
 }
 
+function copyNativeTree(src, dest) {
+  if (!existsSync(src)) return;
+  mkdirSync(path.dirname(dest), { recursive: true });
+  cpSync(src, dest, { recursive: true });
+}
+
 export async function pack() {
   await build();
 
-  const sqliteSrc = path.join(repoRoot, "hub/node_modules/better-sqlite3");
+  const sqliteSrc = path.join(repoRoot, "gateway/node_modules/better-sqlite3");
   if (!existsSync(sqliteSrc)) {
-    throw new Error("Falta hub/node_modules/better-sqlite3. Ejecuta npm install en hub/");
+    throw new Error(
+      "Falta gateway/node_modules/better-sqlite3. Ejecuta npm install en gateway/",
+    );
   }
-  const sqliteDest = path.join(dist, "hub/node_modules/better-sqlite3");
-  mkdirSync(path.dirname(sqliteDest), { recursive: true });
-  cpSync(sqliteSrc, sqliteDest, { recursive: true });
+  for (const destRoot of ["gateway", "hub"]) {
+    copyNativeTree(sqliteSrc, path.join(dist, destRoot, "node_modules/better-sqlite3"));
+    copyNativeTree(
+      path.join(repoRoot, "gateway/node_modules/bindings"),
+      path.join(dist, destRoot, "node_modules/bindings"),
+    );
+    copyNativeTree(
+      path.join(repoRoot, "gateway/node_modules/file-uri-to-path"),
+      path.join(dist, destRoot, "node_modules/file-uri-to-path"),
+    );
+  }
 
-  // winax: addon nativo optional (Windows). External en esbuild; se copia
-  // junto al agent.cjs si está instalado. Node lo resuelve desde argv[1],
-  // no desde cwd.
-  const winaxSrc = path.join(repoRoot, "agent/node_modules/winax");
+  const winaxSrc = path.join(repoRoot, "node/node_modules/winax");
   if (existsSync(winaxSrc)) {
-    const winaxDest = path.join(dist, "agent/node_modules/winax");
-    mkdirSync(path.dirname(winaxDest), { recursive: true });
-    cpSync(winaxSrc, winaxDest, { recursive: true });
-  }
-
-  const bindings = path.join(repoRoot, "hub/node_modules/bindings");
-  if (existsSync(bindings)) {
-    cpSync(bindings, path.join(dist, "hub/node_modules/bindings"), {
-      recursive: true,
-    });
-  }
-  const fileUri = path.join(repoRoot, "hub/node_modules/file-uri-to-path");
-  if (existsSync(fileUri)) {
-    cpSync(fileUri, path.join(dist, "hub/node_modules/file-uri-to-path"), {
-      recursive: true,
-    });
+    for (const destRoot of ["node", "agent"]) {
+      copyNativeTree(winaxSrc, path.join(dist, destRoot, "node_modules/winax"));
+    }
   }
 
   const migrationsSrc = path.join(repoRoot, "db/migrations");
@@ -78,35 +87,40 @@ export async function pack() {
     cpSync(migrationsSrc, path.join(dist, "migrations"), { recursive: true });
   }
 
-  writeLauncher(path.join(dist, "hub/hub"), HUB_UNIX, true);
-  writeLauncher(path.join(dist, "agent/agent"), AGENT_UNIX, true);
-  writeLauncher(path.join(dist, "hub/hub.cmd"), HUB_CMD, false);
-  writeLauncher(path.join(dist, "agent/agent.cmd"), AGENT_CMD, false);
+  writeLauncher(path.join(dist, "gateway", "gateway"), GATEWAY_UNIX, true);
+  writeLauncher(path.join(dist, "gateway", "hub"), HUB_UNIX, true);
+  writeLauncher(path.join(dist, "node", "node"), NODE_UNIX, true);
+  writeLauncher(path.join(dist, "node", "agent"), AGENT_UNIX, true);
+  writeLauncher(path.join(dist, "hub", "hub"), HUB_UNIX, true);
+  writeLauncher(path.join(dist, "agent", "agent"), AGENT_UNIX, true);
+  writeLauncher(path.join(dist, "gateway", "gateway.cmd"), GATEWAY_CMD, false);
+  writeLauncher(path.join(dist, "gateway", "hub.cmd"), HUB_CMD, false);
+  writeLauncher(path.join(dist, "node", "node.cmd"), NODE_CMD, false);
+  writeLauncher(path.join(dist, "node", "agent.cmd"), AGENT_CMD, false);
+  writeLauncher(path.join(dist, "hub", "hub.cmd"), HUB_CMD, false);
+  writeLauncher(path.join(dist, "agent", "agent.cmd"), AGENT_CMD, false);
 
   writeFileSync(
     path.join(dist, "README.txt"),
     [
       "Personal Agent — Single Node (artefactos v1)",
       "",
-      "Topología: una máquina, dos procesos. El Hub (Gateway) spawnea el Local Node por MCP stdio.",
-      "No es un segundo Agent Runtime.",
+      "Topología: Gateway spawnea Node por MCP stdio.",
+      "Nombres canónicos: gateway/ + node/",
+      "Alias legacy: hub/ + agent/ (mismos binarios).",
       "",
       "Requisito: Node.js 22+ en PATH.",
-      "No son ejecutables nativos standalone (Hub usa better-sqlite3).",
       "",
-      "Arranque Single Node (solo el Gateway; el Node es hijo):",
-      "  Linux/macOS:  ./hub/hub     o  node hub/hub.cjs",
-      "  Windows:      hub\\hub.cmd     o  node hub\\hub.cjs",
+      "Arranque Gateway:",
+      "  ./gateway/gateway  o  node gateway/gateway.cjs",
+      "  legacy: ./hub/hub  o  node hub/hub.cjs",
       "",
-      "Local Node aislado (stdio; no levanta el Gateway):",
-      "  ./agent/agent  o  node agent/agent.cjs",
+      "Node aislado (stdio):",
+      "  ./node/node  o  node node/node.cjs",
+      "  legacy: ./agent/agent",
       "",
-      "El Hub localiza el Agent en ../agent/agent.cjs respecto a hub.cjs.",
-      "No depende del cwd. AGENT_FILESYSTEM_ROOT se reenvía al Local Node",
-      "cuando está definido en el entorno del Gateway (boot: dotenv + attach filesystemRoot).",
-      "office.excel.read (Windows): Excel + node_modules/winax junto a agent.cjs.",
+      "HUB_TOKEN = legacy installation credential (no QR / no agentId).",
       "Handshake sin LLM: HUB_HANDSHAKE_ONLY=1",
-      "Producto Windows: npm run package:windows → dist/windows/PersonalAgent/",
       "",
     ].join("\n"),
     "utf8",

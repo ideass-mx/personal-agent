@@ -7,22 +7,30 @@ const path = require("node:path");
 
 /**
  * Supervisa el proceso Gateway existente. No es un Runtime.
+ * Canónico: gateway/gateway.cjs + marker [gateway] READY.
+ * Fallback legacy: hub.cjs / [hub] READY (instalaciones antiguas).
  */
 function resolveGatewayLaunch(productRoot) {
-  const candidates = [
+  const canonical = path.join(productRoot, "gateway", "gateway.cjs");
+  const legacyFallbacks = [
     path.join(productRoot, "gateway", "hub.cjs"),
     path.join(productRoot, "hub", "hub.cjs"),
   ];
-  const hubCjs = candidates.find((p) => fs.existsSync(p));
-  if (!hubCjs) {
+  const gatewayCjs = fs.existsSync(canonical)
+    ? canonical
+    : legacyFallbacks.find((p) => fs.existsSync(p));
+  if (!gatewayCjs) {
     return {
-      hubCjs: candidates[0],
+      gatewayCjs: canonical,
+      hubCjs: canonical,
+      gatewayDir: path.join(productRoot, "gateway"),
       hubDir: path.join(productRoot, "gateway"),
       nodeCmd: "node",
       exists: false,
+      legacyEntrypoint: false,
     };
   }
-  const hubDir = path.dirname(hubCjs);
+  const gatewayDir = path.dirname(gatewayCjs);
   const nodeRuntimeWin = path.join(productRoot, "runtime", "node", "node.exe");
   const nodeRuntimeUnix = path.join(productRoot, "runtime", "node", "bin", "node");
   const nodeCmd = fs.existsSync(nodeRuntimeWin)
@@ -30,7 +38,15 @@ function resolveGatewayLaunch(productRoot) {
     : fs.existsSync(nodeRuntimeUnix)
       ? nodeRuntimeUnix
       : "node";
-  return { hubCjs, hubDir, nodeCmd, exists: true };
+  return {
+    gatewayCjs,
+    hubCjs: gatewayCjs,
+    gatewayDir,
+    hubDir: gatewayDir,
+    nodeCmd,
+    exists: true,
+    legacyEntrypoint: gatewayCjs !== canonical,
+  };
 }
 
 function createAgentSupervisor({
@@ -82,19 +98,43 @@ function createAgentSupervisor({
                   ? json.agentTools.length
                   : 0,
                 devices: Array.isArray(json.devices) ? json.devices : [],
+                nodeStatus:
+                  typeof json.nodeStatus === "string"
+                    ? json.nodeStatus
+                    : json.agentReady
+                      ? "READY"
+                      : "UNKNOWN",
               });
             } catch {
-              resolve({ ok: false, agentReady: false, agentTools: 0, devices: [] });
+              resolve({
+                ok: false,
+                agentReady: false,
+                agentTools: 0,
+                devices: [],
+                nodeStatus: "UNKNOWN",
+              });
             }
           });
         },
       );
       req.on("error", () =>
-        resolve({ ok: false, agentReady: false, agentTools: 0, devices: [] }),
+        resolve({
+          ok: false,
+          agentReady: false,
+          agentTools: 0,
+          devices: [],
+          nodeStatus: "UNKNOWN",
+        }),
       );
       req.on("timeout", () => {
         req.destroy();
-        resolve({ ok: false, agentReady: false, agentTools: 0, devices: [] });
+        resolve({
+          ok: false,
+          agentReady: false,
+          agentTools: 0,
+          devices: [],
+          nodeStatus: "UNKNOWN",
+        });
       });
     });
   }
@@ -110,8 +150,8 @@ function createAgentSupervisor({
     bootReady = false;
     lastError = null;
     const env = getEnv();
-    child = spawn(launch.nodeCmd, [launch.hubCjs], {
-      cwd: launch.hubDir,
+    child = spawn(launch.nodeCmd, [launch.gatewayCjs], {
+      cwd: launch.gatewayDir,
       env: {
         ...process.env,
         ...env,
@@ -123,7 +163,10 @@ function createAgentSupervisor({
     child.stderr.on("data", (buf) => {
       const text = buf.toString("utf8");
       appendLog(text);
-      if (text.includes("[hub] READY") || text.includes("Agent READY")) {
+      if (
+        text.includes("[gateway] READY") ||
+        text.includes("[hub] READY") // legacy fallback
+      ) {
         bootReady = true;
         onState?.();
       }

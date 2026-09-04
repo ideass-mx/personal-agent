@@ -15,7 +15,7 @@ Conversation vive hoy aquí, no en el Runtime:
 | Adapter | `SqliteTurnMemory` | Gateway; Runtime no lo importa |
 | Composición | `hub/src/index.ts` | inyecta `TurnMemory` en el Runtime |
 | WS / protocolo | `user_message.conversationId` opcional | Session ≠ Conversation |
-| Session | `hub/src/http/sessions.ts` | conexión WS + binding de confirmación |
+| Session | `hub/src/sessions/index.ts` | conexión WS + binding de confirmación |
 | `filesystem.root` | `AgentConfig` del proceso `agent/` | infraestructura del **Node**, no Workspace |
 
 Schema de `conversations`: `id`, `title`, `created_at`. **No** hay `workspace_id`.

@@ -11,6 +11,16 @@ export const AuthMessage = z.object({
   token: z.string().min(1),
   deviceId: z.string().min(1),
   deviceName: z.string().optional(),
+  authKind: z.enum(["install", "device"]).optional(),
+});
+
+export const PairingRequestMessage = z.object({
+  type: z.literal("pairing_request"),
+  pairingSessionId: z.string().min(1),
+  pairingSecret: z.string().min(1),
+  deviceId: z.string().min(1),
+  deviceName: z.string().optional(),
+  platform: z.string().optional(),
 });
 
 export const UserMessage = z.object({
@@ -29,6 +39,7 @@ export const PingMessage = z.object({ type: z.literal("ping") });
 
 export const ClientMessage = z.discriminatedUnion("type", [
   AuthMessage,
+  PairingRequestMessage,
   UserMessage,
   ConfirmResponseMessage,
   PingMessage,
@@ -36,6 +47,7 @@ export const ClientMessage = z.discriminatedUnion("type", [
 
 export type ClientMessage = z.infer<typeof ClientMessage>;
 export type AuthMessage = z.infer<typeof AuthMessage>;
+export type PairingRequestMessage = z.infer<typeof PairingRequestMessage>;
 export type UserMessage = z.infer<typeof UserMessage>;
 export type ConfirmResponseMessage = z.infer<typeof ConfirmResponseMessage>;
 
@@ -46,10 +58,25 @@ export type ErrorCode =
   | "auth_required"
   | "bad_message"
   | "busy"
-  | "internal";
+  | "internal"
+  | "pairing_invalid"
+  | "pairing_expired"
+  | "pairing_rejected"
+  | "pairing_waiter_busy";
 
 export type ServerMessage =
   | { type: "auth_ok"; deviceId: string }
+  | {
+      type: "pairing_pending";
+      pairingSessionId: string;
+      message: string;
+    }
+  | {
+      type: "pairing_result";
+      pairingSessionId: string;
+      status: "approved" | "rejected" | "expired";
+      deviceCredential?: string;
+    }
   | { type: "assistant_chunk"; text: string; conversationId?: string }
   | { type: "assistant_done"; messageId: string; conversationId: string }
   | {

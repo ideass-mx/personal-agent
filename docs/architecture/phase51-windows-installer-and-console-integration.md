@@ -109,3 +109,9 @@ Ver [`phase51-windows-installation-validation.md`](./phase51-windows-installatio
 
 Field execution on clean Windows + physical Android using the compiled Setup.exe,
 following the validation protocol end-to-end.
+
+---
+
+## 9. PHASE 51B (onboarding red segura)
+
+Post-install Tailscale gate + máquina de estados persistente: [`phase51b-onboarding-secure-network.md`](./phase51b-onboarding-secure-network.md). Inno sigue empaquetando binarios; el onboarding vive en `desktop/`.

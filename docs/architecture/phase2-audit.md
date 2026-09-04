@@ -16,7 +16,7 @@ Nombres en código (no inventados): `AgentTool`, `ToolRegistry`, `ConfirmationPo
 - `AgentTool` es a la vez **descriptor para el LLM**, **modo de confirmación** y **función `execute`**. Es la representación interna actual de una **Tool**.
 - `ToolRegistry` es un **Map** (`register` / `get` / `list`). No autoriza, no confirma, no ejecuta, no habla MCP. No es el registry global de la plataforma.
 - Autorización = `DEFAULT_TOOL_POLICY` + `registerDiscoveredAgentTools` (Gateway bootstrap). El Runtime solo **lee** `executionMode`.
-- `ConfirmationPort.wait` es el único contrato del Runtime. `createConfirmationWaiter` vive en `hub/src/http/confirmation-waiter.ts` (Gateway). WS traduce frames.
+- `ConfirmationPort.wait` es el único contrato del Runtime. `createConfirmationWaiter` vive en `hub/src/sessions/confirmation-waiter.ts` (Gateway). WS traduce frames.
 - `TurnMemory` **PHASE 2.1 COMPLETED:** contrato en `memory/types.ts`; `SqliteTurnMemory` / `createSqliteTurnMemory()`; `index.ts` es composition root. Runtime no importa `history.ts` ni SQLite.
 - **PHASE 2.4:** no hay `calculatorTool` in-process. Aritmética: `math.*` en el MCP Server. El registry del Hub se llena solo por discovery MCP (`RemoteAgentTool`).
 - **MCP Adapter** (`mcp-stdio.ts` + `mcp-executor.ts`) es el único código de producción del Hub que importa el SDK MCP. `discover.ts` usa `McpListToolsClient` estructural.
@@ -42,7 +42,7 @@ Proceso Agent (`agent/` = Local Node + MCP Server; **no** es un Agent):
 
 ```text
 WS client
-  → attachGateway (http/ws.ts)
+  → attachGateway (ws/index.ts)
   → AgentRuntime.runTurn
        → TurnMemory
        → LLMProvider
@@ -93,7 +93,7 @@ Invariantes observados:
 
 | Rol | Quién | Evidencia |
 |-----|--------|-----------|
-| Agent Runtime | `tools.get` / `list` / `execute` | `hub/src/agent/runtime.ts` |
+| Agent Runtime | `tools.get` / `list` / `execute` | `hub/src/agents/runtime.ts` |
 | Gateway bootstrap | `index.ts` + `registerDiscoveredAgentTools` | `index.ts`, `discover.ts` |
 | Transport WS | no usa `AgentTool` | `ws.ts` solo Runtime events |
 | MCP (Hub) | `createRemoteAgentTool` + `mcp-executor.ts` detrás de `execute` | `remote.ts`, `mcp-executor.ts` |
@@ -175,7 +175,7 @@ No reemplazar `ToolRegistry` por una interfaz equivalente (`ToolLookup`) solo po
 
 ## 5. ConfirmationPort Analysis
 
-**Interfaz** (`hub/src/agent/confirmation.ts`):
+**Interfaz** (`hub/src/agents/confirmation.ts`):
 
 ```ts
 interface ConfirmationPort {
@@ -185,11 +185,11 @@ interface ConfirmationPort {
 
 Runtime **solo** usa `wait` + yield `confirm_request`. Fail-closed si faltan `confirmation` o `sessionId`.
 
-**Implementación:** `createConfirmationWaiter` en `hub/src/http/confirmation-waiter.ts`. Pending in-memory, timeout 60s, `structuredClone` del input, binding `sessionId`/`deviceId`, `respond` / `cancelAll`.
+**Implementación:** `createConfirmationWaiter` en `hub/src/sessions/confirmation-waiter.ts`. Pending in-memory, timeout 60s, `structuredClone` del input, binding `sessionId`/`deviceId`, `respond` / `cancelAll`.
 
 **Quién llama `wait`:** `createAgentRuntime` / `runTurn`.  
 **Quién implementa:** waiter.port.  
-**Quién llama `respond`:** `http/ws.ts` en `confirm_response`.
+**Quién llama `respond`:** `ws/index.ts` en `confirm_response`.
 
 **¿Limpia?** **YES** para PHASE 2.3: contrato en Runtime; waiter en Gateway. El Runtime no importa el waiter ni WebSocket.
 
@@ -241,7 +241,7 @@ hub/src/index.ts
         └── createConfirmationWaiter
               ├── .port → ConfirmationPort  → Runtime.wait
               └── .respond ← ws confirm_response
-              (createConfirmationWaiter en http/confirmation-waiter.ts)
+              (createConfirmationWaiter en sessions/confirmation-waiter.ts)
 
 runtime.ts NO → hono | ws | MCP SDK | better-sqlite3 | node:fs | winax
 ```
@@ -250,7 +250,7 @@ runtime.ts NO → hono | ws | MCP SDK | better-sqlite3 | node:fs | winax
 AgentRuntime
   ├── ToolRegistry.get/list     → AgentTool.execute
   │                                 └── RemoteAgentTool → MCP → Local Node
-  ├── ConfirmationPort.wait     → ConfirmationWaiter (http/confirmation-waiter.ts)
+  ├── ConfirmationPort.wait     → ConfirmationWaiter (sessions/confirmation-waiter.ts)
   │                                 └── WS frames (ws.ts)
   └── TurnMemory                → SqliteTurnMemory → SQLite
 ```
@@ -294,7 +294,7 @@ AgentRuntime
 
 ### Decision 5 — ¿`ConfirmationPort` frontera limpia?
 
-**YES.** Contrato en `agent/confirmation.ts`; waiter en `http/confirmation-waiter.ts`. PHASE 2.3 DONE.
+**YES.** Contrato en `agent/confirmation.ts`; waiter en `sessions/confirmation-waiter.ts`. PHASE 2.3 DONE.
 
 ### Decision 6 — ¿`TurnMemory` frontera limpia?
 

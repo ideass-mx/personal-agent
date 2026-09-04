@@ -38,7 +38,10 @@ import kotlin.math.min
 import kotlin.math.pow
 
 /**
- * Cliente WebSocket del hub. Solo [mx.ideass.personal.agent.service.AgentService]
+ * Cliente WebSocket del Gateway (nombre histórico: HubClient).
+ * Alias canónico: [AgentGatewayClient].
+ * No es MCP Client; no habla con el Node.
+ * Solo [mx.ideass.personal.agent.service.AgentService]
  * lo arranca; la UI nunca abre ni cierra la conexión.
  */
 @Singleton
@@ -122,6 +125,91 @@ class HubClient @Inject constructor(
     fun isConnected(): Boolean = authenticated.get()
 
     /**
+     * QR pairing: connect, send pairing_request, wait for pairing_result.
+     * On approved, persists device credential (authKind=device).
+     */
+    suspend fun completePairingFromQr(
+        endpoint: String,
+        pairingSessionId: String,
+        pairingSecret: String,
+        deviceName: String,
+    ): Result<String> {
+        val deviceId = preferences.getOrCreateDeviceId()
+        return suspendCancellableCoroutine { cont ->
+            val settled = AtomicBoolean(false)
+            fun settle(result: Result<String>) {
+                if (settled.compareAndSet(false, true) && cont.isActive) {
+                    cont.resume(result)
+                }
+            }
+            val request = Request.Builder().url(normalizeWsUrl(endpoint)).build()
+            val probeClient = client.newBuilder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .build()
+            val socket = probeClient.newWebSocket(
+                request,
+                object : WebSocketListener() {
+                    override fun onOpen(webSocket: WebSocket, response: Response) {
+                        val req = ClientMessage.PairingRequest(
+                            pairingSessionId = pairingSessionId,
+                            pairingSecret = pairingSecret,
+                            deviceId = deviceId,
+                            deviceName = deviceName.trim().ifBlank { null },
+                            platform = "android",
+                        )
+                        webSocket.send(ProtocolJson.encodeToString(ClientMessage.serializer(), req))
+                    }
+
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        when (val msg = decodeServer(text)) {
+                            is ServerMessage.PairingPending -> Unit
+                            is ServerMessage.PairingResult -> {
+                                when (msg.status) {
+                                    "approved" -> {
+                                        val cred = msg.deviceCredential
+                                        if (cred.isNullOrBlank()) {
+                                            settle(Result.failure(Exception("Sin deviceCredential")))
+                                        } else {
+                                            settle(Result.success(cred))
+                                        }
+                                        webSocket.close(1000, null)
+                                    }
+                                    "rejected" -> {
+                                        settle(Result.failure(Exception("Emparejamiento rechazado")))
+                                        webSocket.close(1000, null)
+                                    }
+                                    "expired" -> {
+                                        settle(Result.failure(Exception("Sesión de pairing expirada")))
+                                        webSocket.close(1000, null)
+                                    }
+                                    else -> {
+                                        settle(Result.failure(Exception("Resultado de pairing desconocido")))
+                                        webSocket.close(1000, null)
+                                    }
+                                }
+                            }
+                            is ServerMessage.Error -> {
+                                settle(Result.failure(Exception(msg.message)))
+                                webSocket.close(1000, null)
+                            }
+                            else -> Unit
+                        }
+                    }
+
+                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        settle(Result.failure(Exception(t.message ?: "Fallo de pairing")))
+                    }
+
+                    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        settle(Result.failure(Exception("Conexión cerrada antes de completar pairing")))
+                    }
+                },
+            )
+            cont.invokeOnCancellation { socket.cancel() }
+        }
+    }
+
+    /**
      * Abre un WebSocket temporal, autentica y mide latencia hasta auth_ok.
      * No altera la sesión persistente del cliente.
      */
@@ -151,6 +239,7 @@ class HubClient @Inject constructor(
                             token = token.trim(),
                             deviceId = deviceId,
                             deviceName = deviceName.trim().ifBlank { null },
+                            authKind = "install",
                         )
                         webSocket.send(ProtocolJson.encodeToString(ClientMessage.serializer(), auth))
                     }
@@ -246,6 +335,7 @@ class HubClient @Inject constructor(
                     token = config.token,
                     deviceId = deviceId,
                     deviceName = config.deviceName.ifBlank { null },
+                    authKind = config.authKind,
                 )
                 webSocket.send(ProtocolJson.encodeToString(ClientMessage.serializer(), auth))
             }

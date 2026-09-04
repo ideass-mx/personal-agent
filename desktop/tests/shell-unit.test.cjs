@@ -50,6 +50,9 @@ test("mapAgentState not configured / ready / stopped", () => {
       processRunning: true,
       bootReady: true,
       healthOk: true,
+      networkReady: true,
+      nodeStatus: "READY",
+      agentReady: true,
     }),
     AgentUiState.READY,
   );
@@ -59,9 +62,57 @@ test("mapAgentState not configured / ready / stopped", () => {
       processRunning: false,
       bootReady: false,
       healthOk: false,
+      networkReady: true,
     }),
     AgentUiState.STOPPED,
   );
+});
+
+test("mapAgentState DEGRADED when Node DISCONNECTED", () => {
+  assert.equal(
+    mapAgentState({
+      workspaceConfigured: true,
+      processRunning: true,
+      bootReady: true,
+      healthOk: false,
+      networkReady: true,
+      nodeStatus: "DISCONNECTED",
+      agentReady: false,
+    }),
+    AgentUiState.DEGRADED,
+  );
+});
+
+test("install credential ≠ trusted device semantics", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pa-auth-sem-"));
+  const prev = process.env.PERSONAL_AGENT_DATA_DIR;
+  process.env.PERSONAL_AGENT_DATA_DIR = dir;
+  for (const rel of [
+    "../lib/config.cjs",
+    "../lib/pairing.cjs",
+    "../lib/agent-identity.cjs",
+  ]) {
+    delete require.cache[require.resolve(rel)];
+  }
+  try {
+    const id = require("../lib/agent-identity.cjs");
+    const cfg = require("../lib/config.cjs");
+    assert.equal(id.hasPersistedInstallCredential(), false);
+    assert.equal(id.hasPersistedPairingAuth(), false);
+    cfg.ensureHubToken();
+    delete require.cache[require.resolve("../lib/agent-identity.cjs")];
+    delete require.cache[require.resolve("../lib/pairing.cjs")];
+    const id2 = require("../lib/agent-identity.cjs");
+    assert.equal(id2.hasPersistedInstallCredential(), true);
+    // Deprecated alias still means install credential — not trusted device.
+    assert.equal(id2.hasPersistedPairingAuth(), true);
+  } finally {
+    if (prev === undefined) delete process.env.PERSONAL_AGENT_DATA_DIR;
+    else process.env.PERSONAL_AGENT_DATA_DIR = prev;
+  }
 });
 
 test("maskToken never shows full secret", () => {

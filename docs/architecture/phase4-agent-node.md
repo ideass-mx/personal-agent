@@ -11,13 +11,13 @@ No es un proceso, MCP Server, Node, Agent Runtime ni una conexión WebSocket.
 
 **Hoy:** la identidad es **implícita** a una `AgentDefinition` en memoria (PHASE 6). No hay `agentId` persistente ni Agent Registry. Agent identity is currently configuration-scoped and not yet persistent.
 
-Vive en `hub/src/agent/definition.ts` (prompt, model, toolPolicy). El Runtime pasa prompt/modelo al LLM. Policy se aplica en discovery.
+Vive en `hub/src/agents/definition.ts` (prompt, model, toolPolicy). El Runtime pasa prompt/modelo al LLM. Policy se aplica en discovery.
 
 Frontera natural futura para `agentId`: la definition, **no** el protocolo WS ni Android.
 
 ## 2. Agent Runtime
 
-Motor **común**. Una implementación: `hub/src/agent/runtime.ts`.
+Motor **común**. Una implementación: `hub/src/agents/runtime.ts`.
 
 ```text
 Agent + configuration + context + Agent Runtime = ejecución
@@ -44,7 +44,7 @@ Nombres históricos (no rename en esta fase):
 | carpeta / paquete `agent/` | Local Node + MCP Server |
 | `LocalAgent`, `startLocalAgent`, `attachLocalAgent` | lifecycle del MCP Server local |
 | `AgentConfig` (`agent/src/config.ts`) | config de infraestructura (p. ej. `filesystem.root`), **no** identidad de Agent |
-| `hub/src/agent/` | Agent Runtime + ConfirmationPort + prompts |
+| `hub/src/agents/` | Agent Runtime + ConfirmationPort + prompts |
 
 ## 4. MCP Server
 

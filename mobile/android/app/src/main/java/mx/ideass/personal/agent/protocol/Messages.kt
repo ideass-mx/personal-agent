@@ -1,10 +1,12 @@
+/**
+ * Protocolo personal-agent v1 — espejo Kotlin (android).
+ * Fuente de verdad: packages/protocol/PROTOCOL.md.
+ */
 package mx.ideass.personal.agent.protocol
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
-
-// ── Cliente → Servidor ────────────────────────────────────────────────
 
 @Serializable
 sealed interface ClientMessage {
@@ -15,6 +17,17 @@ sealed interface ClientMessage {
         val token: String,
         val deviceId: String,
         val deviceName: String? = null,
+        val authKind: String? = null,
+    ) : ClientMessage
+
+    @Serializable
+    @SerialName("pairing_request")
+    data class PairingRequest(
+        val pairingSessionId: String,
+        val pairingSecret: String,
+        val deviceId: String,
+        val deviceName: String? = null,
+        val platform: String? = null,
     ) : ClientMessage
 
     @Serializable
@@ -36,14 +49,27 @@ sealed interface ClientMessage {
     data object Ping : ClientMessage
 }
 
-// ── Servidor → Cliente ────────────────────────────────────────────────
-
 @Serializable
 sealed interface ServerMessage {
 
     @Serializable
     @SerialName("auth_ok")
     data class AuthOk(val deviceId: String) : ServerMessage
+
+    @Serializable
+    @SerialName("pairing_pending")
+    data class PairingPending(
+        val pairingSessionId: String,
+        val message: String,
+    ) : ServerMessage
+
+    @Serializable
+    @SerialName("pairing_result")
+    data class PairingResult(
+        val pairingSessionId: String,
+        val status: String,
+        val deviceCredential: String? = null,
+    ) : ServerMessage
 
     @Serializable
     @SerialName("assistant_chunk")

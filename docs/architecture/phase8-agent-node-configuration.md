@@ -21,7 +21,7 @@ Gateway
 ├── GatewayConfig          hub/src/config.ts
 │     port, hubToken, dbFile, anthropicApiKey, maxTokens, historyWindow
 │
-├── AgentDefinition        hub/src/agent/definition.ts
+├── AgentDefinition        hub/src/agents/definition.ts
 │     prompt, model, toolPolicy
 │
 ├── Agent Runtime

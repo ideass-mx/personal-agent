@@ -352,7 +352,7 @@ Ejemplos coherentes:
 ### Convivencia con plugins
 
 1. El plugin **declara** `executionMode` por tool en metadata y lo implementa en el `AgentTool` registrado.
-2. El **AgentRuntime / Hub** aplica `confirm`: emite `confirm_request`, espera `confirm_response` (solo `confirmationId` + `approved`), timeout o cancelación por desconexión (fail-closed). La operación (`toolName`, `input`, `toolCallId`, `conversationId`) queda congelada en el pending del servidor y ligada a la sesión WS + `deviceId` (Etapa 6D). Ver `packages/protocol/PROTOCOL.md` y `hub/src/agent/confirmation.ts` (`CONFIRMATION_TIMEOUT_MS`).
+2. El **AgentRuntime / Hub** aplica `confirm`: emite `confirm_request`, espera `confirm_response` (solo `confirmationId` + `approved`), timeout o cancelación por desconexión (fail-closed). La operación (`toolName`, `input`, `toolCallId`, `conversationId`) queda congelada en el pending del servidor y ligada a la sesión WS + `deviceId` (Etapa 6D). Ver `packages/protocol/PROTOCOL.md` y `hub/src/agents/confirmation.ts` (`CONFIRMATION_TIMEOUT_MS`).
 3. Un plugin IPC/remoto debe **devolver o respetar** el mismo `executionMode` en su descriptor; el core puede re-validar contra metadata antes de exponer al LLM.
 4. Plugins **no** pueden “escalar” saltándose confirm desde el lado del modelo: la confirmación es responsabilidad del **Hub/core** cuando `executionMode === "confirm"`.
 
@@ -734,7 +734,7 @@ Permission System.
 - plugins / marketplace
 - WebSocket Hub↔Agent; MCP discovery dinámico / servers instalables
 
-El spike MCP (`agent/src/mcp` + `hub/src/tools/mcp-executor.ts`) **sí** está
+El spike MCP (`agent/src/mcp` + `hub/src/tools/mcp/executor.ts`) **sí** está
 en código; no está en el catálogo productivo del Hub.
 
 **Hub** = cerebro. **Agent** = proceso local de ejecución. MCP los conecta.

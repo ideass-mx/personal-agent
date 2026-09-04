@@ -3,7 +3,7 @@
  * Fuente de verdad: PROTOCOL.md. Este archivo se adapta a él, nunca al revés.
  *
  * Uso en Android: copiar a mx.ideass.personal.agent.protocol y configurar Json con
- *   ignoreUnknownKeys = true   // regla 3 del protocolo
+ *   ignoreUnknownKeys = true
  *   classDiscriminator = "type"
  */
 package mx.ideass.personal.agent.protocol
@@ -23,6 +23,17 @@ sealed interface ClientMessage {
         val token: String,
         val deviceId: String,
         val deviceName: String? = null,
+        val authKind: String? = null,
+    ) : ClientMessage
+
+    @Serializable
+    @SerialName("pairing_request")
+    data class PairingRequest(
+        val pairingSessionId: String,
+        val pairingSecret: String,
+        val deviceId: String,
+        val deviceName: String? = null,
+        val platform: String? = null,
     ) : ClientMessage
 
     @Serializable
@@ -52,6 +63,21 @@ sealed interface ServerMessage {
     @Serializable
     @SerialName("auth_ok")
     data class AuthOk(val deviceId: String) : ServerMessage
+
+    @Serializable
+    @SerialName("pairing_pending")
+    data class PairingPending(
+        val pairingSessionId: String,
+        val message: String,
+    ) : ServerMessage
+
+    @Serializable
+    @SerialName("pairing_result")
+    data class PairingResult(
+        val pairingSessionId: String,
+        val status: String,
+        val deviceCredential: String? = null,
+    ) : ServerMessage
 
     @Serializable
     @SerialName("assistant_chunk")

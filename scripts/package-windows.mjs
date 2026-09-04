@@ -281,6 +281,7 @@ export async function packageWindows() {
 
   const gateway = path.join(outRoot, "gateway");
   const agent = path.join(outRoot, "agent");
+  const nodeDir = path.join(outRoot, "node");
   const desktop = path.join(outRoot, "desktop");
   const runtimeNode = path.join(outRoot, "runtime", "node");
   const runtimeElectron = path.join(outRoot, "runtime", "electron");
@@ -290,11 +291,21 @@ export async function packageWindows() {
 
   mkdirSync(gateway, { recursive: true });
   mkdirSync(agent, { recursive: true });
+  mkdirSync(nodeDir, { recursive: true });
   mkdirSync(desktop, { recursive: true });
   mkdirSync(resources, { recursive: true });
 
-  cpSync(path.join(repoRoot, "dist", "hub"), gateway, { recursive: true });
-  cpSync(path.join(repoRoot, "dist", "agent"), agent, { recursive: true });
+  // Prefer canónico dist/gateway + dist/node; fallback legacy dist/hub + dist/agent
+  const gwSrc = existsSync(path.join(repoRoot, "dist", "gateway", "gateway.cjs"))
+    ? path.join(repoRoot, "dist", "gateway")
+    : path.join(repoRoot, "dist", "hub");
+  const nodeSrc = existsSync(path.join(repoRoot, "dist", "node", "node.cjs"))
+    ? path.join(repoRoot, "dist", "node")
+    : path.join(repoRoot, "dist", "agent");
+  cpSync(gwSrc, gateway, { recursive: true });
+  cpSync(nodeSrc, nodeDir, { recursive: true });
+  // Legacy product path agent/ (Desktop resolve + older docs)
+  cpSync(nodeSrc, agent, { recursive: true });
   if (existsSync(path.join(repoRoot, "dist", "migrations"))) {
     cpSync(
       path.join(repoRoot, "dist", "migrations"),
@@ -471,6 +482,13 @@ export async function packageWindows() {
       );
     }
   }
+
+  // PHASE 64.1 — fail-closed: reject ELF/Mach-O/unknown *.node before installer.
+  const { assertWindowsNativeModules } = await import(
+    "./windows-native-modules.mjs"
+  );
+  process.stderr.write("[package-windows] validating native modules (PHASE 64.1)\n");
+  assertWindowsNativeModules(outRoot);
 
   return { outRoot, manifest, runtimeReady };
 }

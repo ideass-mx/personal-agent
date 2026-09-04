@@ -1,37 +1,51 @@
 # Arquitectura — MX Ideass · Personal Agent
 
-Vocabulario de plataforma (PHASE 1):
+Vocabulario de plataforma (PHASE 1 + 53):
 [`terminology.md`](./architecture/terminology.md) y
 [`boundaries.md`](./architecture/boundaries.md).
-`hub/` es la implementación actual del **Gateway**.
-`agent/` es el precursor del **Local Node**.
+Validación post-rename: [`phase53.1-post-refactor-runtime-validation.md`](./architecture/phase53.1-post-refactor-runtime-validation.md).
+Runtime canónico: [`phase54-canonical-runtime-field-validation.md`](./architecture/phase54-canonical-runtime-field-validation.md).
+Modelo de Agent: [`phase55-agent-model.md`](./architecture/phase55-agent-model.md).
+Skills & capabilities: [`phase56-skills-capabilities.md`](./architecture/phase56-skills-capabilities.md).
+
+`gateway/` es la implementación del **Gateway** (legacy físico: `hub/`).
+`node/` es el **Node** (MCP + Native Tools; legacy físico: `agent/`).
+Entrypoints internos: `gateway/gateway.cjs` → `node/node.cjs` (shims `hub.cjs` / `agent.cjs` solo en bordes).
+`Agent` = definición lógica (`AgentDefinition.id`); ≠ `agentId` de instalación; ≠ proceso Node.
+`Skill` = instrucciones reutilizables; `Tool` = capacidad ejecutable (PHASE 56).
+
+Identidad y pairing (PHASE 52):
+[`phase52-pairing-trusted-device.md`](./architecture/phase52-pairing-trusted-device.md)
+— Agent Identity (`agentId`) ≠ Pairing Session ≠ Trusted Device ≠ Session Auth.
+`HUB_TOKEN` es solo **legacy install credential** (no va en el QR).
 
 ## Principio rector
-Nada se conecta directo a nada: **todo pasa por el Hub (`hub/`)**.
-Los dispositivos son puntos de entrada/salida; el **Agent** (proceso local)
-ejecuta capacidades en la PC; el Hub piensa, confirma y enruta.
+Nada se conecta directo a nada: **todo pasa por el Gateway (`gateway/`)**.
+Los dispositivos son puntos de entrada/salida; el **Node** (proceso local)
+ejecuta capacidades en la PC; el Gateway piensa, confirma y enruta.
 
-**Hub = cerebro del sistema. Agent = garras (proceso local multiplataforma).**
+**Gateway = cerebro del sistema. Node = garras (proceso local multiplataforma).**
 
-En una frase: el Hub piensa y coordina; el Agent ejecuta las capacidades
-locales de la máquina; MCP conecta ambos.
+En una frase: el Gateway piensa y coordina; el Node ejecuta las capacidades
+locales de la máquina; MCP (bajo Tools) conecta ambos.
 
 ## Nomenclatura (no confundir)
 
 | Nombre | Qué es | Dónde vive |
 |--------|--------|------------|
-| **Hub** | Cerebro: LLM, AgentRuntime, Memory, ToolRegistry, Confirmation, plugins del Hub, RemoteAgentTool | `hub/` |
-| **Agent** | Proceso local de la máquina: MCP server, ToolRegistry local, tools locales; futura frontera OS | `agent/` |
-| **Mobile** | Cliente / interfaz móvil | `mobile/` (`mobile/android/` hoy) |
-| **Protocol** | Contratos WS clientes ↔ Hub | `packages/protocol/` |
-| **Tool** | Capacidad ejecutable (`AgentTool`) | Hub in-process o Agent vía MCP |
-| **Plugin / extensión del Hub** | Empaque futuro de tools del cerebro | diseño; no runtime |
-| **Agent Extension** | Código local que aporta `AgentTool[]` **dentro del proceso Agent** | `agent/src/extensions/` |
+| **Gateway** | Cerebro: Agents/Runtime, Memory, ToolRegistry, Confirmation, HTTP/WS, Pairing | `gateway/` (legacy: `hub/`) |
+| **Node** | Proceso local: MCP Server, Native Tools | `node/` (legacy: `agent/`) |
+| **Agents / AgentRuntime** | Lógica de turno LLM dentro del Gateway (no es el proceso Node) | `gateway/src/agents/` |
+| **Mobile** | Cliente / interfaz móvil (Gateway Client) | `mobile/` (`mobile/android/` hoy) |
+| **Desktop** | Supervisor / onboarding / Tailscale / Pairing UI | `desktop/` |
+| **Protocol** | Contratos WS clientes ↔ Gateway | `packages/protocol/` |
+| **Tool** | Capacidad ejecutable (`AgentTool`) | Gateway registry → MCP → Node |
+| **Agent Extension** | Código local que aporta tools **dentro del proceso Node** | `node/src/extensions/` |
 
-**`hub/src/agent/` no es el programa `agent/`.**
+**`gateway/src/agents/` no es el programa `node/`.**
 
-- `hub/src/agent/` = **AgentRuntime** interno del Hub (loop LLM ↔ tools ↔ confirmación).
-- `agent/` = programa local. Frontera de ejecución. Un solo Agent multiplataforma.
+- `gateway/src/agents/` = **AgentRuntime** interno del Gateway (loop LLM ↔ tools ↔ confirmación).
+- `node/` = programa local. Frontera de ejecución. Un solo Node multiplataforma.
 
 **Plugin ≠ proceso. Agent ≠ Plugin. Agent Extension ≠ proceso.**
 Una Agent Extension no es daemon, Guardian, sandbox ni Permission System:
@@ -285,7 +299,7 @@ Escritorio futuro: app → Hub → Agent. No está implementado.
 
 Paquete npm: `@mxideass/hub`. Estructura plana por capacidad:
 `http/ agent/ providers/ memory/ db/` (+ `tools/`).
-`hub/src/agent/` es el AgentRuntime del cerebro, no el programa `agent/`.
+`hub/src/agents/` es el AgentRuntime del cerebro, no el programa `agent/`.
 
 **Responsabilidades (sí):**
 
@@ -446,7 +460,7 @@ LLM → tool_call → ToolRegistry → executionMode?
 ```text
 /
 ├── hub/                 # cerebro (@mxideass/hub)
-│   └── src/             # incluye src/agent/ = AgentRuntime (no es agent/)
+│   └── src/             # incluye src/agents/ = AgentRuntime (no es agent/)
 ├── agent/               # MCP + agent.echo + filesystem.read/write/list
 ├── mobile/
 │   └── android/
@@ -787,7 +801,7 @@ stdin del proceso Agent.
 
 Únicos procesos del producto: **Hub** y **Agent**.
 
-- Clientes → Hub: WebSocket (`hub/src/http/ws.ts`, protocolo v1).
+- Clientes → Hub: WebSocket (`hub/src/ws/index.ts`, protocolo v1).
 - LLM → `AgentRuntime` → `executionMode` → confirmación (si `confirm`) →
   `RemoteAgentTool` → `McpRemoteExecutor` → MCP stdio → Agent `ToolRegistry`
   → OS (`fs` / `spawn`).
@@ -936,7 +950,7 @@ Sin la extensión en el compile/registro, `customer.demo` no aparece en
 ## Etapa 13B — Tool Policy del Hub
 
 Las Agent Extensions declaran capacidades. MCP las descubre (`tools/list`).
-El Hub aplica una **Tool Policy** propia (`hub/src/tools/tool-policy.ts`):
+El Hub aplica una **Tool Policy** propia (`hub/src/tools/policy.ts`):
 qué names se registran como RemoteAgentTool y con qué `executionMode`.
 
 ```text

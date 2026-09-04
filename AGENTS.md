@@ -21,12 +21,21 @@ Contexto obligatorio antes de tocar código: `docs/architecture.md`,
    Kotlin + Jetpack Compose, OkHttp para WebSocket, kotlinx.serialization con
    `ignoreUnknownKeys = true` y `classDiscriminator = "type"`. El foreground
    service es innegociable.
-6. **Hub (`hub/`):** TypeScript estricto, sin frameworks nuevos.
-   Persistencia conversacional vía `hub/src/memory/`; SQLite en `hub/src/db/`.
-   Los prompts del agente viven solo en `hub/src/agent/prompts.ts`
-   (Agent Runtime del Gateway, alojado hoy en el proceso Hub; no confundir
-   con el programa `agent/`, precursor del Local Node).
-   El paquete npm es `@mxideass/hub`.
-   Vocabulario: `docs/architecture/terminology.md`.
+6. **Gateway (`gateway/`):** TypeScript estricto, sin frameworks nuevos.
+   Persistencia conversacional vía `gateway/src/memory/`; SQLite en `gateway/src/db/`.
+   Los prompts viven en `gateway/src/agents/prompts.ts`
+   (Agent Runtime dentro del Gateway; no confundir con el programa `node/`).
+   Paquete npm: `@mxideass/gateway` (legacy: `@mxideass/hub`).
+   Node (`node/`): MCP Server + Native Tools (`@mxideass/node`, legacy `@mxideass/agent`).
+   Spawn canónico: `gateway/gateway.cjs` → `node/node.cjs` (PHASE 54).
+   Agent lógico: `AgentDefinition` / Registry / Manager / Runtime (PHASE 55);
+   `agentId` = instalación ≠ `AgentDefinition.id`.
+   Vocabulario: `docs/architecture/terminology.md`, PHASE 53–55.
 7. **Idioma:** código y nombres en inglés; comentarios, strings de UI y
    documentación en español.
+
+## Legacy (compatibilidad)
+
+- `hub/` / `HUB_TOKEN` / `hub.cjs` / logs `[hub]`: nombres legacy del Gateway (shims; runtime interno usa `[gateway]`).
+- `agent/` / `agent.cjs` / logs `[agent]`: nombres legacy del Node (shims; runtime interno usa `[node]`).
+- No usar `HUB_TOKEN` como agentId, secreto QR ni deviceCredential.

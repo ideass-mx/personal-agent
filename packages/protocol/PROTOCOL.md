@@ -5,19 +5,46 @@ Los espejos (`messages.ts`, `Messages.kt`) se adaptan a este documento, nunca al
 
 - Transporte: WebSocket en `ws://<hub>:<puerto>/ws`
 - Formato: JSON, un mensaje por frame, discriminado por el campo `type`
-- Primera obligación del cliente: enviar `auth` antes que cualquier otra cosa.
-  Cualquier mensaje previo a una autenticación exitosa cierra la conexión.
-- Todo mensaje lleva el origen implícito en la sesión (`deviceId` se declara en `auth`).
+- Primera obligación del cliente: enviar `auth` **o** `pairing_request`
+  antes que cualquier otra cosa.
+  Cualquier otro mensaje previo a autenticación / pairing exitoso cierra la conexión.
+- Todo mensaje post-auth lleva el origen implícito en la sesión
+  (`deviceId` se declara en `auth` o en `pairing_request`).
 
 ## Cliente → Servidor
 
 ### `auth`
 ```json
-{ "type": "auth", "token": "<HUB_TOKEN>", "deviceId": "xiaomi-15t", "deviceName": "Xiaomi 15T" }
+{
+  "type": "auth",
+  "token": "<credential>",
+  "deviceId": "xiaomi-15t",
+  "deviceName": "Xiaomi 15T",
+  "authKind": "install"
+}
 ```
 `deviceId`: estable por dispositivo (lo inventa el cliente y lo persiste).
 `deviceName`: opcional, legible para humanos.
-`token`: el valor de la variable de entorno `HUB_TOKEN` del Hub (nombre histórico).
+`token`:
+- `authKind` omitido o `"install"`: secreto de instalación legacy (`HUB_TOKEN` /
+  env del Hub). Compatibilidad con clientes existentes.
+- `authKind` `"device"`: credencial de dispositivo de confianza emitida al
+  completar un Pairing Session (no es el secreto del QR; no es `HUB_TOKEN`).
+
+### `pairing_request`
+```json
+{
+  "type": "pairing_request",
+  "pairingSessionId": "ps_…",
+  "pairingSecret": "<temporary>",
+  "deviceId": "android-…",
+  "deviceName": "Xiaomi 15T",
+  "platform": "android"
+}
+```
+Inicia emparejamiento con una Pairing Session temporal (QR). Solo válido como
+primer mensaje (sesión no autenticada). El Hub valida hash, TTL y estado
+`PENDING`; pasa a confirmación en Desktop. **No** autentica la sesión aún.
 
 ### `user_message`
 ```json
@@ -56,6 +83,29 @@ Latido opcional del cliente. El Hub responde `pong`.
 ```json
 { "type": "auth_ok", "deviceId": "xiaomi-15t" }
 ```
+
+### `pairing_pending`
+```json
+{
+  "type": "pairing_pending",
+  "pairingSessionId": "ps_…",
+  "message": "Esperando confirmación en el PC"
+}
+```
+El Hub aceptó el secreto temporal; falta aprobación humana en Desktop.
+
+### `pairing_result`
+```json
+{
+  "type": "pairing_result",
+  "pairingSessionId": "ps_…",
+  "status": "approved",
+  "deviceCredential": "<one-time-show>"
+}
+```
+`status`: `approved` | `rejected` | `expired`.
+`deviceCredential` solo si `approved` (mostrar una vez; el cliente lo persiste).
+Tras `approved`, el cliente debe autenticarse con `auth` + `authKind: "device"`.
 
 ### `assistant_chunk`
 ```json
@@ -115,10 +165,21 @@ al hilo correcto en el cliente:
 { "type": "error", "code": "internal", "message": "…", "conversationId": "c_abc123" }
 ```
 
-Códigos actuales: `auth_failed`, `auth_required`, `bad_message`, `busy`, `internal`.
+Códigos actuales: `auth_failed`, `auth_required`, `bad_message`, `busy`, `internal`,
+`pairing_invalid`, `pairing_expired`, `pairing_rejected`, `pairing_waiter_busy`.
 `busy`: ya hay una respuesta en curso en esta sesión; reintentar al terminar.
 (`confirm_response` es la excepción: se acepta durante el turno para desbloquear
 una confirmación pendiente.)
+
+## Pairing QR (fuera del frame WS)
+
+URI versionada (no contiene `HUB_TOKEN` ni claves privadas):
+
+```text
+personalagent://pair?v=1&agent=<agentId>&endpoint=<ws-url>&session=<pairingSessionId>&secret=<temporary>
+```
+
+TTL de la Pairing Session: **5 minutos**, single-use. Solo se persiste el hash del secreto.
 
 ## Reglas de evolución
 
@@ -133,6 +194,7 @@ una confirmación pendiente.)
 - `tool_progress`: progreso de tareas en el Agent (Fase 4)
 - `agent_hello`: registro del Agent ante el Hub — transporte Hub↔Agent distinto
   del WS clientes↔Hub; posible MCP u otro IPC JSON-safe (Fase 4)
+- PKI / clave pública por dispositivo (evolución de Trusted Device)
 
 Este protocolo WS (**clientes ↔ Hub**) no transporta filesystem/shell. Las
 garras OS viven en **Agent** (`agent/`); ver `docs/architecture.md`.
