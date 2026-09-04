@@ -86,14 +86,30 @@ jobs:
             throw "Electron asset HEAD failed: $($resp.StatusCode) for $url"
           }
 
+      # PHASE 64.2: workspace-http npm ci removed (not on Windows installer release path).
+      # Keep gateway npm ci on windows-latest for better-sqlite3 PE natives.
       - name: Install dependencies (npm ci)
         shell: pwsh
         run: |
-          npm ci --prefix packages/protocol
-          npm ci --prefix packages/workspace-http
-          npm ci --prefix gateway
-          npm ci --prefix node
-          npm ci --prefix web
+          function Invoke-NpmCiTimed {
+            param(
+              [Parameter(Mandatory = $true)][string]$Label,
+              [Parameter(Mandatory = $true)][string]$Prefix
+            )
+            Write-Host "[windows-installer] npm ci $Label START"
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            npm ci --prefix $Prefix
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $sw.Stop()
+            $elapsed = $sw.Elapsed.ToString("hh\:mm\:ss")
+            Write-Host "[windows-installer] npm ci $Label END: $elapsed"
+            Write-Host "[windows-installer] $Label npm ci duration: $($sw.Elapsed)"
+          }
+
+          Invoke-NpmCiTimed -Label "protocol" -Prefix "packages/protocol"
+          Invoke-NpmCiTimed -Label "gateway" -Prefix "gateway"
+          Invoke-NpmCiTimed -Label "node" -Prefix "node"
+          Invoke-NpmCiTimed -Label "web" -Prefix "web"
 
       - name: Package Windows layout
         shell: pwsh
