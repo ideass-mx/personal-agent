@@ -1,5 +1,6 @@
 {
   "name": "personal-agent",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
     "install:all": "npm install --prefix packages/protocol && npm install --prefix packages/workspace-http && npm install --prefix gateway && npm install --prefix node && npm install --prefix web",
@@ -22,6 +23,7 @@
     "package:windows": "node scripts/package-windows.mjs",
     "validate:windows-package": "node scripts/validate-windows-package.mjs",
     "validate:windows-natives": "node scripts/validate-windows-natives.mjs",
+    "finalize:installer": "node scripts/release/finalize-installer.mjs",
     "test:packaging": "node --test scripts/tests/*.test.mjs",
     "smoke:package": "node scripts/smoke-package.mjs",
     "smoke:web": "node scripts/smoke-web.mjs"

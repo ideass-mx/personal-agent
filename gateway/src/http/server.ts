@@ -11,6 +11,7 @@ import { mountWorkspaceHttp } from "./workspace-http.ts";
 import { mountPairingHttp } from "./pairing-http.ts";
 import { mountArtifactHttp } from "./artifact-http.ts";
 import { mountSetupHttp } from "./setup-http.ts";
+import { productVersionForHealth } from "../product-version.ts";
 import { resolveConsoleStaticRoot } from "./console-static.ts";
 import type { WorkspaceStore } from "../workspace/types.ts";
 import type { ArtifactManager } from "../artifacts/manager.ts";
@@ -107,6 +108,7 @@ export function startServer(
 
   app.get("/health", (c) => {
     const health = resolveHealth(extras);
+    const product = productVersionForHealth();
     return c.json({
       ok: true,
       name: "personal-agent-api",
@@ -114,6 +116,14 @@ export function startServer(
       agentReady: health.agentReady,
       agentTools: health.agentTools,
       nodeStatus: health.nodeStatus,
+      product: product.product,
+      version: product.version,
+      build: product.build,
+      commit: product.commit,
+      platform: product.platform,
+      architecture: product.architecture,
+      builtAt: product.builtAt,
+      ...(product.channel ? { channel: product.channel } : {}),
     });
   });
 

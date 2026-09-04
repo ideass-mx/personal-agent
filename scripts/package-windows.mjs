@@ -21,6 +21,11 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { pack } from "./package.mjs";
+import {
+  expectedInstallerFileName,
+  resolveProductBuildInfo,
+  writeProductVersionArtifacts,
+} from "./release/product-version.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outRoot = path.join(repoRoot, "dist", "windows", "PersonalAgent");
@@ -386,14 +391,20 @@ export async function packageWindows() {
     "utf8",
   );
 
-  writeFileSync(path.join(outRoot, "VERSION"), "0.1.0-phase51\n", "utf8");
+  mkdirSync(path.join(outRoot, "resources"), { recursive: true });
+  const buildInfo = writeProductVersionArtifacts(outRoot);
+  const installerName = expectedInstallerFileName(buildInfo);
 
   const runtimeReady =
     Boolean(nodeInfo.hasNodeExe) && Boolean(electronInfo.hasElectronExe);
 
   const manifest = {
     product: "PersonalAgent",
-    version: "0.1.0",
+    version: buildInfo.version,
+    build: buildInfo.build,
+    commit: buildInfo.commit,
+    channel: buildInfo.channel,
+    builtAt: buildInfo.builtAt,
     phase: 51,
     layout: [
       "runtime/node",
@@ -405,6 +416,7 @@ export async function packageWindows() {
       "desktop",
       "resources",
       "migrations",
+      "build-info.json",
     ],
     agentConsole: {
       path: "console/",
@@ -422,7 +434,7 @@ export async function packageWindows() {
       preserveWorkspace: true,
       askBeforeDeletingConfigAndDb: true,
     },
-    installerOutput: "PersonalAgent-Setup.exe",
+    installerOutput: installerName,
     windowsFieldValidation: "NOT_EXECUTED_ON_LINUX_PACKAGER",
     installerCompilation: "REQUIRES_WINDOWS_INNO_SETUP",
   };
@@ -437,12 +449,18 @@ export async function packageWindows() {
     [
       "Personal Agent — Windows product layout (PHASE 51)",
       "",
+      `Version: ${buildInfo.version}`,
+      `Build: ${buildInfo.build}`,
+      `Commit: ${buildInfo.commit}`,
+      `Channel: ${buildInfo.channel}`,
+      "",
       "gateway/           Hub (Gateway + Agent Runtime)",
       "agent/             Local Node (MCP + Tools)",
       "console/           Agent Console (static Web UI)",
       "desktop/           Tray / first-run shell (no Chat)",
       "runtime/node/      Portable Node (node.exe required)",
       "runtime/electron/  Portable Electron (electron.exe required)",
+      "build-info.json    Product / build identity (no secrets)",
       "",
       "NO Node.js / npm required on the user PC.",
       "NO repository checkout. NO terminal for first-run.",
@@ -453,7 +471,7 @@ export async function packageWindows() {
       "",
       "Compile installer on Windows with Inno Setup 6+:",
       "  installer\\windows\\personal-agent.iss",
-      "  Output: dist\\windows\\PersonalAgent-Setup.exe",
+      `  Output: dist\\windows\\${installerName}`,
       "",
       `Embedded runtimes ready: ${runtimeReady ? "YES" : "NO — fetch or place node.exe + electron.exe before compiling Setup"}`,
       "",

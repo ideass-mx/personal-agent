@@ -49,6 +49,11 @@ describe("PHASE 51 Windows installer + Agent Console integration", () => {
   it("Inno produces PersonalAgent-Setup and checks runtimes at compile time", () => {
     const iss = read("installer/windows/personal-agent.iss");
     assert.match(iss, /PersonalAgent-Setup/);
+    assert.match(iss, /MyOutputBaseFilename|version\.generated\.iss/);
+    assert.match(
+      iss,
+      /AppId=\{\{A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51\}\}/,
+    );
     // Compile-time ISPP #error — NOT InitializeSetup FileExists on SourceRoot
     // (that path only exists on the build machine; it broke end-user installs).
     assert.match(iss, /#if !FileExists\(SourceRoot/);
@@ -132,8 +137,9 @@ describe("PHASE 51 Windows installer + Agent Console integration", () => {
     assert.match(yml, /workflow_dispatch/);
     assert.match(yml, /FETCH_NODE_WIN/);
     assert.match(yml, /FETCH_ELECTRON_WIN/);
-    assert.match(yml, /PersonalAgent-Setup\.exe/);
-    assert.match(yml, /PersonalAgent-Windows-Installer/);
+    assert.match(yml, /PersonalAgent-Setup-\*-win-x64\.exe|finalize-installer/);
+    assert.match(yml, /artifact_name=/);
+    assert.doesNotMatch(yml, /name:\s*PersonalAgent-Windows-Installer\s*$/m);
     assert.match(yml, /ELECTRON_WIN_VERSION:\s*"v33\.4\.11"/);
     assert.match(yml, /win32-x64/);
     assert.doesNotMatch(yml, /ELECTRON_WIN_VERSION:\s*"v33\.2\.1"/);

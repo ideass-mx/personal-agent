@@ -22,7 +22,11 @@ function sanitizeDiagnostics(text) {
 function buildDiagnosticsReport(snapshot) {
   const lines = [
     "Personal Agent — diagnóstico",
-    `Version: ${snapshot.version || "0.1.0"}`,
+    `Version: ${snapshot.version || "unknown"}`,
+    `Build: ${snapshot.build || "unknown"}`,
+    `Commit: ${snapshot.commit || "unknown"}`,
+    `Platform: ${snapshot.platform || "unknown"} ${snapshot.architecture || ""}`.trim(),
+    `BuiltAt: ${snapshot.builtAt || "unknown"}`,
     `State: ${snapshot.state || "?"}`,
     `Gateway: ${snapshot.gateway || "?"}`,
     `Node (boot): ${snapshot.node || "?"}`,

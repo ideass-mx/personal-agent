@@ -6,6 +6,7 @@ dist/
 build/
 out/
 *.tsbuildinfo
+installer/windows/version.generated.iss
 
 # Entorno y secretos
 .env

@@ -38,10 +38,15 @@ describe("installer simplified happy path", () => {
     }
   });
 
-  it("iss wires InfoBefore and does not prompt LLM/Tailscale", () => {
+  it("iss wires InfoBefore, stable AppId, versioned output", () => {
     const src = fs.readFileSync(iss, "utf8");
     assert.match(src, /InfoBeforeFile=info-before\.txt/);
     assert.doesNotMatch(src, /ANTHROPIC|Tailscale|HUB_TOKEN|OpenAI/);
     assert.match(src, /tu agente está listo para configurarse/i);
+    assert.match(
+      src,
+      /AppId=\{\{A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51\}\}/,
+    );
+    assert.match(src, /OutputBaseFilename=\{#MyOutputBaseFilename\}/);
   });
 });

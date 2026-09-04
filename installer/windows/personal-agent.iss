@@ -1,4 +1,4 @@
-; Personal Agent — Inno Setup script (PHASE 51)
+; Personal Agent — Inno Setup script (PHASE 51 + 7.5 versioning)
 ; Compile on Windows with Inno Setup 6+.
 ; Source root: dist\windows\PersonalAgent\ (from: node scripts/package-windows.mjs)
 ;
@@ -11,13 +11,28 @@
 ; User data: %LOCALAPPDATA%\Ideass\PersonalAgent\
 ; Workspace folder is NEVER deleted by uninstall.
 ; End users must NOT need Node.js, npm, or a terminal.
+;
+; Versioning (PHASE 7.5):
+;   - AppId stays STABLE across releases (same product / upgrades).
+;   - AppVersion + OutputBaseFilename come from version.generated.iss
+;     (written by package-windows from root package.json SemVer).
 
 #define MyAppName "Agente personal"
-#define MyAppVersion "0.1.0"
 #define MyAppPublisher "Ideass"
 #define MyAppExeName "AgentePersonal.bat"
 ; SourcePath = directory of this .iss (trailing backslash). Resolve package layout from there.
 #define SourceRoot SourcePath + "..\..\dist\windows\PersonalAgent"
+
+; Prefer generated defines from packaging; fallback keeps ISCC usable offline.
+#if FileExists(SourcePath + "version.generated.iss")
+  #include "version.generated.iss"
+#endif
+#ifndef MyAppVersion
+  #define MyAppVersion "0.1.0"
+#endif
+#ifndef MyOutputBaseFilename
+  #define MyOutputBaseFilename "PersonalAgent-Setup-0.1.0-win-x64"
+#endif
 
 #if !FileExists(SourceRoot + "\runtime\node\node.exe")
   #error "Falta runtime\node\node.exe — ejecuta FETCH_NODE_WIN=1 npm run package:windows antes de ISCC."
@@ -30,6 +45,7 @@
 #endif
 
 [Setup]
+; STABLE product identity — never change per version (upgrade continuity).
 AppId={{A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
@@ -39,7 +55,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\..\dist\windows
-OutputBaseFilename=PersonalAgent-Setup
+OutputBaseFilename={#MyOutputBaseFilename}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

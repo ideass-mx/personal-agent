@@ -8,6 +8,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const config = require("./config.cjs");
 const { getAgentHostId, hasPersistedPairingAuth } = require("./agent-identity.cjs");
+const { resolveProductVersion } = require("./build-info.cjs");
 
 const InstallScenario = {
   NEW: "NEW",
@@ -17,20 +18,8 @@ const InstallScenario = {
   NO_DOWNGRADE: "NO_DOWNGRADE",
 };
 
-const INSTALLER_VERSION = "0.1.0";
-
 function readInstalledVersion(productRoot) {
-  if (!productRoot) return null;
-  const versionFile = path.join(productRoot, "VERSION");
-  if (!fs.existsSync(versionFile)) return null;
-  try {
-    const raw = fs.readFileSync(versionFile, "utf8").trim();
-    // e.g. 0.1.0-phase51 → 0.1.0
-    const m = raw.match(/^(\d+\.\d+\.\d+)/);
-    return m ? m[0] : raw;
-  } catch {
-    return null;
-  }
+  return resolveProductVersion(productRoot, null);
 }
 
 function compareSemver(a, b) {
@@ -72,7 +61,9 @@ function productBinariesPresent(productRoot) {
  * }} input
  */
 function classifyInstallScenario(input) {
-  const installerVersion = input.installerVersion || INSTALLER_VERSION;
+  const installerVersion =
+    input.installerVersion ||
+    resolveProductVersion(input.productRoot, "0.1.0");
   const cfg = config.loadConfig();
   const data = config.paths();
   const hasConfig = fs.existsSync(data.configFile);
@@ -184,7 +175,10 @@ function classifyInstallScenario(input) {
 
 module.exports = {
   InstallScenario,
-  INSTALLER_VERSION,
+  /** @deprecated use resolveProductVersion(productRoot) */
+  get INSTALLER_VERSION() {
+    return resolveProductVersion(null, "0.1.0");
+  },
   classifyInstallScenario,
   compareSemver,
   readInstalledVersion,

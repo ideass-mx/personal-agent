@@ -32,7 +32,9 @@ const required = [
   "manifest.json",
   "README.txt",
   "VERSION",
+  "build-info.json",
   "resources/personal-agent.iss",
+  "resources/version.generated.iss",
   "config/product.example.json",
 ];
 
@@ -54,15 +56,34 @@ if (!bat.includes("runtime\\node\\node.exe")) {
 const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8"));
 if (manifest.noNpmOnTarget !== true) fail("manifest.noNpmOnTarget");
 if (!manifest.agentConsole) fail("manifest.agentConsole");
-if (manifest.installerOutput !== "PersonalAgent-Setup.exe") {
-  fail("installerOutput name");
+if (!existsSync(path.join(root, "build-info.json"))) fail("missing build-info.json");
+const buildInfo = JSON.parse(
+  readFileSync(path.join(root, "build-info.json"), "utf8"),
+);
+if (!buildInfo.version || !buildInfo.build || !buildInfo.commit) {
+  fail("build-info incomplete");
+}
+if (!String(manifest.installerOutput || "").match(
+  /^PersonalAgent-Setup-.+-win-x64\.exe$/,
+)) {
+  fail(`installerOutput name: ${manifest.installerOutput}`);
+}
+if (manifest.version !== buildInfo.version) {
+  fail("manifest.version must match build-info.version");
 }
 
 const iss = readFileSync(
   path.join(repoRoot, "installer", "windows", "personal-agent.iss"),
   "utf8",
 );
-if (!iss.includes("PersonalAgent-Setup")) fail("Inno OutputBaseFilename");
+if (!iss.includes("PersonalAgent-Setup")) fail("Inno OutputBaseFilename pattern");
+if (!iss.includes("MyOutputBaseFilename")) fail("Inno must use MyOutputBaseFilename");
+if (!iss.includes("A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51")) {
+  fail("Inno AppId must stay stable");
+}
+if (!iss.includes("version.generated.iss")) {
+  fail("Inno must include version.generated.iss");
+}
 if (!iss.includes("#if !FileExists(SourceRoot")) {
   fail("Inno must ISPP-check SourceRoot runtimes at compile time");
 }

@@ -195,36 +195,48 @@ jobs:
           }
           $iss = Join-Path $pwd "installer\windows\personal-agent.iss"
           if (-not (Test-Path $iss)) { throw "Missing $iss" }
+          $gen = Join-Path $pwd "installer\windows\version.generated.iss"
+          if (-not (Test-Path $gen)) { throw "Missing $gen (package:windows must write version.generated.iss)" }
+          Get-Content $gen | Write-Host
           & $iscc $iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
 
-      - name: Verify Setup.exe
-        id: verify_exe
+      - name: Finalize installer (SHA-256 + versioned release folder)
+        id: finalize
         shell: pwsh
         run: |
-          $exe = "dist/windows/PersonalAgent-Setup.exe"
-          if (-not (Test-Path $exe)) {
-            Write-Host "Listing dist/windows:"
-            Get-ChildItem "dist/windows" -ErrorAction SilentlyContinue | Format-Table -AutoSize
-            throw "PersonalAgent-Setup.exe not found at $exe"
-          }
-          $item = Get-Item $exe
-          $size = $item.Length
-          Write-Host "setup_path=$($item.FullName)"
+          node scripts/release/finalize-installer.mjs
+          if ($LASTEXITCODE -ne 0) { throw "finalize-installer failed" }
+          $info = Get-Content "dist/windows/PersonalAgent/build-info.json" -Raw | ConvertFrom-Json
+          $name = "PersonalAgent-Setup-$($info.version)$(if ($info.channel -eq 'release') { '' } else { "-dev.$($info.build)" })-win-x64.exe"
+          # Prefer exact path from finalize via glob
+          $exe = Get-ChildItem "dist/windows/PersonalAgent-Setup-*-win-x64.exe" | Select-Object -First 1
+          if (-not $exe) { throw "Versioned Setup.exe not found under dist/windows" }
+          $sha = "$($exe.FullName).sha256"
+          if (-not (Test-Path $sha)) { throw "Missing $($exe.Name).sha256" }
+          $size = $exe.Length
+          Write-Host "setup_path=$($exe.FullName)"
           Write-Host "setup_size_bytes=$size"
-          # Node (~30MB+ compressed) + Electron + Hub must land well above 40MB.
+          Write-Host "setup_version=$($info.version) build=$($info.build) channel=$($info.channel)"
           if ($size -lt 40000000) {
             throw "Setup.exe too small to contain embedded runtimes ($size bytes; need >= 40MB)"
           }
           Get-ChildItem "dist/windows" | Select-Object Name, Length | Format-Table -AutoSize
-          "path=$($item.FullName)" >> $env:GITHUB_OUTPUT
+          Get-ChildItem "dist/releases" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table -AutoSize
+          "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
           "size=$size" >> $env:GITHUB_OUTPUT
-          "name=$($item.Name)" >> $env:GITHUB_OUTPUT
+          "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+          "version=$($info.version)" >> $env:GITHUB_OUTPUT
+          "channel=$($info.channel)" >> $env:GITHUB_OUTPUT
+          "artifact_name=PersonalAgent-Setup-$($info.version)-$($info.channel)-win-x64" >> $env:GITHUB_OUTPUT
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PersonalAgent-Windows-Installer
-          path: dist/windows/PersonalAgent-Setup.exe
+          name: ${{ steps.finalize.outputs.artifact_name }}
+          path: |
+            dist/windows/PersonalAgent-Setup-*-win-x64.exe
+            dist/windows/PersonalAgent-Setup-*-win-x64.exe.sha256
+            dist/releases/**
           if-no-files-found: error
           retention-days: 30

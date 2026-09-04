@@ -21,6 +21,11 @@ test("sanitizeDiagnostics redacts secrets", () => {
 test("buildDiagnosticsReport has no token fields", () => {
   const report = buildDiagnosticsReport({
     version: "0.1.0",
+    build: "20260904.1",
+    commit: "abc1234",
+    platform: "windows",
+    architecture: "x64",
+    builtAt: "2026-09-04T15:30:00Z",
     state: "READY",
     gateway: "running",
     node: "boot OK",
@@ -31,6 +36,9 @@ test("buildDiagnosticsReport has no token fields", () => {
     android: "unknown",
   });
   assert.match(report, /Personal Agent/);
+  assert.match(report, /Version: 0\.1\.0/);
+  assert.match(report, /Build: 20260904\.1/);
+  assert.match(report, /Commit: abc1234/);
   assert.equal(report.includes("HUB_TOKEN"), false);
 });
 

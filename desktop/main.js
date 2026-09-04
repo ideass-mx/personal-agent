@@ -24,6 +24,7 @@ const {
   buildDiagnosticsReport,
   sanitizeDiagnostics,
 } = require("./lib/diagnostics.cjs");
+const { readBuildInfo, resolveProductVersion } = require("./lib/build-info.cjs");
 const { createAgentSupervisor } = require("./lib/agent-process.cjs");
 const {
   OnboardingState,
@@ -540,11 +541,21 @@ async function copyDiagnosticsToClipboard() {
   const cfg = config.loadConfig();
   const snap = supervisor.snapshot();
   const onboarding = loadOnboarding();
+  const buildInfo = readBuildInfo(productRoot);
   const health = snap.running
     ? await supervisor.probeHealth(cfg.hubPort || 8787)
     : { ok: false, agentReady: false, agentTools: 0, devices: [] };
   const report = buildDiagnosticsReport({
-    version: "0.1.0",
+    version:
+      buildInfo?.version ||
+      resolveProductVersion(productRoot, "0.1.0") ||
+      health.version ||
+      "unknown",
+    build: buildInfo?.build || health.build || "unknown",
+    commit: buildInfo?.commit || health.commit || "unknown",
+    platform: buildInfo?.platform || "windows",
+    architecture: buildInfo?.architecture || "x64",
+    builtAt: buildInfo?.builtAt || health.builtAt || "unknown",
     state: getUiSnapshot().stateLabel,
     gateway: snap.running ? "running" : "stopped",
     node:

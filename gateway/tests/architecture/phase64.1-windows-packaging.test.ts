@@ -40,6 +40,7 @@ describe("PHASE 64.1 architecture / packaging boundaries", () => {
     assert.match(wf, /PHASE 64\.1/);
     assert.match(wf, /assertWindowsNativeModules/);
     assert.match(wf, /Compile PersonalAgent-Setup/);
+    assert.match(wf, /finalize-installer|PersonalAgent-Setup-\*-win-x64/);
     const gateIdx = wf.indexOf("PHASE 64.1");
     const isccIdx = wf.indexOf("Compile PersonalAgent-Setup");
     assert.ok(gateIdx > 0 && isccIdx > gateIdx);
