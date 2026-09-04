@@ -10,6 +10,7 @@ import { attachGateway } from "../ws/index.ts";
 import { mountWorkspaceHttp } from "./workspace-http.ts";
 import { mountPairingHttp } from "./pairing-http.ts";
 import { mountArtifactHttp } from "./artifact-http.ts";
+import { mountSetupHttp } from "./setup-http.ts";
 import { resolveConsoleStaticRoot } from "./console-static.ts";
 import type { WorkspaceStore } from "../workspace/types.ts";
 import type { ArtifactManager } from "../artifacts/manager.ts";
@@ -127,6 +128,10 @@ export function startServer(
     hubToken: config.hubToken,
     getAgentId: () => config.agentId,
     getPreferredWsEndpoint: () => `ws://127.0.0.1:${config.port}/ws`,
+  });
+
+  mountSetupHttp(app, {
+    hubToken: config.hubToken,
   });
 
   if (extras?.artifacts) {

@@ -24,6 +24,10 @@ function required(name: string): string {
  * ni configuración del Local Node.
  */
 export type GatewayConfig = {
+  /**
+   * Clave Anthropic de entorno (opcional en boot).
+   * Efectiva en runtime: env → fichero persistido (setup) → este valor.
+   */
   readonly anthropicApiKey: string;
   readonly hubToken: string;
   /** Persistent Agent identity (from Desktop). Optional for legacy .env boots. */
@@ -53,7 +57,8 @@ const dbFile = path.resolve(
 );
 
 export const config: GatewayConfig = {
-  anthropicApiKey: required("ANTHROPIC_API_KEY"),
+  // Opcional: Gateway puede llegar a AGENT_READY sin LLM (onboarding Web).
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY?.trim() || "",
   /**
    * Legacy install credential (env `HUB_TOKEN`).
    * Used for HTTP Bearer + WS authKind=install. Not Pairing Session / QR.

@@ -4,56 +4,60 @@ import { useApp } from "../../state/AppContext";
 export function ConnectionsScreen() {
   const { health, session, wsStatus } = useApp();
   const devices = health?.devices ?? [];
+  const androidDevices = devices.filter(
+    (d) => d.toLowerCase().includes("android") || d.toLowerCase().includes("phone"),
+  );
 
   return (
     <div className="panel">
-      <h1>Connections</h1>
+      <h1>Dispositivos</h1>
       <p className="lead">
-        Clientes conectados al Gateway (snapshot de sesiones WS vía{" "}
-        <code>/health</code>).
+        Aquí ves qué dispositivos están usando tu agente. El teléfono y el
+        acceso remoto son opcionales.
       </p>
-      <h2>Connected Clients</h2>
+      <h2>Conectados ahora</h2>
       <ul className="status-rows">
         <li>
-          <span>Web Browser (esta consola)</span>
+          <span>Este equipo (consola)</span>
           <span>
-            {wsStatus === "authenticated" ? "● Connected" : "○ Disconnected"}
+            {wsStatus === "authenticated" ? "● Conectado" : "○ Desconectado"}
           </span>
         </li>
         {devices.map((d) => (
           <li key={d}>
-            <span>{d.includes("android") || d.includes("Android") ? "Android" : d}</span>
-            <span>● Connected</span>
+            <span>
+              {d.toLowerCase().includes("android") ? "Teléfono" : d}
+            </span>
+            <span>● Conectado</span>
           </li>
         ))}
       </ul>
       {devices.length === 0 && wsStatus !== "authenticated" ? (
-        <p className="muted">Ningún cliente autenticado.</p>
+        <p className="muted">Ningún dispositivo conectado por ahora.</p>
       ) : null}
-      <h2 style={{ marginTop: 24 }}>Pairing</h2>
+      {androidDevices.length === 0 ? (
+        <p className="muted" style={{ marginTop: 12 }}>
+          Teléfono: no conectado (opcional). Puedes emparejarlo cuando quieras.
+        </p>
+      ) : null}
+
+      <h2 style={{ marginTop: 24 }}>Emparejar teléfono</h2>
       <p className="muted">
-        Usa el mismo token de instalación (<code>HUB_TOKEN</code>) en Android y
-        en Agent Console. No se muestra el token completo aquí.
+        Usa la opción de emparejamiento desde el asistente de configuración o
+        desde el panel de escritorio. No necesitamos mostrar secretos aquí.
       </p>
       {session ? (
         <ul className="status-rows">
           <li>
-            <span>Host</span>
-            <span>{session.httpBase || location.origin}</span>
+            <span>Dirección</span>
+            <span>{session.httpBase || "Este equipo"}</span>
           </li>
           <li>
-            <span>Token</span>
+            <span>Sesión</span>
             <span>{maskToken(session.token)}</span>
-          </li>
-          <li>
-            <span>Device</span>
-            <span>{session.deviceName}</span>
           </li>
         </ul>
       ) : null}
-      <p className="muted" style={{ fontSize: "0.85rem", marginTop: 12 }}>
-        QR / identity — FUTURE. LOCAL y LAN en alcance; INTERNET — FUTURE.
-      </p>
     </div>
   );
 }

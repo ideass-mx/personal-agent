@@ -8,14 +8,68 @@ import { DiagnosticsScreen } from "./features/diagnostics/DiagnosticsScreen";
 import { OverviewScreen } from "./features/overview/OverviewScreen";
 import { SettingsScreen } from "./features/configuration/SettingsScreen";
 import { SetupScreen } from "./features/setup/SetupScreen";
+import { OnboardingWizard } from "./features/setup/OnboardingWizard";
 import { WorkspaceScreen } from "./features/workspace/WorkspaceScreen";
 import { useApp } from "./state/AppContext";
+import { useEffect, useState } from "react";
+import { resolveHttpBase } from "./api/http";
+import { fetchSetupStatus } from "./api/setup";
 
 function Routed() {
-  const { nav, session, health, healthError, wsStatus } = useApp();
+  const { nav, session, health, healthError, wsStatus, setNav } = useApp();
+  const [setupDone, setSetupDone] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!session) {
+      setSetupDone(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const base = resolveHttpBase(session);
+        const st = await fetchSetupStatus(base, session.token);
+        if (!cancelled) {
+          setSetupDone(Boolean(st.onboardingCompleted || st.state === "READY"));
+          if (st.onboardingCompleted || st.state === "READY") {
+            /* stay on current nav */
+          }
+        }
+      } catch {
+        // Sin API de setup (Gateway antiguo): no bloquear consola clásica
+        if (!cancelled) setSetupDone(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   if (!session) {
+    // Host Electron inyecta sesión; remoto manual sigue usando SetupScreen.
     return <SetupScreen mode="welcome" />;
+  }
+
+  if (setupDone === null) {
+    return (
+      <div className="setup-center">
+        <div className="panel">
+          <h1>Conectando…</h1>
+          <p className="lead">Preparando tu espacio.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (setupDone === false) {
+    return (
+      <OnboardingWizard
+        onCompleted={() => {
+          setSetupDone(true);
+          setNav("chat");
+        }}
+      />
+    );
   }
 
   const hostUnreachable =

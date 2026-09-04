@@ -1,0 +1,11 @@
+Instalando Personal Agent…
+
+Este asistente solo instala los componentes en tu equipo.
+No configura inteligencia artificial, teléfono ni acceso remoto.
+
+Después de instalar:
+1. Se abrirá Personal Agent.
+2. Prepararemos tu agente automáticamente.
+3. En la pantalla web continuarás la configuración de forma sencilla.
+
+Tu agente estará listo para configurarse sin pasos técnicos.

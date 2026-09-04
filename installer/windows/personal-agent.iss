@@ -45,7 +45,7 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayName={#MyAppName}
 CloseApplications=force
-InfoBeforeFile=
+InfoBeforeFile=info-before.txt
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -72,7 +72,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startup
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Abrir Agente personal"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "Abrir Agente personal — tu agente está listo para configurarse"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; Only leftovers under {app}. Never touch workspace.

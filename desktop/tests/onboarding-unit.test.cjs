@@ -30,6 +30,30 @@ function withTempData(fn) {
   }
 }
 
+async function withTempDataAsync(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pa-onb-"));
+  const prev = process.env.PERSONAL_AGENT_DATA_DIR;
+  process.env.PERSONAL_AGENT_DATA_DIR = dir;
+  for (const rel of [
+    "../lib/config.cjs",
+    "../lib/onboarding.cjs",
+    "../lib/agent-identity.cjs",
+    "../lib/install-scenario.cjs",
+    "../lib/preflight.cjs",
+    "../lib/tailscale.cjs",
+    "../lib/onboarding-log.cjs",
+    "../lib/pairing.cjs",
+  ]) {
+    delete require.cache[require.resolve(rel)];
+  }
+  try {
+    return await fn(dir);
+  } finally {
+    if (prev === undefined) delete process.env.PERSONAL_AGENT_DATA_DIR;
+    else process.env.PERSONAL_AGENT_DATA_DIR = prev;
+  }
+}
+
 function execStatus(json, whichOk = true) {
   return (cmd, args) => {
     if (cmd === "which" || cmd === "where") {
@@ -316,5 +340,160 @@ test("RECOVERY when incomplete onboarding state", () => {
       onboardingState: "NETWORK_READY",
     });
     assert.equal(r.scenario, InstallScenario.RECOVERY);
+  });
+});
+
+test("PHASE 65.2: PREFLIGHT→PREFLIGHT is patch not transition", () => {
+  withTempData((dir) => {
+    const ob = require("../lib/onboarding.cjs");
+    const logFile = path.join(dir, "logs", "onboarding.log");
+    ob.setOnboardingState(ob.OnboardingState.PREFLIGHT, { scenario: "NEW" });
+    ob.setOnboardingState(ob.OnboardingState.PREFLIGHT, {
+      scenario: "NEW",
+      reason: "should_not_transition",
+    });
+    const log = fs.readFileSync(logFile, "utf8");
+    const lines = log
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    const selfTransitions = lines.filter(
+      (l) =>
+        l.event === "transition" && l.from === "PREFLIGHT" && l.to === "PREFLIGHT",
+    );
+    assert.equal(selfTransitions.length, 0);
+    assert.ok(lines.some((l) => l.event === "patch" && l.to === "PREFLIGHT"));
+  });
+});
+
+test("PHASE 65.2: fresh install + Tailscale MISSING exits PREFLIGHT", async () => {
+  await withTempDataAsync(async (dir) => {
+    const product = path.join(dir, "product");
+    fs.mkdirSync(path.join(product, "gateway"), { recursive: true });
+    fs.writeFileSync(path.join(product, "gateway", "gateway.cjs"), "//");
+    fs.mkdirSync(path.join(product, "runtime", "node"), { recursive: true });
+    fs.writeFileSync(path.join(product, "runtime", "node", "node.exe"), "x");
+
+    // Stale install credential alone must not force RECOVERY
+    require("../lib/pairing.cjs").ensurePairingCredentials();
+
+    const { runPreflight, resolvePostPreflightState } = require("../lib/preflight.cjs");
+    const { TailscalePhase } = require("../lib/tailscale.cjs");
+    const { InstallScenario } = require("../lib/install-scenario.cjs");
+    const ob = require("../lib/onboarding.cjs");
+
+    const pf = await runPreflight({
+      productRoot: product,
+      onboardingState: null,
+      processHealthy: null,
+      probeTailscaleFn: () => ({
+        phase: TailscalePhase.MISSING,
+        installed: false,
+        authenticated: false,
+        connected: false,
+        ready: false,
+        skipped: false,
+        error: "TAILSCALE_NOT_INSTALLED",
+      }),
+    });
+    assert.equal(pf.scenario.scenario, InstallScenario.NEW);
+    assert.equal(pf.networkReady, false);
+    const next = resolvePostPreflightState(pf);
+    assert.equal(next.state, ob.OnboardingState.NETWORK_INSTALLING);
+    assert.notEqual(next.state, ob.OnboardingState.PREFLIGHT);
+
+    const before = ob.loadOnboarding();
+    assert.equal(before.state, ob.OnboardingState.PREFLIGHT);
+    ob.setOnboardingState(next.state, {
+      scenario: pf.scenario.scenario,
+      reason: next.reason,
+    });
+    const after = ob.loadOnboarding();
+    assert.equal(after.state, ob.OnboardingState.NETWORK_INSTALLING);
+    assert.equal(after.scenario, InstallScenario.NEW);
+  });
+});
+
+test("PHASE 65.2: RECOVERY + Tailscale MISSING exits PREFLIGHT", async () => {
+  await withTempDataAsync(async () => {
+    const ob = require("../lib/onboarding.cjs");
+    ob.setOnboardingState(ob.OnboardingState.NETWORK_AUTHENTICATION, {
+      scenario: "RECOVERY",
+    });
+    const { runPreflight, resolvePostPreflightState } = require("../lib/preflight.cjs");
+    const { TailscalePhase } = require("../lib/tailscale.cjs");
+    const { InstallScenario } = require("../lib/install-scenario.cjs");
+
+    const pf = await runPreflight({
+      productRoot: null,
+      onboardingState: "NETWORK_AUTHENTICATION",
+      probeTailscaleFn: () => ({
+        phase: TailscalePhase.MISSING,
+        installed: false,
+        authenticated: false,
+        connected: false,
+        ready: false,
+        skipped: false,
+        error: "TAILSCALE_NOT_INSTALLED",
+      }),
+    });
+    assert.equal(pf.scenario.scenario, InstallScenario.RECOVERY);
+    const next = resolvePostPreflightState(pf);
+    assert.equal(next.state, ob.OnboardingState.NETWORK_INSTALLING);
+    ob.setOnboardingState(next.state, {
+      scenario: pf.scenario.scenario,
+      reason: next.reason,
+    });
+    assert.equal(ob.loadOnboarding().state, "NETWORK_INSTALLING");
+  });
+});
+
+test("PHASE 65.2: networkReady=false does not recurse PREFLIGHT", () => {
+  withTempData(() => {
+    const { resolvePostPreflightState } = require("../lib/preflight.cjs");
+    const { OnboardingState } = require("../lib/onboarding.cjs");
+    const next = resolvePostPreflightState({
+      ok: true,
+      blocking: [],
+      networkReady: false,
+      scenario: { scenario: "NEW" },
+      checks: { tailscale: { phase: "CONNECTED" } },
+    });
+    assert.notEqual(next.state, OnboardingState.PREFLIGHT);
+    assert.equal(next.state, OnboardingState.NETWORK_VERIFYING);
+  });
+});
+
+test("PHASE 65.2: Tailscale READY maps toward NETWORK_READY path", () => {
+  withTempData(() => {
+    const { resolvePostPreflightState } = require("../lib/preflight.cjs");
+    const { OnboardingState } = require("../lib/onboarding.cjs");
+    const next = resolvePostPreflightState({
+      ok: true,
+      blocking: [],
+      networkReady: true,
+      scenario: { scenario: "NEW" },
+      checks: { tailscale: { phase: "READY" } },
+    });
+    assert.equal(next.state, OnboardingState.NETWORK_VERIFYING);
+  });
+});
+
+test("PHASE 65.2: pairing-only + binaries still NEW at PREFLIGHT", () => {
+  withTempData((dir) => {
+    require("../lib/pairing.cjs").ensurePairingCredentials();
+    const product = path.join(dir, "product");
+    fs.mkdirSync(path.join(product, "gateway"), { recursive: true });
+    fs.writeFileSync(path.join(product, "gateway", "gateway.cjs"), "//");
+    if (process.platform === "win32") {
+      fs.mkdirSync(path.join(product, "runtime", "node"), { recursive: true });
+      fs.writeFileSync(path.join(product, "runtime", "node", "node.exe"), "x");
+    }
+    const { classifyInstallScenario, InstallScenario } = require("../lib/install-scenario.cjs");
+    const r = classifyInstallScenario({
+      productRoot: product,
+      onboardingState: "PREFLIGHT",
+    });
+    assert.equal(r.scenario, InstallScenario.NEW);
   });
 });

@@ -108,15 +108,41 @@ function saveOnboarding(record) {
 
 function setOnboardingState(state, patch = {}) {
   const cur = loadOnboarding();
+  const nextState = migrateStateName(state);
+  // PHASE 65.2 invariant: PREFLIGHT must never transition to PREFLIGHT
+  // (no polling via transition(PREFLIGHT)). Metadata-only patches are OK.
+  if (
+    cur.state === OnboardingState.PREFLIGHT &&
+    nextState === OnboardingState.PREFLIGHT
+  ) {
+    const next = saveOnboarding({
+      ...cur,
+      ...patch,
+      state: OnboardingState.PREFLIGHT,
+      lastError:
+        patch.lastError !== undefined ? patch.lastError : cur.lastError,
+      lastErrorCode:
+        patch.lastErrorCode !== undefined
+          ? patch.lastErrorCode
+          : cur.lastErrorCode,
+    });
+    logOnboarding(next.state, "patch", {
+      from: cur.state,
+      to: next.state,
+      scenario: next.scenario,
+      reason: patch.reason || "preflight_metadata_only",
+    });
+    return next;
+  }
   const next = saveOnboarding({
     ...cur,
     ...patch,
-    state: migrateStateName(state),
+    state: nextState,
     lastError: patch.lastError !== undefined ? patch.lastError : cur.lastError,
     lastErrorCode:
       patch.lastErrorCode !== undefined
         ? patch.lastErrorCode
-        : state === OnboardingState.ERROR
+        : nextState === OnboardingState.ERROR
           ? cur.lastErrorCode
           : null,
   });
@@ -124,6 +150,7 @@ function setOnboardingState(state, patch = {}) {
     from: cur.state,
     to: next.state,
     scenario: next.scenario,
+    reason: patch.reason || undefined,
     errorCode: next.lastErrorCode,
   });
   return next;

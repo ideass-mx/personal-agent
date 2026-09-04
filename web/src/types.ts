@@ -46,3 +46,16 @@ export type ConnectionConfig = {
   deviceId: string;
   deviceName: string;
 };
+
+/** Product setup status from Gateway GET /v1/setup/status */
+export type SetupStatusDto = {
+  ok: true;
+  state: string;
+  installationReady: boolean;
+  llmConfigured: boolean;
+  verified: boolean;
+  onboardingCompleted: boolean;
+  llmProvider: string | null;
+  lastError: { code: string; message: string } | null;
+  updatedAt: string;
+};

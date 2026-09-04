@@ -69,19 +69,22 @@ async function runPreflightStep() {
   mark($("pf-net"), c.internet.ok, c.internet.ok ? "✓" : "✗");
   $("pf-scenario").textContent = pf.scenario.scenario;
 
-  if (pf.blocking.includes("NO_DOWNGRADE")) {
+  if (pf.blocking.includes("NO_DOWNGRADE") || pf.nextState === "ERROR") {
     $("pf-error").textContent =
       "Hay una versión más nueva instalada. Este instalador no hará downgrade.";
     return;
   }
   if (!pf.ok && pf.blocking.includes("NO_INTERNET") && !pf.networkReady) {
     $("pf-error").textContent = "Sin conexión a Internet. Reintenta.";
+    $("pf-next").disabled = false;
     return;
   }
   $("pf-next").disabled = false;
   $("pf-msg").textContent = pf.networkReady
     ? "Red segura ya disponible."
     : "Siguiente: conectar red segura (Tailscale).";
+  // Advance to actionable network UI — do not remain stuck on PREFLIGHT.
+  await goNetworkOrReady();
 }
 
 async function refreshNetworkUi() {
@@ -90,7 +93,8 @@ async function refreshNetworkUi() {
     $("net-status").textContent = `Listo — ${ts.ipv4 || ts.selfDnsName || "conectado"}`;
     $("net-error").textContent = "";
   } else if (!ts.installed) {
-    $("net-status").textContent = "Tailscale no está instalado.";
+    $("net-status").textContent =
+      "Tailscale no está instalado. Instálalo y pulsa Verificar.";
   } else if (!ts.authenticated) {
     $("net-status").textContent = "Instalado — falta autenticación.";
   } else {
@@ -127,12 +131,13 @@ async function resumeFromState(state) {
     show("main-panel", true);
     return;
   }
-  if (!st || st === "PREFLIGHT" || st === "ERROR") {
-    if (st === "ERROR" && ob.lastErrorCode === "NO_DOWNGRADE") {
-      showFrStep("fr-preflight");
-      $("pf-error").textContent = ob.lastError || "NO_DOWNGRADE";
-      return;
-    }
+  if (st === "ERROR") {
+    showFrStep("fr-preflight");
+    $("pf-error").textContent = ob.lastError || ob.lastErrorCode || "ERROR";
+    return;
+  }
+  // PREFLIGHT is only the welcome entry; after Begin Setup we leave PREFLIGHT.
+  if (!st || st === "PREFLIGHT") {
     showFrStep("fr-welcome");
     return;
   }

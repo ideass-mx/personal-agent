@@ -33,7 +33,7 @@ const {
   migrateLegacyIfNeeded,
   canStartAgentRuntime,
 } = require("./lib/onboarding.cjs");
-const { runPreflight } = require("./lib/preflight.cjs");
+const { runPreflight, resolvePostPreflightState } = require("./lib/preflight.cjs");
 const {
   probeTailscale,
   startTailscaleLogin,
@@ -52,8 +52,8 @@ const {
   getPairingStatus,
   getInstallAuthBearer,
 } = require("./lib/pairing.cjs");
-const { InstallScenario } = require("./lib/install-scenario.cjs");
 const { logOnboarding } = require("./lib/onboarding-log.cjs");
+const { waitForHealth, injectConsoleSession } = require("./lib/host-boot.cjs");
 
 function resolveProductRoot() {
   if (process.env.PERSONAL_AGENT_PRODUCT_ROOT) {
@@ -280,7 +280,8 @@ function getUiSnapshot() {
     workspaceRoot: cfg.workspaceRoot,
     port: cfg.hubPort || 8787,
     lanIps: lanAddresses(),
-    tokenMasked: config.maskToken(config.getHubToken()),
+    // Do not eager-create HUB_TOKEN on UI snapshot (false RECOVERY/NEW trap).
+    tokenMasked: config.maskToken(config.loadSecrets().hubToken || ""),
     running: snap.running,
     bootReady: snap.bootReady,
     lastError: snap.lastError,
@@ -369,10 +370,11 @@ async function startAgentIfAllowed() {
   return supervisor.start();
 }
 
-function createWindow() {
+function createWindow(opts = {}) {
+  const hostUi = Boolean(opts.hostUi);
   mainWindow = new BrowserWindow({
-    width: 560,
-    height: 820,
+    width: hostUi ? 1100 : 560,
+    height: hostUi ? 800 : 820,
     show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -381,13 +383,69 @@ function createWindow() {
     },
     title: "Agente personal",
   });
-  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  if (!hostUi) {
+    mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  }
   mainWindow.on("close", (e) => {
     if (!quitting) {
       e.preventDefault();
       mainWindow.hide();
     }
   });
+}
+
+/**
+ * Fase 3: host mode — Gateway sin Tailscale gate; Web UI es el onboarding.
+ */
+async function bootHostMode() {
+  config.ensureHubToken();
+  const cfg = config.loadConfig();
+  const port = cfg.hubPort || 8787;
+
+  createWindow({ hostUi: true });
+  mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
+
+  logOnboarding("HOST", "gateway_start", { port });
+  const started = await supervisor.start();
+  if (!started.ok && !started.already) {
+    logOnboarding("HOST", "gateway_start_failed", {
+      error: started.error || "start_failed",
+    });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
+      mainWindow.webContents.executeJavaScript(
+        `document.body && (document.body.dataset.error = "start_failed");
+         const el = document.getElementById("msg");
+         if (el) el.textContent = "No pudimos preparar tu agente. Reintenta desde la bandeja.";`,
+      ).catch(() => {});
+    }
+    return { ok: false, error: started.error || "start_failed" };
+  }
+
+  try {
+    await waitForHealth(port, 90000);
+  } catch {
+    logOnboarding("HOST", "health_timeout", { port });
+    return { ok: false, error: "health_timeout" };
+  }
+
+  lastNetworkReady = true; // localhost product path; remote Tailscale is optional later
+  const url = `http://127.0.0.1:${port}/`;
+  await mainWindow.loadURL(url);
+  try {
+    const token = config.getHubToken();
+    const did = await injectConsoleSession(mainWindow.webContents, token);
+    if (did) {
+      await mainWindow.loadURL(url);
+    }
+  } catch (err) {
+    logOnboarding("HOST", "inject_failed", {
+      error: err instanceof Error ? err.message : "inject_failed",
+    });
+  }
+  logOnboarding("HOST", "console_open", { url: "localhost" });
+  publishState();
+  return { ok: true };
 }
 
 function buildTrayTemplate() {
@@ -544,25 +602,49 @@ function wireIpc() {
   });
 
   ipcMain.handle("run-preflight", async () => {
-    setOnboardingState(OnboardingState.PREFLIGHT);
+    const before = loadOnboarding();
+    // Classify against persisted stage before this check — do not force PREFLIGHT
+    // first (that caused PREFLIGHT→PREFLIGHT + false RECOVERY).
+    const classifyState =
+      before.state === OnboardingState.PREFLIGHT ? null : before.state;
     const processHealthy = supervisor?.isRunning()
       ? Boolean(supervisor.snapshot().bootReady || lastHealth.ok)
       : null;
     lastPreflight = await runPreflight({
       productRoot,
-      onboardingState: loadOnboarding().state,
+      onboardingState: classifyState,
       processHealthy,
     });
     const scenario = lastPreflight.scenario;
-    setOnboardingState(OnboardingState.PREFLIGHT, {
+    lastNetworkReady = lastPreflight.networkReady;
+    const next = resolvePostPreflightState(lastPreflight);
+    if (next.state === OnboardingState.ERROR) {
+      setOnboardingState(OnboardingState.ERROR, {
+        scenario: scenario.scenario,
+        reason: next.reason,
+        lastErrorCode: next.errorCode || "NO_DOWNGRADE",
+        lastError: userErrorMessage(next.errorCode || "NO_DOWNGRADE"),
+      });
+    } else {
+      setOnboardingState(next.state, {
+        scenario: scenario.scenario,
+        reason: next.reason,
+        lastError: null,
+        lastErrorCode: null,
+      });
+    }
+    logOnboarding("PREFLIGHT", "advance", {
+      from: before.state,
+      to: next.state,
+      reason: next.reason,
       scenario: scenario.scenario,
     });
-    if (scenario.scenario === InstallScenario.NO_DOWNGRADE) {
-      setOnboardingError("NO_DOWNGRADE", userErrorMessage("NO_DOWNGRADE"));
-    }
-    lastNetworkReady = lastPreflight.networkReady;
     publishState();
-    return lastPreflight;
+    return {
+      ...lastPreflight,
+      nextState: next.state,
+      advanceReason: next.reason,
+    };
   });
 
   ipcMain.handle("get-tailscale-status", async () => {
@@ -1052,9 +1134,15 @@ app.whenReady().then(async () => {
     onState: publishState,
   });
   wireIpc();
-  createWindow();
   createTray();
 
+  const legacyOnboarding = process.env.PERSONAL_AGENT_LEGACY_ONBOARDING === "1";
+  if (!legacyOnboarding) {
+    await bootHostMode();
+    return;
+  }
+
+  createWindow();
   const ts = await refreshNetwork();
   lastPreflight = await runPreflight({
     productRoot,
@@ -1064,7 +1152,7 @@ app.whenReady().then(async () => {
 
   const cfg = config.loadConfig();
   const onboarding = loadOnboarding();
-  // Never auto-start Agent without Tailscale READY.
+  // Legacy: never auto-start Agent without Tailscale READY.
   if (
     cfg.firstRunComplete &&
     cfg.workspaceRoot &&

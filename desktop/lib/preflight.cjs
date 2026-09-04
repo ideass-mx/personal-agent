@@ -7,14 +7,63 @@
  */
 const os = require("node:os");
 const dns = require("node:dns");
-const { probeTailscale } = require("./tailscale.cjs");
+const { probeTailscale, TailscalePhase } = require("./tailscale.cjs");
 const {
   classifyInstallScenario,
   InstallScenario,
 } = require("./install-scenario.cjs");
 const { getAgentHostId, hasPersistedPairingAuth } = require("./agent-identity.cjs");
+const { OnboardingState } = require("./onboarding.cjs");
 const config = require("./config.cjs");
 const { logOnboarding } = require("./onboarding-log.cjs");
+
+/**
+ * Map preflight result → next onboarding state.
+ * Never returns PREFLIGHT (invariant: no PREFLIGHT → PREFLIGHT polling).
+ *
+ * @param {{
+ *   scenario: { scenario: string },
+ *   networkReady: boolean,
+ *   checks: { tailscale: { phase: string } },
+ *   ok: boolean,
+ *   blocking: string[],
+ * }} preflight
+ * @returns {{ state: string, reason: string, errorCode?: string }}
+ */
+function resolvePostPreflightState(preflight) {
+  const scenario = preflight?.scenario?.scenario;
+  if (scenario === InstallScenario.NO_DOWNGRADE) {
+    return {
+      state: OnboardingState.ERROR,
+      reason: "no_downgrade",
+      errorCode: "NO_DOWNGRADE",
+    };
+  }
+  const phase = preflight?.checks?.tailscale?.phase || TailscalePhase.MISSING;
+  if (preflight?.networkReady === true || phase === TailscalePhase.READY) {
+    return {
+      state: OnboardingState.NETWORK_VERIFYING,
+      reason: "tailscale_ready_verify",
+    };
+  }
+  if (phase === TailscalePhase.MISSING) {
+    return {
+      state: OnboardingState.NETWORK_INSTALLING,
+      reason: "tailscale_missing",
+    };
+  }
+  if (phase === TailscalePhase.AUTH_REQUIRED) {
+    return {
+      state: OnboardingState.NETWORK_AUTHENTICATION,
+      reason: "tailscale_auth_required",
+    };
+  }
+  // CONNECTED or other not-ready phases → explicit verify / wait UI
+  return {
+    state: OnboardingState.NETWORK_VERIFYING,
+    reason: "network_not_ready",
+  };
+}
 
 function checkWindowsVersion() {
   if (process.platform !== "win32") {
@@ -154,6 +203,7 @@ async function runPreflight(input) {
 
 module.exports = {
   runPreflight,
+  resolvePostPreflightState,
   checkWindowsVersion,
   checkArchitecture,
   checkAdministrator,

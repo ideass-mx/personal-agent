@@ -81,20 +81,25 @@ function classifyInstallScenario(input) {
   const hasPairing = hasPersistedPairingAuth();
   const binaries = productBinariesPresent(input.productRoot);
   const installedVersion = readInstalledVersion(input.productRoot);
-  const incompleteOnboarding =
-    input.onboardingState &&
+  // PREFLIGHT is the entry check — not mid-flow recovery.
+  // Inno always ships product binaries; they do NOT mean a prior onboarding.
+  const midOnboarding =
+    Boolean(input.onboardingState) &&
     input.onboardingState !== "READY" &&
-    input.onboardingState !== "ERROR";
+    input.onboardingState !== "ERROR" &&
+    input.onboardingState !== "PREFLIGHT";
 
-  const anyExisting =
-    hasConfig ||
+  // User/AppData evidence of a prior or in-progress install (not layout alone).
+  // Install credential alone (HUB_TOKEN) without identity/firstRun is NOT enough
+  // to classify UPDATE/RECOVERY — Desktop used to eager-create HUB_TOKEN on UI read.
+  const userDataExisting =
     hasDb ||
     hasIdentity ||
-    hasPairing ||
-    cfg.firstRunComplete ||
-    binaries;
+    Boolean(cfg.firstRunComplete) ||
+    midOnboarding ||
+    (hasConfig && (hasIdentity || Boolean(cfg.firstRunComplete) || hasDb));
 
-  if (!anyExisting) {
+  if (!userDataExisting) {
     return {
       scenario: InstallScenario.NEW,
       installerVersion,
@@ -102,7 +107,11 @@ function classifyInstallScenario(input) {
       preserveIdentity: false,
       preservePairing: false,
       preserveDatabase: false,
-      reasons: ["no_existing_install"],
+      reasons: [
+        "no_existing_userdata",
+        binaries ? "binaries_layout_only" : "no_binaries",
+        hasPairing ? "install_credential_ignored_for_new" : "no_pairing",
+      ],
     };
   }
 
@@ -121,7 +130,7 @@ function classifyInstallScenario(input) {
     };
   }
 
-  if (incompleteOnboarding) {
+  if (midOnboarding) {
     return {
       scenario: InstallScenario.RECOVERY,
       installerVersion,
@@ -150,7 +159,7 @@ function classifyInstallScenario(input) {
     };
   }
 
-  if (cfg.firstRunComplete || hasIdentity || hasPairing) {
+  if (cfg.firstRunComplete || hasIdentity) {
     return {
       scenario: InstallScenario.UPDATE,
       installerVersion,

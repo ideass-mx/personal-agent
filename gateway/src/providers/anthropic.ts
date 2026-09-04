@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { DEFAULT_AGENT_MODEL } from "../agents/definition.ts";
 import { SYSTEM_PROMPT } from "../agents/prompts.ts";
 import { config } from "../config.ts";
+import { getEffectiveAnthropicApiKey } from "../setup/llm-key.ts";
 import type {
   LLMContentBlock,
   LLMMessage,
@@ -50,10 +51,15 @@ function toAnthropicMessages(
 
 /** Provider concreto Anthropic. El SDK no debe usarse fuera de este módulo. */
 export function createAnthropicProvider(): LLMProvider {
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
-
   return {
     async *stream(request: LLMRequest) {
+      const apiKey = getEffectiveAnthropicApiKey();
+      if (!apiKey) {
+        throw new Error(
+          "LLM no configurado. Completa el onboarding para conectar la inteligencia.",
+        );
+      }
+      const client = new Anthropic({ apiKey });
       const params: Anthropic.MessageCreateParams = {
         // Modelo efectivo: AgentDefinition vía Runtime (request.model).
         model: request.model ?? DEFAULT_AGENT_MODEL,
