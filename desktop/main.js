@@ -54,9 +54,15 @@ const {
   getInstallAuthBearer,
 } = require("./lib/pairing.cjs");
 const { logOnboarding } = require("./lib/onboarding-log.cjs");
-const { waitForHealth, requestBrowserLaunchUrl } = require("./lib/host-boot.cjs");
+const {
+  waitForHealth,
+  requestBrowserLaunchUrl,
+  classifyBrowserOpenError,
+} = require("./lib/host-boot.cjs");
 
 /** true when product UX is Web (default). Legacy Electron onboarding only if env flag. */
+const SHUTDOWN_HOST_ARG = "--shutdown-host";
+const shutdownRequested = process.argv.includes(SHUTDOWN_HOST_ARG);
 let hostModeActive = false;
 let lastConsolePort = 8787;
 let browserOpenedForCurrentStartup = false;
@@ -174,6 +180,63 @@ let lastNetworkReady = false;
 let lastPreflight = null;
 /** @type {null | { substatus: string, sessionId?: string, uri?: string, qrDataUrl?: string, expiresAt?: string, deviceName?: string, deviceId?: string }} */
 let lastPairingUi = null;
+let shutdownInFlight = null;
+
+function destroyTray() {
+  if (!tray) return;
+  try {
+    tray.destroy();
+  } catch {
+    /* ignore */
+  }
+  tray = null;
+}
+
+async function shutdownHost(reason = "app_quit") {
+  if (shutdownInFlight) return shutdownInFlight;
+  shutdownInFlight = (async () => {
+    quitting = true;
+    logOnboarding("HOST", "shutdown_requested", { reason });
+    destroyTray();
+    try {
+      if (supervisor) {
+        await supervisor.stop();
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.removeAllListeners("close");
+        mainWindow.close();
+      }
+    } catch {
+      /* ignore */
+    }
+    app.quit();
+    setTimeout(() => {
+      try {
+        app.exit(0);
+      } catch {
+        /* ignore */
+      }
+    }, 1500).unref?.();
+  })();
+  return shutdownInFlight;
+}
+
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv) => {
+    if (argv.includes(SHUTDOWN_HOST_ARG)) {
+      void shutdownHost("uninstall");
+      return;
+    }
+    void showProductWindow();
+  });
+}
 
 function hubHttpBase() {
   const cfg = config.loadConfig();
@@ -407,6 +470,34 @@ function consoleHttpUrl(port = lastConsolePort) {
   return `http://127.0.0.1:${port}/`;
 }
 
+function escapeForTemplateLiteral(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$\{/g, "\\${");
+}
+
+async function showHostSplashMessage(state) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const details = [
+    state.details,
+    state.errorCode ? `Código: ${state.errorCode}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  await mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
+  await mainWindow.webContents
+    .executeJavaScript(
+      `window.setHostSplashState && window.setHostSplashState({
+        title: \`${escapeForTemplateLiteral(state.title || "Personal Agent")}\`,
+        message: \`${escapeForTemplateLiteral(state.message || "Iniciando tu agente…")}\`,
+        details: \`${escapeForTemplateLiteral(details)}\`,
+        showActions: ${state.showActions !== false},
+      });`,
+    )
+    .catch(() => {});
+}
+
 /**
  * Recreate / show the product window. In host mode never load legacy onboarding UI.
  */
@@ -462,16 +553,11 @@ async function bootHostMode() {
     logOnboarding("HOST", "gateway_start_failed", {
       error: started.error || "start_failed",
     });
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
-      mainWindow.webContents.executeJavaScript(
-        `document.body && (document.body.dataset.error = "start_failed");
-         const el = document.getElementById("msg");
-         if (el) el.textContent = "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.";
-         const actions = document.getElementById("actions");
-         if (actions) actions.hidden = false;`,
-      ).catch(() => {});
-    }
+    await showHostSplashMessage({
+      title: "Personal Agent",
+      message: "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.",
+      details: "El host no pudo iniciar el agente correctamente.",
+    });
     return { ok: false, error: started.error || "start_failed" };
   }
 
@@ -479,15 +565,11 @@ async function bootHostMode() {
     await waitForHealth(port, 90000);
   } catch {
     logOnboarding("HOST", "health_timeout", { port });
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.executeJavaScript(
-        `document.body && (document.body.dataset.error = "health_timeout");
-         const el = document.getElementById("msg");
-         if (el) el.textContent = "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.";
-         const actions = document.getElementById("actions");
-         if (actions) actions.hidden = false;`,
-      ).catch(() => {});
-    }
+    await showHostSplashMessage({
+      title: "Personal Agent",
+      message: "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.",
+      details: "El agente no respondió al health check a tiempo.",
+    });
     return { ok: false, error: "health_timeout" };
   }
 
@@ -498,19 +580,17 @@ async function bootHostMode() {
       browserOpenedForCurrentStartup = true;
     }
   } catch (err) {
-    logOnboarding("HOST", "browser_open_failed", {
-      error: err instanceof Error ? err.message : "browser_open_failed",
+    const browserError = classifyBrowserOpenError(err);
+    logOnboarding("HOST", browserError.event, {
+      ...(browserError.errorCode ? { errorCode: browserError.errorCode } : {}),
+      ...(browserError.error ? { error: browserError.error } : {}),
     });
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.executeJavaScript(
-        `document.body && (document.body.dataset.error = "browser_open_failed");
-         const el = document.getElementById("msg");
-         if (el) el.textContent = "Tu agente ya está iniciando, pero no pudimos abrir el navegador. Usa Reintentar.";
-         const actions = document.getElementById("actions");
-         if (actions) actions.hidden = false;`,
-      ).catch(() => {});
-    }
-    return { ok: false, error: "browser_open_failed" };
+    await showHostSplashMessage(browserError);
+    return {
+      ok: false,
+      error: browserError.classification,
+      errorCode: browserError.errorCode,
+    };
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.hide();
@@ -585,9 +665,7 @@ function buildTrayTemplate() {
     {
       label: "Salir",
       click: async () => {
-        quitting = true;
-        await supervisor.stop();
-        app.quit();
+        await shutdownHost("tray_exit");
       },
     },
   ];
@@ -1219,6 +1297,10 @@ function wireIpc() {
 }
 
 app.whenReady().then(async () => {
+  if (shutdownRequested) {
+    await shutdownHost("uninstall_helper");
+    return;
+  }
   if (app.isPackaged) {
     process.env.ELECTRON_IS_PACKAGED = "1";
   }
@@ -1280,4 +1362,5 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   quitting = true;
+  destroyTray();
 });

@@ -56,5 +56,7 @@ También se dispara al push de tags `v*`.
 - Natives win32 PE
 - Setup.exe ≥ ~40MB con nombre versionado
 - Checksum SHA-256 presente
+- Uninstall: solicita cierre limpio del Host antes de borrar y limpia los
+  shortcuts administrados (`Start Menu`, `Desktop`, `Startup`)
 
 Field install Windows = **NOT_EXECUTED** en este workflow.

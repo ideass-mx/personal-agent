@@ -50,6 +50,7 @@ describe("PHASE 51 Windows installer + Agent Console integration", () => {
     const iss = read("installer/windows/personal-agent.iss");
     assert.match(iss, /PersonalAgent-Setup/);
     assert.match(iss, /MyOutputBaseFilename|version\.generated\.iss/);
+    assert.match(iss, /MyAppShutdownParams/);
     assert.match(
       iss,
       /AppId=\{\{A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51\}\}/,
@@ -65,6 +66,13 @@ describe("PHASE 51 Windows installer + Agent Console integration", () => {
     assert.match(iss, /electron\.exe/);
     assert.match(iss, /console\\index\.html|console\\\\index\.html|console/);
     assert.doesNotMatch(iss, /npm install/i);
+    assert.match(iss, /RequestHostShutdownForUninstall/);
+    assert.match(iss, /--shutdown-host/);
+    assert.match(iss, /\[UninstallDelete\]/);
+    assert.match(iss, /\{userstartup\}\\\{#MyAppName\}\.lnk/);
+    assert.match(iss, /\{autodesktop\}\\\{#MyAppName\}\.lnk/);
+    assert.match(iss, /\{group\}\\Desinstalar \{#MyAppName\}\.lnk/);
+    assert.doesNotMatch(iss, /CurrentVersion\\Run/);
   });
 
   it("tray shell opens Console; no Chat; workspace env wired", () => {

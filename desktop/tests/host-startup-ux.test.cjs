@@ -19,6 +19,7 @@ const launcherPath = path.join(
   "release",
   "windows-launcher.mjs",
 );
+const hostSplashPath = path.join(desktopRoot, "renderer", "host-splash.html");
 
 test("default startup is host mode (Web onboarding), not legacy Electron UI", () => {
   const src = fs.readFileSync(mainPath, "utf8");
@@ -82,10 +83,31 @@ test("host mode opens external browser instead of embedding web app", () => {
   assert.match(src, /requestBrowserLaunchUrl/);
   assert.match(src, /shell\.openExternal/);
   assert.match(src, /browserOpenedForCurrentStartup/);
+  assert.match(src, /classifyBrowserOpenError/);
+  assert.match(src, /showHostSplashMessage/);
   const bootIdx = src.indexOf("async function bootHostMode");
   const bootSlice = src.slice(bootIdx, bootIdx + 2600);
   assert.doesNotMatch(bootSlice, /loadURL\(url\)/);
   assert.match(bootSlice, /openPersonalAgentInBrowser/);
+});
+
+test("host splash contains browser-unavailable and details UX", () => {
+  const html = fs.readFileSync(hostSplashPath, "utf8");
+  assert.match(html, /Ver detalles/);
+  assert.match(html, /window\.setHostSplashState/);
+  assert.match(html, /details-panel/);
+  assert.doesNotMatch(html, /HUB_TOKEN|bootstrap secret|API key/i);
+});
+
+test("host uninstall shutdown destroys tray and stops supervisor cleanly", () => {
+  const src = fs.readFileSync(mainPath, "utf8");
+  assert.match(src, /SHUTDOWN_HOST_ARG/);
+  assert.match(src, /requestSingleInstanceLock/);
+  assert.match(src, /second-instance/);
+  assert.match(src, /shutdownHost\("uninstall"\)/);
+  assert.match(src, /tray\.destroy\(\)/);
+  assert.match(src, /await supervisor\.stop\(\)/);
+  assert.match(src, /app\.quit\(\)/);
 });
 
 function pathToFileUrl(p) {

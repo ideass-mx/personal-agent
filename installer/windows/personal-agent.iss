@@ -22,6 +22,7 @@
 ; Primary shortcut target: Electron GUI (no cmd.exe). Bat/VBS are fallbacks only.
 #define MyAppExeName "runtime\electron\electron.exe"
 #define MyAppParams """{app}\desktop"""
+#define MyAppShutdownParams """{app}\desktop"" --shutdown-host"
 ; SourcePath = directory of this .iss (trailing backslash). Resolve package layout from there.
 #define SourceRoot SourcePath + "..\..\dist\windows\PersonalAgent"
 
@@ -94,9 +95,33 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: {#MyAppParams}; WorkingDir: "{app
 
 [UninstallDelete]
 ; Only leftovers under {app}. Never touch workspace.
+Type: files; Name: "{autodesktop}\{#MyAppName}.lnk"
+Type: files; Name: "{userstartup}\{#MyAppName}.lnk"
+Type: files; Name: "{group}\{#MyAppName}.lnk"
+Type: files; Name: "{group}\Desinstalar {#MyAppName}.lnk"
+Type: dirifempty; Name: "{group}"
 Type: filesandordirs; Name: "{app}\desktop\node_modules"
 
 [Code]
+procedure RequestHostShutdownForUninstall;
+var
+  HostExe: String;
+  ResultCode: Integer;
+begin
+  HostExe := ExpandConstant('{app}\{#MyAppExeName}');
+  if not FileExists(HostExe) then
+    exit;
+  Exec(
+    HostExe,
+    ExpandConstant('{#MyAppShutdownParams}'),
+    ExpandConstant('{app}'),
+    SW_HIDE,
+    ewNoWait,
+    ResultCode
+  );
+  Sleep(2000);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   // Post-install: confirm runtimes under the install dir (not the build SourceRoot).
@@ -120,6 +145,7 @@ end;
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
+  RequestHostShutdownForUninstall();
   if MsgBox('¿Eliminar también configuración y base de datos locales del agente?' + #13#10 +
             '(La carpeta de trabajo / workspace NUNCA se borra.)',
             mbConfirmation, MB_YESNO) = IDYES then

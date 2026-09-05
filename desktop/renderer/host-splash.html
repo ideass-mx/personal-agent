@@ -36,18 +36,38 @@
 </head>
 <body>
   <div class="card">
-    <h1>Personal Agent</h1>
+    <h1 id="title">Personal Agent</h1>
     <p id="msg">Iniciando tu agente…</p>
     <div id="actions" hidden>
       <button type="button" id="retry">Reintentar</button>
       <button type="button" class="secondary" id="details">Ver detalles</button>
     </div>
+    <div id="details-panel" hidden>
+      <p id="details-text" style="margin-top: 1rem; text-align: left; white-space: pre-line;"></p>
+    </div>
   </div>
   <script>
+    window.setHostSplashState = (state) => {
+      const title = document.getElementById("title");
+      const msg = document.getElementById("msg");
+      const actions = document.getElementById("actions");
+      const detailText = document.getElementById("details-text");
+      const detailPanel = document.getElementById("details-panel");
+      if (title && state && state.title) title.textContent = state.title;
+      if (msg && state && state.message) msg.textContent = state.message;
+      if (detailText) detailText.textContent = (state && state.details) || "";
+      if (detailPanel) detailPanel.hidden = true;
+      if (actions) actions.hidden = !(state && state.showActions);
+    };
+
     document.getElementById("retry").addEventListener("click", () => {
       const el = document.getElementById("msg");
+      const title = document.getElementById("title");
       if (el) el.textContent = "Iniciando tu agente…";
+      if (title) title.textContent = "Personal Agent";
       document.getElementById("actions").hidden = true;
+      document.getElementById("details-panel").hidden = true;
+      document.getElementById("details-text").textContent = "";
       if (window.desktopApi && window.desktopApi.retryHostBoot) {
         window.desktopApi.retryHostBoot();
       } else {
@@ -55,11 +75,9 @@
       }
     });
     document.getElementById("details").addEventListener("click", () => {
-      if (window.desktopApi && window.desktopApi.copyDiagnostics) {
-        window.desktopApi.copyDiagnostics();
-        const el = document.getElementById("msg");
-        if (el) el.textContent = "Diagnóstico copiado. Puedes pegarlo en un mensaje de soporte.";
-      }
+      const panel = document.getElementById("details-panel");
+      if (!panel) return;
+      panel.hidden = !panel.hidden;
     });
   </script>
 </body>
