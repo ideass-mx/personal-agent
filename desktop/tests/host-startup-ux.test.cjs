@@ -41,7 +41,7 @@ test("showProductWindow never loads legacy index in host mode", () => {
   const showIdx = src.indexOf("async function showProductWindow");
   const showSlice = src.slice(showIdx, showIdx + 800);
   assert.doesNotMatch(showSlice, /renderer[\\/]+index\.html/);
-  assert.match(showSlice, /openPersonalAgentInBrowser|host-splash\.html/);
+  assert.match(showSlice, /openPersonalAgentInBrowser|showHostSplashMessage/);
 });
 
 test("Gateway spawn hides Windows console", () => {
@@ -89,6 +89,8 @@ test("host mode opens external browser instead of embedding web app", () => {
   const bootSlice = src.slice(bootIdx, bootIdx + 2600);
   assert.doesNotMatch(bootSlice, /loadURL\(url\)/);
   assert.match(bootSlice, /openPersonalAgentInBrowser/);
+  assert.doesNotMatch(bootSlice, /createWindow\(\{\s*hostUi:\s*true/);
+  assert.doesNotMatch(bootSlice, /host-splash\.html/);
 });
 
 test("host splash contains browser-unavailable and details UX", () => {
@@ -108,6 +110,16 @@ test("host uninstall shutdown destroys tray and stops supervisor cleanly", () =>
   assert.match(src, /tray\.destroy\(\)/);
   assert.match(src, /await supervisor\.stop\(\)/);
   assert.match(src, /app\.quit\(\)/);
+});
+
+test("host happy path delays tray until boot completes", () => {
+  const src = fs.readFileSync(mainPath, "utf8");
+  const readyIdx = src.indexOf("app.whenReady");
+  const readySlice = src.slice(readyIdx, readyIdx + 900);
+  assert.doesNotMatch(readySlice, /createTray\(\)\s*;\s*\n\s*const legacyOnboarding/);
+  const bootIdx = src.indexOf("async function bootHostMode");
+  const bootSlice = src.slice(bootIdx, bootIdx + 2600);
+  assert.match(bootSlice, /ensureTray\(\)/);
 });
 
 function pathToFileUrl(p) {

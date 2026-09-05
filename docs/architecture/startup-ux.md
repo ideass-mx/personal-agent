@@ -13,10 +13,12 @@
 ```text
 Start Menu / Desktop shortcut
   → runtime/electron/electron.exe  "{app}\desktop"
-  → Electron host mode
+  → Electron host invisible
   → Gateway (windowsHide)
   → Node (MCP, windowsHide)
-  → splash → Web UI → OnboardingWizard
+  → browser bootstrap
+  → navegador predeterminado
+  → Web UI → OnboardingWizard
 ```
 
 ## Launchers
@@ -26,5 +28,8 @@ Start Menu / Desktop shortcut
 | Inno Icons/Run → `electron.exe` + params | **Primario** (sin consola) |
 | `AgentePersonal.vbs` | Doble clic silencioso (fallback) |
 | `AgentePersonal.bat` | Diagnóstico; usa `start ""` para desacoplar de CMD |
+
+El splash de Electron queda solo para errores o diagnóstico explícito; el
+camino feliz no crea una ventana visible.
 
 Legacy Electron onboarding: solo con `PERSONAL_AGENT_LEGACY_ONBOARDING=1`.

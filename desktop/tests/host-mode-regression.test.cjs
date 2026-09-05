@@ -33,13 +33,14 @@ test("main.js default host mode without Tailscale / LLM gate", () => {
   assert.match(src, /bootHostMode/);
   assert.match(src, /PERSONAL_AGENT_LEGACY_ONBOARDING/);
   assert.match(src, /waitForHealth/);
-  assert.match(src, /host-splash\.html/);
+  assert.match(src, /showHostSplashMessage/);
   // Host path must not require Tailscale before opening console
   const bootIdx = src.indexOf("async function bootHostMode");
   assert.ok(bootIdx > 0);
   const bootSlice = src.slice(bootIdx, bootIdx + 2500);
   assert.doesNotMatch(bootSlice, /probeTailscale|verifySecureNetwork|runPreflight/);
   assert.doesNotMatch(bootSlice, /ANTHROPIC_API_KEY/);
+  assert.doesNotMatch(bootSlice, /createWindow\(\{\s*hostUi:\s*true/);
 });
 
 test("legacy onboarding flag still wired", () => {

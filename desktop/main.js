@@ -447,7 +447,7 @@ function createWindow(opts = {}) {
   mainWindow = new BrowserWindow({
     width: hostUi ? 1100 : 560,
     height: hostUi ? 800 : 820,
-    show: true,
+    show: opts.show ?? !hostUi,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -478,7 +478,9 @@ function escapeForTemplateLiteral(value) {
 }
 
 async function showHostSplashMessage(state) {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow({ hostUi: true, show: false });
+  }
   const details = [
     state.details,
     state.errorCode ? `Código: ${state.errorCode}` : "",
@@ -496,6 +498,8 @@ async function showHostSplashMessage(state) {
       });`,
     )
     .catch(() => {});
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
 }
 
 /**
@@ -513,8 +517,12 @@ async function showProductWindow() {
       mainWindow.focus();
       return;
     }
-    createWindow({ hostUi: true });
-    mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
+    await showHostSplashMessage({
+      title: "Personal Agent",
+      message: "Iniciando tu agente…",
+      details: "El host sigue iniciando Gateway y Node.",
+      showActions: false,
+    });
     return;
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -533,6 +541,14 @@ async function openPersonalAgentInBrowser() {
   return { ok: true, url: launchUrl };
 }
 
+function ensureTray() {
+  if (!tray) {
+    createTray();
+  } else {
+    refreshTrayMenu();
+  }
+}
+
 /**
  * Fase 3/7.6: host mode — Gateway sin Tailscale gate; Web UI es el onboarding.
  */
@@ -543,9 +559,6 @@ async function bootHostMode() {
   const cfg = config.loadConfig();
   const port = cfg.hubPort || 8787;
   lastConsolePort = port;
-
-  createWindow({ hostUi: true });
-  mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
 
   logOnboarding("HOST", "gateway_start", { port });
   const started = await supervisor.start();
@@ -574,6 +587,7 @@ async function bootHostMode() {
   }
 
   lastNetworkReady = true; // localhost product path; remote Tailscale is optional later
+  ensureTray();
   try {
     if (!browserOpenedForCurrentStartup) {
       await openPersonalAgentInBrowser();
@@ -1314,7 +1328,6 @@ app.whenReady().then(async () => {
     onState: publishState,
   });
   wireIpc();
-  createTray();
 
   const legacyOnboarding = process.env.PERSONAL_AGENT_LEGACY_ONBOARDING === "1";
   if (!legacyOnboarding) {
@@ -1322,6 +1335,7 @@ app.whenReady().then(async () => {
     return;
   }
 
+  createTray();
   createWindow();
   const ts = await refreshNetwork();
   lastPreflight = await runPreflight({
