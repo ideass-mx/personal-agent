@@ -88,35 +88,56 @@ describe("Anthropic diagnostic mapping", () => {
     assert.equal(
       mapAnthropicError(
         { status: 401, error: { message: "unauthorized", type: "authentication_error" } },
-        { diagnosticId: "PA-A", streamStarted: false },
+        { diagnosticId: "PA-A", streamStarted: false, model: "claude-sonnet-4-6" },
       ).errorCode,
       "LLM_AUTH_FAILED",
     );
     assert.equal(
       mapAnthropicError(
         { status: 404, error: { message: "model missing", type: "not_found_error" } },
-        { diagnosticId: "PA-B", streamStarted: false },
+        { diagnosticId: "PA-B", streamStarted: false, model: "claude-sonnet-4-6" },
       ).errorCode,
       "LLM_MODEL_NOT_FOUND",
     );
+    const invalid = mapAnthropicError(
+      {
+        status: 400,
+        requestID: "req_123",
+        name: "BadRequestError",
+        error: {
+          type: "error",
+          error: {
+            type: "invalid_request_error",
+            message:
+              "tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,64}$'",
+          },
+        },
+      },
+      { diagnosticId: "PA-BAD", streamStarted: false, model: "claude-sonnet-4-6" },
+    );
+    assert.equal(invalid.errorCode, "LLM_REQUEST_INVALID");
+    assert.equal(invalid.httpStatus, 400);
+    assert.equal(invalid.metadata?.providerErrorType, "invalid_request_error");
+    assert.equal(invalid.metadata?.providerRequestId, "req_123");
+    assert.match(String(invalid.metadata?.safeProviderMessage || ""), /tools\.0\.custom\.name/);
     assert.equal(
       mapAnthropicError(
         { status: 429, error: { message: "rate limit", type: "rate_limit_error" } },
-        { diagnosticId: "PA-C", streamStarted: false },
+        { diagnosticId: "PA-C", streamStarted: false, model: "claude-sonnet-4-6" },
       ).errorCode,
       "LLM_RATE_LIMITED",
     );
     assert.equal(
       mapAnthropicError(
         { code: "ETIMEDOUT", message: "request timed out" },
-        { diagnosticId: "PA-D", streamStarted: false },
+        { diagnosticId: "PA-D", streamStarted: false, model: "claude-sonnet-4-6" },
       ).errorCode,
       "LLM_TIMEOUT",
     );
     assert.equal(
       mapAnthropicError(
         { message: "stream reset" },
-        { diagnosticId: "PA-E", streamStarted: true },
+        { diagnosticId: "PA-E", streamStarted: true, model: "claude-sonnet-4-6" },
       ).errorCode,
       "LLM_STREAM_FAILED",
     );

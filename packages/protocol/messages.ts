@@ -72,6 +72,10 @@ export type DiagnosticPayload = {
   timestamp: string;
   provider?: string;
   httpStatus?: number;
+  providerErrorType?: string;
+  providerRequestId?: string;
+  safeMessage?: string;
+  model?: string;
 };
 
 export type ServerMessage =

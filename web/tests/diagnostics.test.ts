@@ -18,18 +18,25 @@ const diagnostic: DiagnosticInfo = {
   diagnosticId: "PA-7F42C1",
   component: "LLM_PROVIDER",
   stage: "LLM_REQUEST",
-  errorCode: "LLM_AUTH_FAILED",
+  errorCode: "LLM_REQUEST_INVALID",
   timestamp: "2026-09-04T22:14:02.019Z",
   provider: "anthropic",
-  httpStatus: 401,
+  httpStatus: 400,
+  providerErrorType: "invalid_request_error",
+  providerRequestId: "req_123",
+  safeMessage:
+    "tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,64}$'",
+  model: "claude-sonnet-4-6",
 };
 
 describe("web diagnostics helpers", () => {
   it("keeps chat error friendly and formats safe details", () => {
     assert.match(friendlyChatError(), /No pude generar la respuesta/i);
     const details = formatDiagnosticDetails(diagnostic);
-    assert.match(details, /LLM_AUTH_FAILED/);
+    assert.match(details, /LLM_REQUEST_INVALID/);
     assert.match(details, /PA-7F42C1/);
+    assert.match(details, /invalid_request_error/);
+    assert.match(details, /req_123/);
     assert.equal(/api key|authorization|cookie|token/i.test(details), false);
   });
 
@@ -46,7 +53,9 @@ describe("web diagnostics helpers", () => {
     const text = buildDiagnosticClipboardText(diagnostic, health);
     assert.match(text, /Personal Agent Diagnostic/);
     assert.match(text, /ID: PA-7F42C1/);
-    assert.match(text, /HTTP: 401/);
+    assert.match(text, /HTTP: 400/);
+    assert.match(text, /Provider Error Type: invalid_request_error/);
+    assert.match(text, /Provider Request ID: req_123/);
     assert.equal(/api key|authorization|cookie|token/i.test(text), false);
   });
 });

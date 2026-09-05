@@ -12,6 +12,7 @@ import type {
   LLMProvider,
 } from "../providers/types.ts";
 import { toLLMToolDescriptor } from "../tools/descriptor.ts";
+import { toProviderSafeToolName } from "../tools/provider-safe-name.ts";
 import type { AgentTool, ToolResult } from "../tools/types.ts";
 import {
   createDefaultAgentDefinition,
@@ -136,7 +137,9 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
   return {
     async *runTurn(input: AgentTurnInput): AsyncGenerator<AgentEvent> {
       const diagnosticId =
-        input.diagnosticId || diagnostics?.createDiagnosticId() || `PA-${randomUUID().slice(0, 6).toUpperCase()}`;
+        input.diagnosticId ||
+        diagnostics?.createDiagnosticId() ||
+        `PA-${randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
       const startedAt = Date.now();
       try {
         const conversationId = memory.ensureConversation(input.conversationId);
@@ -165,7 +168,26 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           content: m.content,
         }));
 
-        const toolDescriptors = tools.list().map(toLLMToolDescriptor);
+        const availableTools = tools.list();
+        const providerToolNameMap = new Map<string, string>();
+        const toolDescriptors = availableTools.map((tool) => {
+          const safeName = toProviderSafeToolName(tool.name);
+          const existing = providerToolNameMap.get(safeName);
+          if (existing && existing !== tool.name) {
+            throw new AgentDiagnosticError({
+              message: `Tool names collide after provider normalization: ${existing}, ${tool.name}`,
+              component: "AGENT_RUNTIME",
+              stage: "TOOL_SELECTION",
+              errorCode: "LLM_REQUEST_INVALID",
+              diagnosticId,
+            });
+          }
+          providerToolNameMap.set(safeName, tool.name);
+          return {
+            ...toLLMToolDescriptor(tool),
+            name: safeName,
+          };
+        });
         let full = "";
 
         for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
@@ -189,9 +211,11 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
               full += event.text;
               yield { type: "text_delta", text: event.text };
             } else if (event.type === "tool_call") {
+              const internalToolName =
+                providerToolNameMap.get(event.name) || event.name;
               toolCalls.push({
                 id: event.id,
-                name: event.name,
+                name: internalToolName,
                 input: event.input,
               });
             }

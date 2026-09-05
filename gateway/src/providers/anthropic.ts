@@ -53,29 +53,48 @@ function toAnthropicMessages(
 
 function mapAnthropicError(
   err: unknown,
-  input: { diagnosticId?: string; streamStarted: boolean },
+  input: { diagnosticId?: string; streamStarted: boolean; model: string },
 ): AgentDiagnosticError {
   const anyErr = err as {
     status?: number;
     code?: string;
-    error?: { type?: string; message?: string };
+    error?: { type?: string; message?: string; error?: { type?: string; message?: string } };
+    requestID?: string | null;
+    headers?: { get?: (name: string) => string | null };
     name?: string;
     message?: string;
   };
   const httpStatus =
     typeof anyErr?.status === "number" ? anyErr.status : undefined;
+  const providerPayload =
+    anyErr?.error?.error && typeof anyErr.error.error === "object"
+      ? anyErr.error.error
+      : anyErr?.error;
   const message =
-    anyErr?.error?.message ||
+    providerPayload?.message ||
     anyErr?.message ||
     "anthropic_request_failed";
   const providerErrorType =
-    anyErr?.error?.type || anyErr?.name || "anthropic_error";
+    providerPayload?.type || anyErr?.name || "anthropic_error";
+  const providerRequestId =
+    typeof anyErr?.requestID === "string"
+      ? anyErr.requestID
+      : anyErr?.headers?.get?.("request-id") || undefined;
   let errorCode = input.streamStarted
     ? "LLM_STREAM_FAILED"
     : "LLM_REQUEST_FAILED";
   if (httpStatus === 401 || httpStatus === 403) errorCode = "LLM_AUTH_FAILED";
   else if (httpStatus === 404) errorCode = "LLM_MODEL_NOT_FOUND";
   else if (httpStatus === 429) errorCode = "LLM_RATE_LIMITED";
+  else if (
+    httpStatus === 400 &&
+    providerErrorType === "invalid_request_error" &&
+    /model/i.test(message)
+  ) {
+    errorCode = "LLM_MODEL_NOT_FOUND";
+  } else if (httpStatus === 400 && providerErrorType === "invalid_request_error") {
+    errorCode = "LLM_REQUEST_INVALID";
+  }
   else if (/timeout|timed out|abort/i.test(message) || anyErr?.code === "ETIMEDOUT") {
     errorCode = "LLM_TIMEOUT";
   }
@@ -90,6 +109,10 @@ function mapAnthropicError(
       provider: "anthropic",
       providerErrorType,
       providerStatus: httpStatus,
+      providerRequestId,
+      safeProviderMessage: message,
+      sdkErrorName: anyErr?.name || "AnthropicError",
+      model: input.model,
     },
   });
 }
@@ -126,6 +149,9 @@ export function createAnthropicProvider(input?: {
           model: params.model,
           messageCount: request.messages.length,
           toolCount: request.tools?.length ?? 0,
+          systemPresent: Boolean(params.system),
+          maxTokens: params.max_tokens,
+          stream: true,
         },
       });
 
@@ -178,6 +204,7 @@ export function createAnthropicProvider(input?: {
         const mapped = mapAnthropicError(err, {
           diagnosticId: request.diagnosticId,
           streamStarted,
+          model: params.model,
         });
         input?.diagnostics?.record({
           diagnosticId: request.diagnosticId || "PA-UNKNOWN",

@@ -371,7 +371,7 @@ describe("AgentRuntime tool calling", () => {
     );
 
     assert.equal(requests.length, 2);
-    assert.ok(requests[0]?.tools?.some((t) => t.name === "test.add"));
+    assert.ok(requests[0]?.tools?.some((t) => t.name === "test_add"));
     assert.ok(
       !requests[0]?.tools?.some((t) => "execute" in (t as object)),
     );
@@ -386,6 +386,54 @@ describe("AgentRuntime tool calling", () => {
     const assistant = memory.messages.find((m) => m.role === "assistant");
     assert.ok(assistant);
     assert.equal(assistant.content, "Son 5.");
+    assert.ok(events.some((e) => e.type === "done"));
+  });
+
+  it("normaliza nombres de tools para el provider y los revierte al ejecutar", async () => {
+    const memory = createFakeMemory();
+    const tools = new ToolRegistry();
+    let executed = false;
+    tools.register({
+      name: "filesystem.read",
+      description: "Lee un archivo",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        additionalProperties: false,
+      },
+      executionMode: "automatic",
+      async execute(input) {
+        executed = true;
+        assert.deepEqual(input, { path: "nota.txt" });
+        return { ok: true, content: { text: "hola" } };
+      },
+    });
+    const requests: LLMRequest[] = [];
+    const llm = createScriptedLLM(
+      [
+        (req) => {
+          requests.push(req);
+          assert.equal(req.tools?.[0]?.name, "filesystem_read");
+          return [
+            {
+              type: "tool_call",
+              id: "call_read",
+              name: "filesystem_read",
+              input: { path: "nota.txt" },
+            },
+            { type: "done" },
+          ];
+        },
+        () => [{ type: "text_delta", text: "ok" }, { type: "done" }],
+      ],
+    );
+    const runtime = createAgentRuntime({
+      memory,
+      llm,
+      tools,
+    });
+    const events = await collect(runtime.runTurn({ userMessage: "lee la nota" }));
+    assert.equal(executed, true);
     assert.ok(events.some((e) => e.type === "done"));
   });
 

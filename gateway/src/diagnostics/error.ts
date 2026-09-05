@@ -48,6 +48,22 @@ export function toDiagnosticClientPayload(
         : undefined,
     httpStatus:
       typeof err.httpStatus === "number" ? err.httpStatus : undefined,
+    providerErrorType:
+      typeof err.metadata?.providerErrorType === "string"
+        ? err.metadata.providerErrorType
+        : undefined,
+    providerRequestId:
+      typeof err.metadata?.providerRequestId === "string"
+        ? err.metadata.providerRequestId
+        : undefined,
+    safeMessage:
+      typeof err.metadata?.safeProviderMessage === "string"
+        ? err.metadata.safeProviderMessage
+        : undefined,
+    model:
+      typeof err.metadata?.model === "string"
+        ? err.metadata.model
+        : undefined,
   };
 }
 

@@ -69,6 +69,10 @@ sealed interface ServerMessage {
         val timestamp: String,
         val provider: String? = null,
         val httpStatus: Int? = null,
+        val providerErrorType: String? = null,
+        val providerRequestId: String? = null,
+        val safeMessage: String? = null,
+        val model: String? = null,
     )
 
     @Serializable

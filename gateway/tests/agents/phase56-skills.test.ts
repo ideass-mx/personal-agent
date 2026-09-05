@@ -20,6 +20,7 @@ import {
   SkillRegistry,
 } from "../../src/agents/skills/index.ts";
 import { DEFAULT_TOOL_POLICY } from "../../src/tools/policy.ts";
+import { toProviderSafeToolName } from "../../src/tools/provider-safe-name.ts";
 import type { TurnMemory } from "../../src/memory/types.ts";
 import type { LLMProvider, LLMRequest } from "../../src/providers/types.ts";
 import type { AgentTool } from "../../src/tools/types.ts";
@@ -193,8 +194,8 @@ describe("PHASE 56 skills & capabilities", () => {
       /* drain */
     }
     assert.deepEqual(cap.tools?.slice().sort(), [
-      "filesystem.read",
-      "process.execute",
+      toProviderSafeToolName("filesystem.read"),
+      toProviderSafeToolName("process.execute"),
     ]);
   });
 

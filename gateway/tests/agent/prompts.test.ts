@@ -4,6 +4,7 @@ import { SYSTEM_PROMPT } from "../../src/agents/prompts.ts";
 import { createAgentRuntime } from "../../src/agents/runtime.ts";
 import type { LLMEvent, LLMProvider, LLMRequest } from "../../src/providers/types.ts";
 import { toLLMToolDescriptor } from "../../src/tools/descriptor.ts";
+import { toProviderSafeToolName } from "../../src/tools/provider-safe-name.ts";
 import { ToolRegistry } from "../../src/tools/registry.ts";
 import type { AgentTool } from "../../src/tools/types.ts";
 
@@ -80,7 +81,10 @@ describe("tool descriptors vs prompt", () => {
 
     assert.ok(requests[0]?.tools);
     assert.deepEqual(requests[0].tools, [
-      toLLMToolDescriptor(sampleTool),
+      {
+        ...toLLMToolDescriptor(sampleTool),
+        name: toProviderSafeToolName(sampleTool.name),
+      },
     ]);
     assert.equal(tools.get("test.sample")?.name, "test.sample");
   });

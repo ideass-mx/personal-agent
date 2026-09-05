@@ -181,7 +181,11 @@ información **segura** para soporte local:
     "errorCode": "LLM_AUTH_FAILED",
     "timestamp": "2026-09-04T22:14:02.019Z",
     "provider": "anthropic",
-    "httpStatus": 401
+    "httpStatus": 401,
+    "providerErrorType": "authentication_error",
+    "providerRequestId": "req_...",
+    "safeMessage": "API key is invalid.",
+    "model": "claude-sonnet-4-6"
   }
 }
 ```

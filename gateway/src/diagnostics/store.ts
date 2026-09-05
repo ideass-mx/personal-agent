@@ -70,7 +70,7 @@ export class SqliteDiagnosticsStore {
   }
 
   createDiagnosticId(): string {
-    return `PA-${randomBytes(3).toString("hex").toUpperCase()}`;
+    return `PA-${randomBytes(6).toString("hex").toUpperCase()}`;
   }
 
   record(input: DiagnosticEventInput): DiagnosticEventRecord {

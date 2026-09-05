@@ -59,5 +59,9 @@ export type DiagnosticClientPayload = {
   timestamp: string;
   provider?: string;
   httpStatus?: number;
+  providerErrorType?: string;
+  providerRequestId?: string;
+  safeMessage?: string;
+  model?: string;
 };
 

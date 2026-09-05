@@ -15,6 +15,7 @@ import {
 } from "../../src/agents/runtime.ts";
 import { createBuiltinSkillRegistry } from "../../src/agents/skills/index.ts";
 import { DEFAULT_TOOL_POLICY } from "../../src/tools/policy.ts";
+import { toProviderSafeToolName } from "../../src/tools/provider-safe-name.ts";
 import type { TurnMemory } from "../../src/memory/types.ts";
 import type { LLMProvider, LLMRequest } from "../../src/providers/types.ts";
 import type { AgentTool } from "../../src/tools/types.ts";
@@ -126,11 +127,11 @@ describe("PHASE 56.1-C fixtures honesty", () => {
       /* drain */
     }
     assert.ok(capture.tools);
-    assert.ok(capture.tools!.includes("filesystem.read"));
-    assert.ok(capture.tools!.includes("process.execute"));
-    assert.equal(capture.tools!.includes("math.add"), false);
-    assert.equal(capture.tools!.includes("system.info"), false);
-    assert.equal(capture.tools!.includes("git.status"), false);
+    assert.ok(capture.tools!.includes(toProviderSafeToolName("filesystem.read")));
+    assert.ok(capture.tools!.includes(toProviderSafeToolName("process.execute")));
+    assert.equal(capture.tools!.includes(toProviderSafeToolName("math.add")), false);
+    assert.equal(capture.tools!.includes(toProviderSafeToolName("system.info")), false);
+    assert.equal(capture.tools!.includes(toProviderSafeToolName("git.status")), false);
   });
 
   it("herramienta no registrada / no autorizada no aparece; inexistente no rompe Runtime", async () => {
@@ -152,7 +153,10 @@ describe("PHASE 56.1-C fixtures honesty", () => {
     assert.ok(capture.tools);
     assert.deepEqual(
       capture.tools!.sort(),
-      ["filesystem.list", "filesystem.read"].sort(),
+      [
+        toProviderSafeToolName("filesystem.list"),
+        toProviderSafeToolName("filesystem.read"),
+      ].sort(),
     );
     assert.ok(events.some((e) => e.type === "done" || e.type === "text_delta"));
   });
