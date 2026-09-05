@@ -47,29 +47,55 @@ function waitForHealth(port, timeoutMs = 60000) {
   });
 }
 
-/**
- * Inject install session into Agent Console (same-origin) without showing the token in UI.
- */
-async function injectConsoleSession(webContents, token) {
-  const needs = await webContents.executeJavaScript(
-    `!sessionStorage.getItem("pa_console_session_v1")`,
-  );
-  if (!needs) return false;
-  const payload = JSON.stringify({
-    httpBase: "",
-    token,
-    deviceId: crypto.randomUUID(),
-    deviceName: "Escritorio",
+function requestBrowserLaunchUrl(port, token) {
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({
+      deviceId: `browser_${crypto.randomUUID()}`,
+      deviceName: "Navegador",
+    });
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path: "/v1/host/browser-sessions",
+        method: "POST",
+        timeout: 4000,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+          Accept: "application/json",
+        },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (c) => {
+          body += c;
+        });
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(body);
+            if (res.statusCode === 200 && json.ok === true && json.launchUrl) {
+              resolve(json.launchUrl);
+              return;
+            }
+          } catch {
+            /* handled below */
+          }
+          reject(new Error("browser_launch_url_failed"));
+        });
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy(new Error("browser_launch_url_timeout"));
+    });
+    req.write(payload);
+    req.end();
   });
-  await webContents.executeJavaScript(
-    `sessionStorage.setItem("pa_console_session_v1", ${JSON.stringify(payload)});
-     sessionStorage.setItem("pa_host_bootstrap", "1");
-     true;`,
-  );
-  return true;
 }
 
 module.exports = {
   waitForHealth,
-  injectConsoleSession,
+  requestBrowserLaunchUrl,
 };

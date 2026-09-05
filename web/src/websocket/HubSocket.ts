@@ -52,14 +52,16 @@ export class HubSocket {
     this.ws = ws;
     ws.onopen = () => {
       this.handlers.onOpen?.();
-      ws.send(
-        JSON.stringify({
-          type: "auth",
-          token: this.token,
-          deviceId: this.deviceId,
-          deviceName: this.deviceName,
-        }),
-      );
+      if (this.token.trim()) {
+        ws.send(
+          JSON.stringify({
+            type: "auth",
+            token: this.token,
+            deviceId: this.deviceId,
+            deviceName: this.deviceName,
+          }),
+        );
+      }
     };
     ws.onmessage = (ev) => {
       let msg: ServerMsg;

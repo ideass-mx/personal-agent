@@ -1,5 +1,5 @@
 /**
- * Tras ISCC: SHA-256 + copia versionada bajo dist/releases/.
+ * Tras ISCC: SHA-256 + metadata junto al instalador canónico.
  * Uso: node scripts/release/finalize-installer.mjs [path-to-setup.exe]
  */
 import { existsSync, readdirSync } from "node:fs";
@@ -49,5 +49,5 @@ const result = finalizeInstallerArtifacts(setupPath, info);
 process.stdout.write(
   `[finalize-installer] ${path.basename(setupPath)}\n` +
     `  sha256=${result.hash}\n` +
-    `  releaseDir=${result.releaseDir}\n`,
+    `  buildInfo=${result.infoPath}\n`,
 );

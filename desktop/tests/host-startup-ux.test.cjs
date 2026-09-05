@@ -40,7 +40,7 @@ test("showProductWindow never loads legacy index in host mode", () => {
   const showIdx = src.indexOf("async function showProductWindow");
   const showSlice = src.slice(showIdx, showIdx + 800);
   assert.doesNotMatch(showSlice, /renderer[\\/]+index\.html/);
-  assert.match(showSlice, /consoleHttpUrl|loadURL/);
+  assert.match(showSlice, /openPersonalAgentInBrowser|host-splash\.html/);
 });
 
 test("Gateway spawn hides Windows console", () => {
@@ -75,6 +75,17 @@ test("bat launcher detaches Electron; vbs has no cmd echo", async () => {
     .filter((l) => l.trim() && !l.trim().startsWith("'"))
     .join("\n");
   assert.doesNotMatch(codeLines, /cmd\.exe/i);
+});
+
+test("host mode opens external browser instead of embedding web app", () => {
+  const src = fs.readFileSync(mainPath, "utf8");
+  assert.match(src, /requestBrowserLaunchUrl/);
+  assert.match(src, /shell\.openExternal/);
+  assert.match(src, /browserOpenedForCurrentStartup/);
+  const bootIdx = src.indexOf("async function bootHostMode");
+  const bootSlice = src.slice(bootIdx, bootIdx + 2600);
+  assert.doesNotMatch(bootSlice, /loadURL\(url\)/);
+  assert.match(bootSlice, /openPersonalAgentInBrowser/);
 });
 
 function pathToFileUrl(p) {

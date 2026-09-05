@@ -14,7 +14,7 @@ export function loadSession(): ConnectionConfig | null {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as ConnectionConfig;
-    if (!parsed.token || !parsed.deviceId) return null;
+    if (!parsed.deviceId) return null;
     return parsed;
   } catch {
     return null;
@@ -26,7 +26,7 @@ export function saveSession(cfg: ConnectionConfig): void {
     KEY,
     JSON.stringify({
       httpBase: cfg.httpBase ?? "",
-      token: cfg.token,
+      token: cfg.token ?? "",
       deviceId: cfg.deviceId,
       deviceName: cfg.deviceName || "Agent Console",
     }),

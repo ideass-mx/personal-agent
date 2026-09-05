@@ -18,7 +18,7 @@ En un runner **`windows-latest`**:
 6. Tests de arquitectura PHASE 51
 7. `npm run smoke:package`
 8. Inno Setup 6 → Setup versionado
-9. `npm run finalize:installer` → `.sha256` + `dist/releases/…`
+9. `npm run finalize:installer` → `.sha256` + `*.build-info.json`
 10. Artifact con nombre versionado (no sobrescribe releases distintas)
 
 **No** crea GitHub Releases todavía.

@@ -19,11 +19,12 @@ test("host-splash exists for host boot UX", () => {
   assert.match(html, /agente/i);
 });
 
-test("host-boot waits for Gateway health and injects session", () => {
+test("host-boot waits for Gateway health and requests browser bootstrap", () => {
   const src = fs.readFileSync(hostBootPath, "utf8");
   assert.match(src, /\/health/);
-  assert.match(src, /pa_console_session_v1/);
-  assert.match(src, /pa_host_bootstrap/);
+  assert.match(src, /\/v1\/host\/browser-sessions/);
+  assert.match(src, /Authorization: `Bearer \$\{token\}`/);
+  assert.doesNotMatch(src, /pa_console_session_v1|pa_host_bootstrap/);
   assert.doesNotMatch(src, /probeTailscale|verifySecureNetwork|ANTHROPIC/);
 });
 

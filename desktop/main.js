@@ -54,11 +54,12 @@ const {
   getInstallAuthBearer,
 } = require("./lib/pairing.cjs");
 const { logOnboarding } = require("./lib/onboarding-log.cjs");
-const { waitForHealth, injectConsoleSession } = require("./lib/host-boot.cjs");
+const { waitForHealth, requestBrowserLaunchUrl } = require("./lib/host-boot.cjs");
 
 /** true when product UX is Web (default). Legacy Electron onboarding only if env flag. */
 let hostModeActive = false;
 let lastConsolePort = 8787;
+let browserOpenedForCurrentStartup = false;
 
 function resolveProductRoot() {
   if (process.env.PERSONAL_AGENT_PRODUCT_ROOT) {
@@ -410,22 +411,35 @@ function consoleHttpUrl(port = lastConsolePort) {
  * Recreate / show the product window. In host mode never load legacy onboarding UI.
  */
 async function showProductWindow() {
+  if (hostModeActive) {
+    const snap = supervisor?.snapshot?.() || {};
+    if (snap.running && snap.bootReady) {
+      await openPersonalAgentInBrowser();
+      return;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+      return;
+    }
+    createWindow({ hostUi: true });
+    mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
+    return;
+  }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.show();
     mainWindow.focus();
     return;
   }
-  if (hostModeActive) {
-    createWindow({ hostUi: true });
-    try {
-      await mainWindow.loadURL(consoleHttpUrl());
-    } catch {
-      mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
-    }
-    return;
-  }
   createWindow();
   mainWindow.show();
+}
+
+async function openPersonalAgentInBrowser() {
+  const token = config.getHubToken();
+  const launchUrl = await requestBrowserLaunchUrl(lastConsolePort, token);
+  await shell.openExternal(launchUrl);
+  return { ok: true, url: launchUrl };
 }
 
 /**
@@ -433,6 +447,7 @@ async function showProductWindow() {
  */
 async function bootHostMode() {
   hostModeActive = true;
+  browserOpenedForCurrentStartup = false;
   config.ensureHubToken();
   const cfg = config.loadConfig();
   const port = cfg.hubPort || 8787;
@@ -477,20 +492,30 @@ async function bootHostMode() {
   }
 
   lastNetworkReady = true; // localhost product path; remote Tailscale is optional later
-  const url = consoleHttpUrl(port);
-  await mainWindow.loadURL(url);
   try {
-    const token = config.getHubToken();
-    const did = await injectConsoleSession(mainWindow.webContents, token);
-    if (did) {
-      await mainWindow.loadURL(url);
+    if (!browserOpenedForCurrentStartup) {
+      await openPersonalAgentInBrowser();
+      browserOpenedForCurrentStartup = true;
     }
   } catch (err) {
-    logOnboarding("HOST", "inject_failed", {
-      error: err instanceof Error ? err.message : "inject_failed",
+    logOnboarding("HOST", "browser_open_failed", {
+      error: err instanceof Error ? err.message : "browser_open_failed",
     });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(
+        `document.body && (document.body.dataset.error = "browser_open_failed");
+         const el = document.getElementById("msg");
+         if (el) el.textContent = "Tu agente ya está iniciando, pero no pudimos abrir el navegador. Usa Reintentar.";
+         const actions = document.getElementById("actions");
+         if (actions) actions.hidden = false;`,
+      ).catch(() => {});
+    }
+    return { ok: false, error: "browser_open_failed" };
   }
-  logOnboarding("HOST", "console_open", { url: "localhost" });
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+  logOnboarding("HOST", "browser_open", { url: "localhost" });
   publishState();
   return { ok: true };
 }
@@ -535,9 +560,9 @@ function buildTrayTemplate() {
       },
     },
     {
-      label: "Abrir Agent Console",
+      label: "Abrir Personal Agent",
       click: () => {
-        shell.openExternal(consoleUrl());
+        void showProductWindow();
       },
     },
     {
@@ -1071,8 +1096,7 @@ function wireIpc() {
     return { ok: true };
   });
   ipcMain.handle("open-console", () => {
-    shell.openExternal(consoleUrl());
-    return { ok: true, url: consoleUrl() };
+    return openPersonalAgentInBrowser();
   });
   ipcMain.handle("copy-diagnostics", async () => copyDiagnosticsToClipboard());
   ipcMain.handle("retry-host-boot", async () => {

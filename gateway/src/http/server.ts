@@ -10,6 +10,7 @@ import { attachGateway } from "../ws/index.ts";
 import { mountWorkspaceHttp } from "./workspace-http.ts";
 import { mountPairingHttp } from "./pairing-http.ts";
 import { mountArtifactHttp } from "./artifact-http.ts";
+import { mountBrowserBootstrapHttp } from "./browser-bootstrap-http.ts";
 import { mountSetupHttp } from "./setup-http.ts";
 import { productVersionForHealth } from "../product-version.ts";
 import { resolveConsoleStaticRoot } from "./console-static.ts";
@@ -141,6 +142,10 @@ export function startServer(
   });
 
   mountSetupHttp(app, {
+    hubToken: config.hubToken,
+  });
+
+  mountBrowserBootstrapHttp(app, {
     hubToken: config.hubToken,
   });
 

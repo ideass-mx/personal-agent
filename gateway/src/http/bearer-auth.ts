@@ -5,6 +5,10 @@
 import { timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
 import { verifyDeviceCredential } from "../pairing/store.ts";
+import {
+  BROWSER_AUTH_COOKIE,
+  verifyBrowserCookieSession,
+} from "./browser-session.ts";
 
 export type HttpAuthPrincipal =
   | { kind: "install" }
@@ -20,6 +24,22 @@ export function bearerToken(header: string | undefined): string | undefined {
   if (!header) return undefined;
   const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
   return match?.[1];
+}
+
+export function cookieToken(
+  header: string | undefined,
+  name: string,
+): string | undefined {
+  if (!header) return undefined;
+  const parts = header.split(/;\s*/);
+  for (const part of parts) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    const key = part.slice(0, eq).trim();
+    if (key !== name) continue;
+    return decodeURIComponent(part.slice(eq + 1).trim());
+  }
+  return undefined;
 }
 
 export function httpErrorBody(
@@ -39,13 +59,20 @@ export function authenticateHttpRequest(
   hubToken: string,
 ): HttpAuthPrincipal | null {
   const token = bearerToken(c.req.header("Authorization"));
-  if (!token) return null;
-  if (tokenMatches(token, hubToken)) {
-    return { kind: "install" };
+  if (token) {
+    if (tokenMatches(token, hubToken)) {
+      return { kind: "install" };
+    }
+    const deviceId = c.req.header("X-Device-Id")?.trim();
+    if (deviceId && verifyDeviceCredential(deviceId, token)) {
+      return { kind: "device", deviceId };
+    }
   }
-  const deviceId = c.req.header("X-Device-Id")?.trim();
-  if (deviceId && verifyDeviceCredential(deviceId, token)) {
-    return { kind: "device", deviceId };
+  const browserSession = verifyBrowserCookieSession(
+    cookieToken(c.req.header("Cookie"), BROWSER_AUTH_COOKIE),
+  );
+  if (browserSession) {
+    return { kind: "install" };
   }
   return null;
 }

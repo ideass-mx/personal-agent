@@ -26,8 +26,7 @@ No duplicar la versión a mano en Inno / Desktop / Gateway.
 PersonalAgent-Setup-0.1.0-win-x64.exe          # release
 PersonalAgent-Setup-0.1.0-dev.20260904.42-win-x64.exe  # dev
 + .sha256
-dist/releases/v0.1.0/…                        # release folder
-dist/releases/dev-0.1.0-<build>/…             # dev folder
+PersonalAgent-Setup-0.1.0-win-x64.exe.build-info.json
 ```
 
 `AppId` Inno **estable** (`{{A8E5C2F1-…PERSONALAGENT51}}`) → upgrades del mismo producto.
@@ -36,7 +35,7 @@ dist/releases/dev-0.1.0-<build>/…             # dev folder
 
 1. `npm run package:windows` → `build-info.json`, `VERSION`, `installer/windows/version.generated.iss`
 2. ISCC `personal-agent.iss` (incluye defines generados)
-3. `npm run finalize:installer` → SHA-256 + `dist/releases/…`
+3. `npm run finalize:installer` → SHA-256 + `*.build-info.json` junto al instalador
 
 ## Runtime
 

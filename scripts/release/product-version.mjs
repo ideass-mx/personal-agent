@@ -8,6 +8,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -270,7 +271,8 @@ export function sha256File(filePath) {
 }
 
 /**
- * Escribe sidecar .sha256 junto al instalador y copia a dist/releases/.
+ * Escribe sidecar .sha256 junto al instalador.
+ * Mantiene un solo .exe canónico para evitar duplicidad.
  * @param {string} setupExePath
  * @param {ProductBuildInfo} info
  */
@@ -278,28 +280,22 @@ export function finalizeInstallerArtifacts(setupExePath, info) {
   if (!existsSync(setupExePath)) {
     throw new Error(`installer missing: ${setupExePath}`);
   }
+  const legacyReleasesDir = path.join(repoRoot, "dist", "releases");
+  if (existsSync(legacyReleasesDir)) {
+    rmSync(legacyReleasesDir, { recursive: true, force: true });
+  }
   const hash = sha256File(setupExePath);
   const base = path.basename(setupExePath);
   const shaPath = `${setupExePath}.sha256`;
   writeFileSync(shaPath, `${hash}  ${base}\n`, "utf8");
-
-  const tagDir =
-    info.channel === "release"
-      ? `v${info.version}`
-      : `dev-${info.version}-${info.build}`;
-  const releaseDir = path.join(repoRoot, "dist", "releases", tagDir);
-  mkdirSync(releaseDir, { recursive: true });
-  const destExe = path.join(releaseDir, base);
-  const destSha = path.join(releaseDir, `${base}.sha256`);
-  writeFileSync(destExe, readFileSync(setupExePath));
-  writeFileSync(destSha, `${hash}  ${base}\n`, "utf8");
+  const infoPath = path.join(path.dirname(setupExePath), `${base}.build-info.json`);
   writeFileSync(
-    path.join(releaseDir, "build-info.json"),
+    infoPath,
     `${JSON.stringify(toPublicBuildInfo(info), null, 2)}\n`,
     "utf8",
   );
 
-  return { hash, shaPath, releaseDir, destExe, destSha };
+  return { hash, shaPath, infoPath };
 }
 
 export function expectedInstallerFileName(info) {

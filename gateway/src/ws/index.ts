@@ -20,6 +20,13 @@ import {
   dropPairingWaiterByWs,
   registerPairingWaiter,
 } from "../pairing/waiters.ts";
+import {
+  cookieToken,
+} from "../http/bearer-auth.ts";
+import {
+  BROWSER_AUTH_COOKIE,
+  verifyBrowserCookieSession,
+} from "../http/browser-session.ts";
 
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -241,8 +248,18 @@ export function attachGateway(server: Server, runtime: AgentRuntime): void {
 
   const wss = new WebSocketServer({ server, path: "/ws" });
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
     const session = createSession(ws);
+    const browserAuth = verifyBrowserCookieSession(
+      cookieToken(req.headers.cookie, BROWSER_AUTH_COOKIE),
+    );
+    if (browserAuth) {
+      session.authenticated = true;
+      session.deviceId = browserAuth.deviceId;
+      session.deviceName = browserAuth.deviceName;
+      touchDevice(browserAuth.deviceId, browserAuth.deviceName);
+      send(session.ws, { type: "auth_ok", deviceId: browserAuth.deviceId });
+    }
     ws.on("message", (data) => handleMessage(session, data.toString()));
     ws.on("close", () => {
       dropPairingWaiterByWs(ws);

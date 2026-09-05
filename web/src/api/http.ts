@@ -1,10 +1,14 @@
 import type { ConnectionConfig, ConversationMeta, HealthSnapshot } from "../types";
 
 function authHeaders(token: string): HeadersInit {
-  return {
+  const headers: HeadersInit = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
   };
+  if (!token.trim()) {
+    return { Accept: "application/json" };
+  }
+  return headers;
 }
 
 export function resolveHttpBase(cfg: ConnectionConfig): string {

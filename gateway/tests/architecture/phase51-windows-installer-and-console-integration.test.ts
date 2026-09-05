@@ -139,6 +139,7 @@ describe("PHASE 51 Windows installer + Agent Console integration", () => {
     assert.match(yml, /FETCH_ELECTRON_WIN/);
     assert.match(yml, /PersonalAgent-Setup-\*-win-x64\.exe|finalize-installer/);
     assert.match(yml, /artifact_name=/);
+    assert.doesNotMatch(yml, /dist\/releases/);
     assert.doesNotMatch(yml, /name:\s*PersonalAgent-Windows-Installer\s*$/m);
     assert.match(yml, /ELECTRON_WIN_VERSION:\s*"v33\.4\.11"/);
     assert.match(yml, /win32-x64/);

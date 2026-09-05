@@ -162,7 +162,7 @@ describe("product versioning (PHASE 7.5)", () => {
     assert.doesNotMatch(gen, /API_KEY|HUB_TOKEN|sk-ant/);
   });
 
-  it("SHA-256 matches installer bytes; versions coexist under dist/releases", () => {
+  it("SHA-256 matches installer bytes; versions coexist by filename without duplicate copies", () => {
     const winDir = path.join(tmp, "dist", "windows");
     mkdirSync(winDir, { recursive: true });
     const mkFake = (version) => {
@@ -203,6 +203,10 @@ describe("product versioning (PHASE 7.5)", () => {
     );
     assert.equal(existsSync(a.exePath) && existsSync(b.exePath), true);
     assert.notEqual(a.name, b.name);
+    assert.equal(
+      existsSync(path.join(tmp, "dist", "releases")),
+      false,
+    );
   });
 
   it("Inno AppId remains stable while OutputBaseFilename is versioned", () => {

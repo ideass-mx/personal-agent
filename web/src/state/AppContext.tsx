@@ -271,7 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (session?.token) {
+    if (session) {
       void connect(session);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once from stored session

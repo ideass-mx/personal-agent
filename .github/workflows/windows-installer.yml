@@ -201,7 +201,7 @@ jobs:
           & $iscc $iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit $LASTEXITCODE" }
 
-      - name: Finalize installer (SHA-256 + versioned release folder)
+      - name: Finalize installer (SHA-256 + build metadata)
         id: finalize
         shell: pwsh
         run: |
@@ -222,7 +222,6 @@ jobs:
             throw "Setup.exe too small to contain embedded runtimes ($size bytes; need >= 40MB)"
           }
           Get-ChildItem "dist/windows" | Select-Object Name, Length | Format-Table -AutoSize
-          Get-ChildItem "dist/releases" -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table -AutoSize
           "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
           "size=$size" >> $env:GITHUB_OUTPUT
           "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
@@ -237,6 +236,6 @@ jobs:
           path: |
             dist/windows/PersonalAgent-Setup-*-win-x64.exe
             dist/windows/PersonalAgent-Setup-*-win-x64.exe.sha256
-            dist/releases/**
+            dist/windows/PersonalAgent-Setup-*-win-x64.exe.build-info.json
           if-no-files-found: error
           retention-days: 30

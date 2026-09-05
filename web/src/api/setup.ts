@@ -7,11 +7,18 @@ export type SetupProviderDto = {
 };
 
 function authHeaders(token: string): HeadersInit {
-  return {
+  const headers: HeadersInit = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
     "Content-Type": "application/json",
   };
+  if (!token.trim()) {
+    return {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+  }
+  return headers;
 }
 
 export async function fetchSetupStatus(
