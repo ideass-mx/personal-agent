@@ -165,6 +165,30 @@ al hilo correcto en el cliente:
 { "type": "error", "code": "internal", "message": "…", "conversationId": "c_abc123" }
 ```
 
+Cuando exista, `error` puede incluir un bloque opcional `diagnostic` con
+información **segura** para soporte local:
+
+```json
+{
+  "type": "error",
+  "code": "internal",
+  "message": "…",
+  "conversationId": "c_abc123",
+  "diagnostic": {
+    "diagnosticId": "PA-7F42C1",
+    "component": "LLM_PROVIDER",
+    "stage": "LLM_REQUEST",
+    "errorCode": "LLM_AUTH_FAILED",
+    "timestamp": "2026-09-04T22:14:02.019Z",
+    "provider": "anthropic",
+    "httpStatus": 401
+  }
+}
+```
+
+`diagnostic` es aditivo/compatible. Nunca incluye prompts, respuestas, headers
+de autorización, cookies ni secretos.
+
 Códigos actuales: `auth_failed`, `auth_required`, `bad_message`, `busy`, `internal`,
 `pairing_invalid`, `pairing_expired`, `pairing_rejected`, `pairing_waiter_busy`.
 `busy`: ya hay una respuesta en curso en esta sesión; reintentar al terminar.

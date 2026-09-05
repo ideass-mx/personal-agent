@@ -26,6 +26,14 @@ export async function fetchHealth(base: string): Promise<HealthSnapshot> {
     devices: Array.isArray(json.devices) ? json.devices : [],
     agentReady: Boolean(json.agentReady),
     agentTools: Array.isArray(json.agentTools) ? json.agentTools : [],
+    nodeStatus: typeof json.nodeStatus === "string" ? json.nodeStatus : undefined,
+    version: typeof json.version === "string" ? json.version : undefined,
+    build: typeof json.build === "string" ? json.build : undefined,
+    commit: typeof json.commit === "string" ? json.commit : undefined,
+    platform: typeof json.platform === "string" ? json.platform : undefined,
+    architecture:
+      typeof json.architecture === "string" ? json.architecture : undefined,
+    builtAt: typeof json.builtAt === "string" ? json.builtAt : undefined,
   };
 }
 

@@ -34,6 +34,8 @@ export interface LLMRequest {
   system?: string;
   /** Modelo del Agent Definition. */
   model?: string;
+  /** Correlation id técnico de la request actual. */
+  diagnosticId?: string;
 }
 
 export type LLMEvent =

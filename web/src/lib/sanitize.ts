@@ -35,6 +35,9 @@ export function humanizeError(code?: string, message?: string): string {
   if (c === "busy") {
     return "El agente está ocupado con otra solicitud. Espera un momento.";
   }
+  if (c === "internal") {
+    return "No pude generar la respuesta. Inténtalo nuevamente.";
+  }
   if (message?.trim()) return message.trim();
   if (code) return `Algo salió mal (${code}).`;
   return "Algo salió mal. Inténtalo de nuevo.";

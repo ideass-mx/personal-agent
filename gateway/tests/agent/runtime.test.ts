@@ -10,6 +10,7 @@ import {
   type AgentEvent,
   type TurnMemory,
 } from "../../src/agents/runtime.ts";
+import { AgentDiagnosticError } from "../../src/diagnostics/error.ts";
 import {
   createConfirmationWaiter,
   type ConfirmationWaiter,
@@ -269,6 +270,39 @@ describe("AgentRuntime.runTurn (texto)", () => {
     assert.ok(events.some((e) => e.type === "text_delta"));
     assert.ok(events.some((e) => e.type === "error"));
     assert.equal(events.some((e) => e.type === "done"), false);
+    const error = events.find((e) => e.type === "error");
+    assert.ok(error && error.type === "error");
+    assert.equal(error.diagnostic?.errorCode, "AGENT_RUNTIME_FAILED");
+    assert.match(error.diagnostic?.diagnosticId || "", /^PA-/);
+  });
+
+  it("propaga diagnosticId cuando el provider clasifica un error", async () => {
+    const memory = createFakeMemory();
+    const llm: LLMProvider = {
+      async *stream() {
+        throw new AgentDiagnosticError({
+          message: "invalid x-api-key",
+          component: "LLM_PROVIDER",
+          stage: "LLM_REQUEST",
+          errorCode: "LLM_AUTH_FAILED",
+          diagnosticId: "PA-ABC123",
+          httpStatus: 401,
+          metadata: { provider: "anthropic" },
+        });
+      },
+    };
+    const runtime = createAgentRuntime({
+      memory,
+      llm,
+      tools: emptyTools(),
+    });
+    const events = await collect(runtime.runTurn({ userMessage: "hola" }));
+    const error = events.find((e) => e.type === "error");
+    assert.ok(error && error.type === "error");
+    assert.equal(error.diagnostic?.diagnosticId, "PA-ABC123");
+    assert.equal(error.diagnostic?.errorCode, "LLM_AUTH_FAILED");
+    assert.equal(error.diagnostic?.component, "LLM_PROVIDER");
+    assert.equal(error.diagnostic?.httpStatus, 401);
   });
 
   it("crea conversación nueva si no se envía conversationId", async () => {

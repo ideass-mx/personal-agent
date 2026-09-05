@@ -1,4 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  buildDiagnosticClipboardText,
+  formatDiagnosticDetails,
+} from "../../lib/diagnostics";
 import { useApp } from "../../state/AppContext";
 
 export function ChatScreen() {
@@ -10,11 +14,14 @@ export function ChatScreen() {
     busy,
     toolBanner,
     bannerError,
+    bannerDiagnostic,
+    health,
     activeConversationId,
     newConversation,
     wsStatus,
   } = useApp();
   const endRef = useRef<HTMLDivElement>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -47,7 +54,54 @@ export function ChatScreen() {
           </button>
         </div>
         {toolBanner ? <div className="tool-banner">{toolBanner}</div> : null}
-        {bannerError ? <p className="error">{bannerError}</p> : null}
+        {bannerError ? (
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <p className="error" style={{ marginTop: 0 }}>{bannerError}</p>
+            {bannerDiagnostic ? (
+              <>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  Código de diagnóstico: {bannerDiagnostic.diagnosticId}
+                </p>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setShowDetails((v) => !v)}
+                  >
+                    Ver detalles
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() =>
+                      void navigator.clipboard.writeText(
+                        buildDiagnosticClipboardText(
+                          bannerDiagnostic,
+                          health,
+                        ),
+                      )
+                    }
+                  >
+                    Copiar diagnóstico
+                  </button>
+                </div>
+                {showDetails ? (
+                  <pre
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      background: "#fafaf9",
+                      padding: 12,
+                      borderRadius: 10,
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    {formatDiagnosticDetails(bannerDiagnostic)}
+                  </pre>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <div className="messages">
           {messages.length === 0 ? (
             <div className="panel" style={{ border: "none", background: "transparent" }}>

@@ -25,7 +25,7 @@ function walkTs(dir: string, files: string[] = []): string[] {
 }
 
 describe("11C independencia Agent Extension", () => {
-  it("Hub src no importa diagnostics; executionMode solo en tool-policy.ts", () => {
+  it("Hub src no importa la extensión diagnostics del Node; executionMode solo en tool-policy.ts", () => {
     const policyFile = path.join(repoRoot, "gateway/src/tools/policy.ts");
     for (const file of walkTs(path.join(repoRoot, "gateway/src"))) {
       const text = readFileSync(file, "utf8");
@@ -38,7 +38,6 @@ describe("11C independencia Agent Extension", () => {
         continue;
       }
       assert.doesNotMatch(text, /diagnostics\.ping/, file);
-      assert.doesNotMatch(text, /diagnostics/, file);
     }
     assert.equal(DEFAULT_TOOL_POLICY["diagnostics.ping"], "automatic");
   });

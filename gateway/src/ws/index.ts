@@ -9,6 +9,7 @@ import {
 import type { AgentRuntime } from "../agents/runtime.ts";
 import { createConfirmationWaiter } from "../sessions/confirmation-waiter.ts";
 import { config } from "../config.ts";
+import type { SqliteDiagnosticsStore } from "../diagnostics/store.ts";
 import { touchDevice, ensureConversation } from "../memory/history.ts";
 import { createSession, dropSession, type Session } from "../sessions/index.ts";
 import {
@@ -38,8 +39,13 @@ function installTokenMatches(candidate: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function attachGateway(server: Server, runtime: AgentRuntime): void {
+export function attachGateway(
+  server: Server,
+  runtime: AgentRuntime,
+  diagnostics?: SqliteDiagnosticsStore,
+): void {
   async function reply(session: Session, msg: UserMessage): Promise<void> {
+    const diagnosticId = diagnostics?.createDiagnosticId() || "PA-UNKNOWN";
     session.replying = true;
     const waiter = createConfirmationWaiter({
       sessionId: session.id,
@@ -47,10 +53,24 @@ export function attachGateway(server: Server, runtime: AgentRuntime): void {
     });
     session.confirmationWaiter = waiter;
     const conversationId = ensureConversation(msg.conversationId);
+    const startedAt = Date.now();
+    diagnostics?.record({
+      diagnosticId,
+      component: "GATEWAY",
+      stage: "WEBSOCKET",
+      level: "INFO",
+      event: "REQUEST_RECEIVED",
+      metadata: {
+        conversationIdKnown: Boolean(msg.conversationId),
+        deviceId: session.deviceId,
+        inputLength: msg.text.length,
+      },
+    });
     try {
       for await (const event of runtime.runTurn({
         conversationId,
         deviceId: session.deviceId,
+        diagnosticId,
         sessionId: session.id,
         userMessage: msg.text,
         confirmation: waiter.port,
@@ -74,6 +94,14 @@ export function attachGateway(server: Server, runtime: AgentRuntime): void {
             });
             break;
           case "done":
+            diagnostics?.record({
+              diagnosticId,
+              component: "GATEWAY",
+              stage: "WEBSOCKET",
+              level: "INFO",
+              event: "REQUEST_COMPLETED",
+              durationMs: Date.now() - startedAt,
+            });
             send(session.ws, {
               type: "assistant_done",
               messageId: event.messageId,
@@ -81,11 +109,21 @@ export function attachGateway(server: Server, runtime: AgentRuntime): void {
             });
             break;
           case "error":
+            diagnostics?.record({
+              diagnosticId,
+              component: "GATEWAY",
+              stage: "WEBSOCKET",
+              level: "ERROR",
+              event: "REQUEST_FAILED",
+              errorCode: event.diagnostic?.errorCode || "REQUEST_FAILED",
+              durationMs: Date.now() - startedAt,
+            });
             send(session.ws, {
               type: "error",
               code: "internal",
               message: event.message,
               conversationId,
+              ...(event.diagnostic ? { diagnostic: event.diagnostic } : {}),
             });
             break;
         }

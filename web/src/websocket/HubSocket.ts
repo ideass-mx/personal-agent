@@ -1,3 +1,5 @@
+import type { DiagnosticInfo } from "../types";
+
 export type ServerMsg =
   | { type: "auth_ok"; deviceId: string }
   | { type: "assistant_chunk"; text: string; conversationId?: string }
@@ -11,7 +13,13 @@ export type ServerMsg =
       conversationId: string;
     }
   | { type: "pong" }
-  | { type: "error"; code: string; message: string; conversationId?: string };
+  | {
+      type: "error";
+      code: string;
+      message: string;
+      conversationId?: string;
+      diagnostic?: DiagnosticInfo;
+    };
 
 export type WsHandlers = {
   onOpen?: () => void;

@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { DEFAULT_AGENT_MODEL } from "../agents/definition.ts";
 import { SYSTEM_PROMPT } from "../agents/prompts.ts";
 import { config } from "../config.ts";
+import { AgentDiagnosticError } from "../diagnostics/error.ts";
+import type { SqliteDiagnosticsStore } from "../diagnostics/store.ts";
 import { getEffectiveAnthropicApiKey } from "../setup/llm-key.ts";
 import type {
   LLMContentBlock,
@@ -49,10 +51,56 @@ function toAnthropicMessages(
   }));
 }
 
+function mapAnthropicError(
+  err: unknown,
+  input: { diagnosticId?: string; streamStarted: boolean },
+): AgentDiagnosticError {
+  const anyErr = err as {
+    status?: number;
+    code?: string;
+    error?: { type?: string; message?: string };
+    name?: string;
+    message?: string;
+  };
+  const httpStatus =
+    typeof anyErr?.status === "number" ? anyErr.status : undefined;
+  const message =
+    anyErr?.error?.message ||
+    anyErr?.message ||
+    "anthropic_request_failed";
+  const providerErrorType =
+    anyErr?.error?.type || anyErr?.name || "anthropic_error";
+  let errorCode = input.streamStarted
+    ? "LLM_STREAM_FAILED"
+    : "LLM_REQUEST_FAILED";
+  if (httpStatus === 401 || httpStatus === 403) errorCode = "LLM_AUTH_FAILED";
+  else if (httpStatus === 404) errorCode = "LLM_MODEL_NOT_FOUND";
+  else if (httpStatus === 429) errorCode = "LLM_RATE_LIMITED";
+  else if (/timeout|timed out|abort/i.test(message) || anyErr?.code === "ETIMEDOUT") {
+    errorCode = "LLM_TIMEOUT";
+  }
+  return new AgentDiagnosticError({
+    message,
+    component: "LLM_PROVIDER",
+    stage: input.streamStarted ? "LLM_STREAM" : "LLM_REQUEST",
+    errorCode,
+    diagnosticId: input.diagnosticId,
+    httpStatus,
+    metadata: {
+      provider: "anthropic",
+      providerErrorType,
+      providerStatus: httpStatus,
+    },
+  });
+}
+
 /** Provider concreto Anthropic. El SDK no debe usarse fuera de este módulo. */
-export function createAnthropicProvider(): LLMProvider {
+export function createAnthropicProvider(input?: {
+  diagnostics?: SqliteDiagnosticsStore;
+}): LLMProvider {
   return {
     async *stream(request: LLMRequest) {
+      const startedAt = Date.now();
       const apiKey = getEffectiveAnthropicApiKey();
       if (!apiKey) {
         throw new Error(
@@ -67,6 +115,19 @@ export function createAnthropicProvider(): LLMProvider {
         system: request.system ?? SYSTEM_PROMPT,
         messages: toAnthropicMessages(request.messages),
       };
+      input?.diagnostics?.record({
+        diagnosticId: request.diagnosticId || "PA-UNKNOWN",
+        component: "LLM_PROVIDER",
+        stage: "LLM_REQUEST",
+        level: "INFO",
+        event: "LLM_REQUEST_STARTED",
+        metadata: {
+          provider: "anthropic",
+          model: params.model,
+          messageCount: request.messages.length,
+          toolCount: request.tools?.length ?? 0,
+        },
+      });
 
       if (request.tools && request.tools.length > 0) {
         params.tools = request.tools.map((t) => ({
@@ -76,44 +137,76 @@ export function createAnthropicProvider(): LLMProvider {
         }));
       }
 
-      const stream = client.messages.stream(params);
-
       let currentTool: { id: string; name: string; json: string } | null =
         null;
-
-      for await (const event of stream) {
-        if (event.type === "content_block_start") {
-          const block = event.content_block;
-          if (block.type === "tool_use") {
-            currentTool = { id: block.id, name: block.name, json: "" };
+      let streamStarted = false;
+      try {
+        const stream = client.messages.stream(params);
+        for await (const event of stream) {
+          streamStarted = true;
+          if (event.type === "content_block_start") {
+            const block = event.content_block;
+            if (block.type === "tool_use") {
+              currentTool = { id: block.id, name: block.name, json: "" };
+            }
+          } else if (event.type === "content_block_delta") {
+            if (event.delta.type === "text_delta") {
+              yield { type: "text_delta", text: event.delta.text };
+            } else if (
+              event.delta.type === "input_json_delta" &&
+              currentTool
+            ) {
+              currentTool.json += event.delta.partial_json;
+            }
+          } else if (event.type === "content_block_stop" && currentTool) {
+            let parsedInput: unknown = {};
+            try {
+              parsedInput = currentTool.json ? JSON.parse(currentTool.json) : {};
+            } catch {
+              parsedInput = {};
+            }
+            yield {
+              type: "tool_call",
+              id: currentTool.id,
+              name: currentTool.name,
+              input: parsedInput,
+            };
+            currentTool = null;
           }
-        } else if (event.type === "content_block_delta") {
-          if (event.delta.type === "text_delta") {
-            yield { type: "text_delta", text: event.delta.text };
-          } else if (
-            event.delta.type === "input_json_delta" &&
-            currentTool
-          ) {
-            currentTool.json += event.delta.partial_json;
-          }
-        } else if (event.type === "content_block_stop" && currentTool) {
-          let input: unknown = {};
-          try {
-            input = currentTool.json ? JSON.parse(currentTool.json) : {};
-          } catch {
-            input = {};
-          }
-          yield {
-            type: "tool_call",
-            id: currentTool.id,
-            name: currentTool.name,
-            input,
-          };
-          currentTool = null;
         }
+      } catch (err) {
+        const mapped = mapAnthropicError(err, {
+          diagnosticId: request.diagnosticId,
+          streamStarted,
+        });
+        input?.diagnostics?.record({
+          diagnosticId: request.diagnosticId || "PA-UNKNOWN",
+          component: "LLM_PROVIDER",
+          stage: mapped.stage,
+          level: "ERROR",
+          event: mapped.errorCode,
+          errorCode: mapped.errorCode,
+          message: mapped.message,
+          durationMs: Date.now() - startedAt,
+          metadata: mapped.metadata,
+        });
+        throw mapped;
       }
-
+      input?.diagnostics?.record({
+        diagnosticId: request.diagnosticId || "PA-UNKNOWN",
+        component: "LLM_PROVIDER",
+        stage: streamStarted ? "LLM_STREAM" : "LLM_RESPONSE",
+        level: "INFO",
+        event: "LLM_REQUEST_COMPLETED",
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          provider: "anthropic",
+          model: params.model,
+        },
+      });
       yield { type: "done" };
     },
   };
 }
+
+export { mapAnthropicError };

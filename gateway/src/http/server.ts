@@ -11,7 +11,9 @@ import { mountWorkspaceHttp } from "./workspace-http.ts";
 import { mountPairingHttp } from "./pairing-http.ts";
 import { mountArtifactHttp } from "./artifact-http.ts";
 import { mountBrowserBootstrapHttp } from "./browser-bootstrap-http.ts";
+import { mountDiagnosticsHttp } from "./diagnostics-http.ts";
 import { mountSetupHttp } from "./setup-http.ts";
+import type { SqliteDiagnosticsStore } from "../diagnostics/store.ts";
 import { productVersionForHealth } from "../product-version.ts";
 import { resolveConsoleStaticRoot } from "./console-static.ts";
 import type { WorkspaceStore } from "../workspace/types.ts";
@@ -75,6 +77,7 @@ export type StartServerExtras = {
   workspaces?: WorkspaceStore;
   /** PHASE 58 — delivery HTTP de Artifacts. */
   artifacts?: ArtifactManager;
+  diagnostics?: SqliteDiagnosticsStore;
 };
 
 function resolveHealth(extras?: StartServerExtras): {
@@ -149,6 +152,13 @@ export function startServer(
     hubToken: config.hubToken,
   });
 
+  if (extras?.diagnostics) {
+    mountDiagnosticsHttp(app, {
+      hubToken: config.hubToken,
+      diagnostics: extras.diagnostics,
+    });
+  }
+
   if (extras?.artifacts) {
     mountArtifactHttp(app, {
       artifacts: extras.artifacts,
@@ -180,7 +190,7 @@ export function startServer(
     }
   });
 
-  attachGateway(server as import("node:http").Server, runtime);
+  attachGateway(server as import("node:http").Server, runtime, extras?.diagnostics);
 
   return {
     close: () =>

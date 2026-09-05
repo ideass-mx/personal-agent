@@ -42,6 +42,9 @@ async function main(): Promise<void> {
   }
 
   const { createAnthropicProvider } = await import("./providers/anthropic.ts");
+  const { createSqliteDiagnosticsStore } = await import(
+    "./diagnostics/store.ts"
+  );
   const { startServer } = await import("./http/server.ts");
   const { createSqliteTurnMemory } = await import(
     "./memory/sqlite-turn-memory.ts"
@@ -62,11 +65,13 @@ async function main(): Promise<void> {
   });
   const boundTools = bindToolsToCapabilityExecutor(tools, capabilityExecutor);
 
-  const llm = createAnthropicProvider();
+  const diagnostics = createSqliteDiagnosticsStore();
+  const llm = createAnthropicProvider({ diagnostics });
   const agentRuntime = agents.createRuntime({
     memory: createSqliteTurnMemory(),
     llm,
     tools: boundTools,
+    diagnostics,
   });
 
   // PHASE 59: CredentialManager (metadata SQLite + SecretStore). No se pasa al Runtime/LLM.
@@ -109,6 +114,7 @@ async function main(): Promise<void> {
     getNodeHealth: () => localNode.getHealth(),
     workspaces: createSqliteWorkspaceStore(),
     artifacts: artifactManager,
+    diagnostics,
   });
   process.stderr.write("[gateway] READY\n");
 

@@ -64,6 +64,16 @@ export type ErrorCode =
   | "pairing_rejected"
   | "pairing_waiter_busy";
 
+export type DiagnosticPayload = {
+  diagnosticId: string;
+  component: string;
+  stage: string;
+  errorCode: string;
+  timestamp: string;
+  provider?: string;
+  httpStatus?: number;
+};
+
 export type ServerMessage =
   | { type: "auth_ok"; deviceId: string }
   | {
@@ -88,4 +98,10 @@ export type ServerMessage =
       conversationId: string;
     }
   | { type: "pong" }
-  | { type: "error"; code: ErrorCode; message: string; conversationId?: string };
+  | {
+      type: "error";
+      code: ErrorCode;
+      message: string;
+      conversationId?: string;
+      diagnostic?: DiagnosticPayload;
+    };

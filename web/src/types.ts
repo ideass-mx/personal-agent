@@ -30,6 +30,37 @@ export type HealthSnapshot = {
   devices: string[];
   agentReady: boolean;
   agentTools: string[];
+  nodeStatus?: string;
+  version?: string;
+  build?: string;
+  commit?: string;
+  platform?: string;
+  architecture?: string;
+  builtAt?: string;
+};
+
+export type DiagnosticInfo = {
+  diagnosticId: string;
+  component: string;
+  stage: string;
+  errorCode: string;
+  timestamp: string;
+  provider?: string;
+  httpStatus?: number;
+};
+
+export type DiagnosticEventRow = {
+  timestamp: string;
+  diagnosticId: string;
+  requestId: string;
+  component: string;
+  stage: string;
+  level: string;
+  event: string;
+  errorCode: string | null;
+  message: string | null;
+  durationMs: number | null;
+  metadata: Record<string, unknown> | null;
 };
 
 export type ConversationMeta = {

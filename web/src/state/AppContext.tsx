@@ -27,6 +27,7 @@ import type {
   ConfirmPending,
   ConnectionConfig,
   ConversationMeta,
+  DiagnosticInfo,
   HealthSnapshot,
   NavId,
 } from "../types";
@@ -59,6 +60,7 @@ type AppState = {
   toolBanner: string | null;
   busy: boolean;
   bannerError: string | null;
+  bannerDiagnostic: DiagnosticInfo | null;
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -89,6 +91,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toolBanner, setToolBanner] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [bannerError, setBannerError] = useState<string | null>(null);
+  const [bannerDiagnostic, setBannerDiagnostic] =
+    useState<DiagnosticInfo | null>(null);
   const socketRef = useRef<HubSocket | null>(null);
   const streamIdRef = useRef<string | null>(null);
   const activeRef = useRef<string | null>(null);
@@ -198,6 +202,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       streamIdRef.current = null;
       const text = humanizeError(msg.code, msg.message);
       setBannerError(text);
+      setBannerDiagnostic(msg.diagnostic ?? null);
       if (
         !msg.conversationId ||
         msg.conversationId === activeRef.current ||
@@ -402,6 +407,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toolBanner,
       busy,
       bannerError,
+        bannerDiagnostic,
     }),
     [
       session,
@@ -425,6 +431,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toolBanner,
       busy,
       bannerError,
+      bannerDiagnostic,
     ],
   );
 

@@ -1,4 +1,10 @@
 import { randomUUID } from "node:crypto";
+import {
+  AgentDiagnosticError,
+  toDiagnosticClientPayload,
+} from "../diagnostics/error.ts";
+import type { SqliteDiagnosticsStore } from "../diagnostics/store.ts";
+import type { DiagnosticClientPayload } from "../diagnostics/types.ts";
 import type { TurnMemory } from "../memory/types.ts";
 import type {
   LLMContentBlock,
@@ -29,7 +35,7 @@ export type { TurnMemory } from "../memory/types.ts";
 export type AgentEvent =
   | { type: "text_delta"; text: string }
   | { type: "done"; messageId: string; conversationId: string }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; diagnostic?: DiagnosticClientPayload }
   | {
       type: "confirm_request";
       confirmationId: string;
@@ -42,6 +48,7 @@ export type AgentEvent =
 export interface AgentTurnInput {
   conversationId?: string;
   deviceId?: string;
+  diagnosticId?: string;
   /** Identidad opaca del turno (binding de confirmaciones). No es un objeto Session. */
   sessionId?: string;
   userMessage: string;
@@ -68,6 +75,7 @@ export interface AgentRuntimeDeps {
   memory: TurnMemory;
   llm: LLMProvider;
   tools: AgentRuntimeTools;
+  diagnostics?: SqliteDiagnosticsStore;
   /**
    * Registry de Skills. Obligatorio si AgentDefinition.skills tiene entradas.
    * Skills solo afectan el system prompt; no habilitan tools.
@@ -123,9 +131,13 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
   const llm = deps.llm;
   const tools = filterToolsForAgent(deps.tools, agent);
   const systemPrompt = resolveSystemPrompt(agent, deps.skills);
+  const diagnostics = deps.diagnostics;
 
   return {
     async *runTurn(input: AgentTurnInput): AsyncGenerator<AgentEvent> {
+      const diagnosticId =
+        input.diagnosticId || diagnostics?.createDiagnosticId() || `PA-${randomUUID().slice(0, 6).toUpperCase()}`;
+      const startedAt = Date.now();
       try {
         const conversationId = memory.ensureConversation(input.conversationId);
         memory.addMessage(
@@ -134,6 +146,18 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           input.userMessage,
           input.deviceId,
         );
+        diagnostics?.record({
+          diagnosticId,
+          component: "AGENT_RUNTIME",
+          stage: "REQUEST_RECEIVED",
+          level: "INFO",
+          event: "REQUEST_STARTED",
+          metadata: {
+            inputLength: input.userMessage.length,
+            hasConversationId: Boolean(input.conversationId),
+            hasDeviceId: Boolean(input.deviceId),
+          },
+        });
 
         const history = memory.getHistory(conversationId);
         const messages: LLMMessage[] = history.map((m) => ({
@@ -158,6 +182,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
               toolDescriptors.length > 0 ? toolDescriptors : undefined,
             system: systemPrompt,
             model: agent.model,
+            diagnosticId,
           })) {
             if (event.type === "text_delta") {
               turnText += event.text;
@@ -178,6 +203,19 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
               "assistant",
               full,
             );
+            diagnostics?.record({
+              diagnosticId,
+              component: "AGENT_RUNTIME",
+              stage: "RESPONSE_ASSEMBLY",
+              level: "INFO",
+              event: "REQUEST_COMPLETED",
+              durationMs: Date.now() - startedAt,
+              metadata: {
+                outputLength: full.length,
+                historyCount: history.length,
+                toolCount: 0,
+              },
+            });
             yield { type: "done", messageId, conversationId };
             return;
           }
@@ -285,14 +323,84 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           messages.push({ role: "user", content: resultBlocks });
         }
 
+        diagnostics?.record({
+          diagnosticId,
+          component: "AGENT_RUNTIME",
+          stage: "TOOL_EXECUTION",
+          level: "ERROR",
+          event: "REQUEST_FAILED",
+          errorCode: "TOOL_ITERATION_LIMIT",
+          durationMs: Date.now() - startedAt,
+        });
         yield {
           type: "error",
           message:
             "El agente superó el límite de iteraciones de herramientas.",
+          diagnostic: {
+            diagnosticId,
+            component: "AGENT_RUNTIME",
+            stage: "TOOL_EXECUTION",
+            errorCode: "TOOL_ITERATION_LIMIT",
+            timestamp: new Date().toISOString(),
+          },
         };
       } catch (err) {
+        const at = new Date().toISOString();
+        if (err instanceof AgentDiagnosticError) {
+          const propagatedDiagnosticId = err.diagnosticId || diagnosticId;
+          diagnostics?.record({
+            diagnosticId: propagatedDiagnosticId,
+            component: "AGENT_RUNTIME",
+            stage: err.stage,
+            level: "ERROR",
+            event: "REQUEST_FAILED",
+            errorCode: err.errorCode,
+            message: err.message,
+            durationMs: Date.now() - startedAt,
+            metadata: err.metadata,
+          });
+          yield {
+            type: "error",
+            message: INTERNAL_ERROR_MESSAGE,
+            diagnostic: toDiagnosticClientPayload(
+              new AgentDiagnosticError({
+                diagnosticId: propagatedDiagnosticId,
+                message: err.message,
+                component: err.component,
+                stage: err.stage,
+                errorCode: err.errorCode,
+                httpStatus: err.httpStatus,
+                metadata: err.metadata,
+              }),
+              at,
+            ),
+          };
+          return;
+        }
+        const message =
+          err instanceof Error ? err.message : "agent_runtime_failed";
+        diagnostics?.record({
+          diagnosticId,
+          component: "AGENT_RUNTIME",
+          stage: "AGENT_RUNTIME",
+          level: "ERROR",
+          event: "REQUEST_FAILED",
+          errorCode: "AGENT_RUNTIME_FAILED",
+          message,
+          durationMs: Date.now() - startedAt,
+        });
         console.error("[gateway] error generando respuesta:", err);
-        yield { type: "error", message: INTERNAL_ERROR_MESSAGE };
+        yield {
+          type: "error",
+          message: INTERNAL_ERROR_MESSAGE,
+          diagnostic: {
+            diagnosticId,
+            component: "AGENT_RUNTIME",
+            stage: "AGENT_RUNTIME",
+            errorCode: "AGENT_RUNTIME_FAILED",
+            timestamp: at,
+          },
+        };
       }
     },
   };

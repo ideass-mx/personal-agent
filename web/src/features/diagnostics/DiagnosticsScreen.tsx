@@ -1,10 +1,29 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { fetchRecentDiagnostics } from "../../api/diagnostics";
+import { resolveHttpBase } from "../../api/http";
 import { sanitizeDiagnostics } from "../../lib/sanitize";
 import { useApp } from "../../state/AppContext";
+import type { DiagnosticEventRow } from "../../types";
 
 export function DiagnosticsScreen() {
-  const { health, healthError, wsStatus, session, refreshHealth, bannerError } =
-    useApp();
+  const {
+    health,
+    healthError,
+    wsStatus,
+    session,
+    refreshHealth,
+    bannerError,
+    bannerDiagnostic,
+  } = useApp();
+  const [recent, setRecent] = useState<DiagnosticEventRow[]>([]);
+
+  useEffect(() => {
+    if (!session) return;
+    const base = resolveHttpBase(session);
+    void fetchRecentDiagnostics(base, session.token, 12)
+      .then(setRecent)
+      .catch(() => {});
+  }, [session]);
 
   const report = useMemo(() => {
     const lines = [
@@ -18,6 +37,9 @@ export function DiagnosticsScreen() {
       `Devices: ${(health?.devices ?? []).join(", ") || "(none)"}`,
       `API name: ${health?.name ?? "—"}`,
       `Banner: ${bannerError ?? "(none)"}`,
+      bannerDiagnostic
+        ? `Last diagnostic: ${bannerDiagnostic.errorCode} (${bannerDiagnostic.diagnosticId})`
+        : "Last diagnostic: (none)",
       "",
       "Notes:",
       "- Node/MCP/Tools status is a boot snapshot, not live liveness.",
@@ -25,7 +47,7 @@ export function DiagnosticsScreen() {
       "- Secrets redacted; do not paste tokens into chats.",
     ];
     return sanitizeDiagnostics(lines.join("\n"));
-  }, [health, healthError, wsStatus, session, bannerError]);
+  }, [health, healthError, wsStatus, session, bannerError, bannerDiagnostic]);
 
   async function copy() {
     try {
@@ -87,6 +109,21 @@ export function DiagnosticsScreen() {
           Copiar diagnóstico
         </button>
       </div>
+      {recent.length > 0 ? (
+        <div style={{ marginTop: 16 }}>
+          <h2 style={{ marginBottom: 8 }}>Última actividad</h2>
+          <ul className="status-rows">
+            {recent.slice(0, 6).map((row) => (
+              <li key={`${row.diagnosticId}:${row.timestamp}`}>
+                <span>{row.timestamp.slice(11, 19)} · {row.event}</span>
+                <span className="muted">
+                  {row.errorCode || row.component} · {row.diagnosticId}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <pre
         style={{
           marginTop: 16,

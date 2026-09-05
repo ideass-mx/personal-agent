@@ -61,6 +61,17 @@ sealed interface ClientMessage {
 sealed interface ServerMessage {
 
     @Serializable
+    data class DiagnosticPayload(
+        val diagnosticId: String,
+        val component: String,
+        val stage: String,
+        val errorCode: String,
+        val timestamp: String,
+        val provider: String? = null,
+        val httpStatus: Int? = null,
+    )
+
+    @Serializable
     @SerialName("auth_ok")
     data class AuthOk(val deviceId: String) : ServerMessage
 
@@ -113,5 +124,6 @@ sealed interface ServerMessage {
         val code: String,
         val message: String,
         val conversationId: String? = null,
+        val diagnostic: DiagnosticPayload? = null,
     ) : ServerMessage
 }

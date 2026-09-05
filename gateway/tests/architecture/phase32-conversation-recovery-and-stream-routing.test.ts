@@ -72,7 +72,7 @@ describe("PHASE 32 conversation recovery + stream routing", () => {
     );
     assert.match(
       protocol,
-      /type: "error"; code: ErrorCode; message: string; conversationId\?: string/,
+      /type: "error";[\s\S]*code: ErrorCode;[\s\S]*message: string;[\s\S]*conversationId\?: string/,
     );
 
     const md = read("packages/protocol/PROTOCOL.md");
