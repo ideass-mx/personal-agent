@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'" />
   <title>Agente personal</title>
   <style>
     body {
@@ -21,12 +21,46 @@
     }
     h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 0.75rem; }
     p { margin: 0; opacity: 0.75; line-height: 1.5; }
+    #actions { margin-top: 1.25rem; display: flex; gap: 0.75rem; justify-content: center; }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 0.55rem 1rem;
+      font: inherit;
+      cursor: pointer;
+      background: #3d8bfd;
+      color: #fff;
+    }
+    button.secondary { background: #2a3340; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Preparando tu agente</h1>
-    <p id="msg">Estamos dejando todo listo. Solo un momento…</p>
+    <h1>Personal Agent</h1>
+    <p id="msg">Iniciando tu agente…</p>
+    <div id="actions" hidden>
+      <button type="button" id="retry">Reintentar</button>
+      <button type="button" class="secondary" id="details">Ver detalles</button>
+    </div>
   </div>
+  <script>
+    document.getElementById("retry").addEventListener("click", () => {
+      const el = document.getElementById("msg");
+      if (el) el.textContent = "Iniciando tu agente…";
+      document.getElementById("actions").hidden = true;
+      if (window.desktopApi && window.desktopApi.retryHostBoot) {
+        window.desktopApi.retryHostBoot();
+      } else {
+        location.reload();
+      }
+    });
+    document.getElementById("details").addEventListener("click", () => {
+      if (window.desktopApi && window.desktopApi.copyDiagnostics) {
+        window.desktopApi.copyDiagnostics();
+        const el = document.getElementById("msg");
+        if (el) el.textContent = "Diagnóstico copiado. Puedes pegarlo en un mensaje de soporte.";
+      }
+    });
+  </script>
 </body>
 </html>

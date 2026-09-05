@@ -150,15 +150,16 @@ function createAgentSupervisor({
     bootReady = false;
     lastError = null;
     const env = getEnv();
+    // CREATE_NO_WINDOW via windowsHide — never surface a console for Gateway.
     child = spawn(launch.nodeCmd, [launch.gatewayCjs], {
       cwd: launch.gatewayDir,
       env: {
         ...process.env,
         ...env,
-        // SQLite bajo AppData si se define PERSONAL_AGENT_DB
       },
       stdio: ["ignore", "ignore", "pipe"],
       windowsHide: true,
+      shell: false,
     });
     child.stderr.on("data", (buf) => {
       const text = buf.toString("utf8");

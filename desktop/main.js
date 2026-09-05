@@ -56,6 +56,10 @@ const {
 const { logOnboarding } = require("./lib/onboarding-log.cjs");
 const { waitForHealth, injectConsoleSession } = require("./lib/host-boot.cjs");
 
+/** true when product UX is Web (default). Legacy Electron onboarding only if env flag. */
+let hostModeActive = false;
+let lastConsolePort = 8787;
+
 function resolveProductRoot() {
   if (process.env.PERSONAL_AGENT_PRODUCT_ROOT) {
     return process.env.PERSONAL_AGENT_PRODUCT_ROOT;
@@ -124,6 +128,9 @@ function gatewayEnv() {
     HUB_TOKEN: token,
     HUB_PORT: String(cfg.hubPort || 8787),
   };
+  if (productRoot) {
+    env.PERSONAL_AGENT_PRODUCT_ROOT = productRoot;
+  }
   if (hostId) {
     env.PERSONAL_AGENT_ID = hostId;
     env.PERSONAL_AGENT_HOST_ID = hostId;
@@ -372,7 +379,7 @@ async function startAgentIfAllowed() {
 }
 
 function createWindow(opts = {}) {
-  const hostUi = Boolean(opts.hostUi);
+  const hostUi = Boolean(opts.hostUi) || hostModeActive;
   mainWindow = new BrowserWindow({
     width: hostUi ? 1100 : 560,
     height: hostUi ? 800 : 820,
@@ -395,13 +402,41 @@ function createWindow(opts = {}) {
   });
 }
 
+function consoleHttpUrl(port = lastConsolePort) {
+  return `http://127.0.0.1:${port}/`;
+}
+
 /**
- * Fase 3: host mode — Gateway sin Tailscale gate; Web UI es el onboarding.
+ * Recreate / show the product window. In host mode never load legacy onboarding UI.
+ */
+async function showProductWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    return;
+  }
+  if (hostModeActive) {
+    createWindow({ hostUi: true });
+    try {
+      await mainWindow.loadURL(consoleHttpUrl());
+    } catch {
+      mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
+    }
+    return;
+  }
+  createWindow();
+  mainWindow.show();
+}
+
+/**
+ * Fase 3/7.6: host mode — Gateway sin Tailscale gate; Web UI es el onboarding.
  */
 async function bootHostMode() {
+  hostModeActive = true;
   config.ensureHubToken();
   const cfg = config.loadConfig();
   const port = cfg.hubPort || 8787;
+  lastConsolePort = port;
 
   createWindow({ hostUi: true });
   mainWindow.loadFile(path.join(__dirname, "renderer", "host-splash.html"));
@@ -417,7 +452,9 @@ async function bootHostMode() {
       mainWindow.webContents.executeJavaScript(
         `document.body && (document.body.dataset.error = "start_failed");
          const el = document.getElementById("msg");
-         if (el) el.textContent = "No pudimos preparar tu agente. Reintenta desde la bandeja.";`,
+         if (el) el.textContent = "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.";
+         const actions = document.getElementById("actions");
+         if (actions) actions.hidden = false;`,
       ).catch(() => {});
     }
     return { ok: false, error: started.error || "start_failed" };
@@ -427,11 +464,20 @@ async function bootHostMode() {
     await waitForHealth(port, 90000);
   } catch {
     logOnboarding("HOST", "health_timeout", { port });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.executeJavaScript(
+        `document.body && (document.body.dataset.error = "health_timeout");
+         const el = document.getElementById("msg");
+         if (el) el.textContent = "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.";
+         const actions = document.getElementById("actions");
+         if (actions) actions.hidden = false;`,
+      ).catch(() => {});
+    }
     return { ok: false, error: "health_timeout" };
   }
 
   lastNetworkReady = true; // localhost product path; remote Tailscale is optional later
-  const url = `http://127.0.0.1:${port}/`;
+  const url = consoleHttpUrl(port);
   await mainWindow.loadURL(url);
   try {
     const token = config.getHubToken();
@@ -457,7 +503,9 @@ function buildTrayTemplate() {
       enabled: false,
     },
     {
-      label: `Onboarding: ${snap.onboarding?.state || "—"}`,
+      label: hostModeActive
+        ? `Host: ${snap.stateLabel}`
+        : `Onboarding: ${snap.onboarding?.state || "—"}`,
       enabled: false,
     },
     { type: "separator" },
@@ -493,10 +541,9 @@ function buildTrayTemplate() {
       },
     },
     {
-      label: "Mostrar panel",
+      label: hostModeActive ? "Mostrar agente" : "Mostrar panel",
       click: () => {
-        if (!mainWindow) createWindow();
-        mainWindow.show();
+        void showProductWindow();
       },
     },
     {
@@ -532,8 +579,7 @@ function createTray() {
   tray = new Tray(img);
   refreshTrayMenu();
   tray.on("click", () => {
-    if (!mainWindow) createWindow();
-    mainWindow.show();
+    void showProductWindow();
   });
 }
 
@@ -1029,6 +1075,23 @@ function wireIpc() {
     return { ok: true, url: consoleUrl() };
   });
   ipcMain.handle("copy-diagnostics", async () => copyDiagnosticsToClipboard());
+  ipcMain.handle("retry-host-boot", async () => {
+    if (!hostModeActive) {
+      return { ok: false, error: "not_host_mode" };
+    }
+    try {
+      const snap = supervisor?.snapshot?.() || {};
+      if (!snap.running && supervisor) {
+        await supervisor.stop().catch(() => {});
+      }
+      return await bootHostMode();
+    } catch (err) {
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "retry_failed",
+      };
+    }
+  });
   ipcMain.handle("reveal-token-once", () => ({
     token: config.getHubToken(),
     kind: "LEGACY_INSTALL_CREDENTIAL",

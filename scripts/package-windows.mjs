@@ -26,6 +26,10 @@ import {
   resolveProductBuildInfo,
   writeProductVersionArtifacts,
 } from "./release/product-version.mjs";
+import {
+  buildAgentePersonalBat,
+  buildAgentePersonalVbs,
+} from "./release/windows-launcher.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outRoot = path.join(repoRoot, "dist", "windows", "PersonalAgent");
@@ -350,27 +354,12 @@ export async function packageWindows() {
 
   writeFileSync(
     path.join(outRoot, "AgentePersonal.bat"),
-    [
-      "@echo off",
-      "setlocal",
-      "set \"ROOT=%~dp0\"",
-      "set \"PERSONAL_AGENT_PRODUCT_ROOT=%ROOT%\"",
-      "set \"NODE_EXE=%ROOT%runtime\\node\\node.exe\"",
-      "set \"ELECTRON_EXE=%ROOT%runtime\\electron\\electron.exe\"",
-      "if not exist \"%ELECTRON_EXE%\" (",
-      "  echo [Personal Agent] Falta Electron embebido ^(runtime\\electron\\electron.exe^).",
-      "  echo Reinstala con el instalador oficial. No uses npm en esta PC.",
-      "  exit /b 1",
-      ")",
-      "if not exist \"%NODE_EXE%\" (",
-      "  echo [Personal Agent] Falta Node embebido ^(runtime\\node\\node.exe^).",
-      "  echo Reinstala con el instalador oficial. No uses npm en esta PC.",
-      "  exit /b 1",
-      ")",
-      "\"%ELECTRON_EXE%\" \"%ROOT%desktop\"",
-      "exit /b %ERRORLEVEL%",
-      "",
-    ].join("\r\n"),
+    buildAgentePersonalBat(),
+    "utf8",
+  );
+  writeFileSync(
+    path.join(outRoot, "AgentePersonal.vbs"),
+    buildAgentePersonalVbs(),
     "utf8",
   );
 

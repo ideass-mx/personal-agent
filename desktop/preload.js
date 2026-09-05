@@ -41,4 +41,5 @@ contextBridge.exposeInMainWorld("desktopApi", {
   artifactHead: (payload) => ipcRenderer.invoke("artifact-head", payload),
   artifactDownload: (payload) =>
     ipcRenderer.invoke("artifact-download", payload),
+  retryHostBoot: () => ipcRenderer.invoke("retry-host-boot"),
 });

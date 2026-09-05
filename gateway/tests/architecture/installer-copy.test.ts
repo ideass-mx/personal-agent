@@ -38,7 +38,7 @@ describe("installer simplified happy path", () => {
     }
   });
 
-  it("iss wires InfoBefore, stable AppId, versioned output", () => {
+  it("iss wires InfoBefore, stable AppId, versioned output, electron primary launch", () => {
     const src = fs.readFileSync(iss, "utf8");
     assert.match(src, /InfoBeforeFile=info-before\.txt/);
     assert.doesNotMatch(src, /ANTHROPIC|Tailscale|HUB_TOKEN|OpenAI/);
@@ -48,5 +48,8 @@ describe("installer simplified happy path", () => {
       /AppId=\{\{A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51\}\}/,
     );
     assert.match(src, /OutputBaseFilename=\{#MyOutputBaseFilename\}/);
+    assert.match(src, /MyAppExeName "runtime\\electron\\electron\.exe"/);
+    assert.match(src, /Parameters: \{#MyAppParams\}/);
+    assert.doesNotMatch(src, /MyAppExeName "AgentePersonal\.bat"/);
   });
 });

@@ -154,10 +154,17 @@ test("config persists workspaceRoot across save/load", () => {
 test("launcher bat contract is encoded in package-windows (no npm)", () => {
   const fs = require("node:fs");
   const path = require("node:path");
-  const src = fs.readFileSync(
+  const pkg = fs.readFileSync(
     path.join(__dirname, "../../scripts/package-windows.mjs"),
     "utf8",
   );
-  assert.match(src, /No uses npm/);
-  assert.match(src, /electron\.exe/);
+  const launcher = fs.readFileSync(
+    path.join(__dirname, "../../scripts/release/windows-launcher.mjs"),
+    "utf8",
+  );
+  assert.match(pkg, /buildAgentePersonalBat/);
+  assert.match(pkg, /buildAgentePersonalVbs/);
+  assert.match(pkg, /electron\.exe/);
+  assert.match(launcher, /No uses npm|no npm|Reinstala/i);
+  assert.match(launcher, /start \\"\\" \\"%ELECTRON_EXE%\\"/);
 });

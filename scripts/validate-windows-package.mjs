@@ -29,6 +29,7 @@ const required = [
   "desktop/main.js",
   "desktop/renderer/index.html",
   "AgentePersonal.bat",
+  "AgentePersonal.vbs",
   "manifest.json",
   "README.txt",
   "VERSION",
@@ -51,6 +52,12 @@ if (!bat.includes("runtime\\electron\\electron.exe")) {
 }
 if (!bat.includes("runtime\\node\\node.exe")) {
   fail("bat must require bundled Node");
+}
+if (!/\bstart\s+""\s+"%ELECTRON_EXE%"/.test(bat) && !bat.includes('start ""')) {
+  fail("bat must start Electron detached (so CMD close does not kill the app)");
+}
+if (!existsSync(path.join(root, "AgentePersonal.vbs"))) {
+  fail("missing AgentePersonal.vbs silent launcher");
 }
 
 const manifest = JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8"));
@@ -83,6 +90,15 @@ if (!iss.includes("A8E5C2F1-9B47-4D3A-9E21-PERSONALAGENT51")) {
 }
 if (!iss.includes("version.generated.iss")) {
   fail("Inno must include version.generated.iss");
+}
+if (!iss.includes("runtime\\electron\\electron.exe")) {
+  fail("Inno shortcuts must target electron.exe (no CMD launcher)");
+}
+if (/MyAppExeName "AgentePersonal\.bat"/.test(iss)) {
+  fail("Inno must not use AgentePersonal.bat as primary shortcut");
+}
+if (!iss.includes("MyAppParams")) {
+  fail("Inno must pass desktop path Parameters to Electron");
 }
 if (!iss.includes("#if !FileExists(SourceRoot")) {
   fail("Inno must ISPP-check SourceRoot runtimes at compile time");

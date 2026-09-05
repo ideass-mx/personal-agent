@@ -116,7 +116,8 @@ export async function connectAgentStdioClient(
     args: options.args ?? defaults.args,
     cwd: options.cwd ?? defaults.cwd,
     env: childEnvForLocalNode(options.env),
-    stderr: "inherit",
+    // pipe: avoid attaching a visible console via inherit on Windows.
+    stderr: "pipe",
   });
   if (options.onClose) {
     const previous = transport.onclose;

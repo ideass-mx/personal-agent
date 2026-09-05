@@ -19,7 +19,9 @@
 
 #define MyAppName "Agente personal"
 #define MyAppPublisher "Ideass"
-#define MyAppExeName "AgentePersonal.bat"
+; Primary shortcut target: Electron GUI (no cmd.exe). Bat/VBS are fallbacks only.
+#define MyAppExeName "runtime\electron\electron.exe"
+#define MyAppParams """{app}\desktop"""
 ; SourcePath = directory of this .iss (trailing backslash). Resolve package layout from there.
 #define SourceRoot SourcePath + "..\..\dist\windows\PersonalAgent"
 
@@ -82,13 +84,13 @@ Name: "{localappdata}\Ideass\PersonalAgent\data"
 Name: "{localappdata}\Ideass\PersonalAgent\runtime"
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: {#MyAppParams}; WorkingDir: "{app}"
 Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startup
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: {#MyAppParams}; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: {#MyAppParams}; WorkingDir: "{app}"; Tasks: startup
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Abrir Agente personal — tu agente está listo para configurarse"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: {#MyAppParams}; WorkingDir: "{app}"; Description: "Abrir Agente personal — tu agente está listo para configurarse"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; Only leftovers under {app}. Never touch workspace.
