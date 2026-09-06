@@ -1,15 +1,16 @@
 import { HitlModal } from "./components/HitlModal";
 import { Shell } from "./components/Shell";
-import { CapabilitiesScreen } from "./features/capabilities/CapabilitiesScreen";
-import { ChatScreen } from "./features/chat/ChatScreen";
-import { ConnectionsScreen } from "./features/connections/ConnectionsScreen";
-import { ConversationsScreen } from "./features/conversations/ConversationsScreen";
+import { AgentSpaceScreen } from "./features/agent/AgentSpaceScreen";
+import { AutomationsScreen } from "./features/automations/AutomationsScreen";
+import { ConversationScreen } from "./features/conversations/ConversationThreadScreen";
+import { ConversationsListScreen } from "./features/conversations/ConversationsListScreen";
 import { DiagnosticsScreen } from "./features/diagnostics/DiagnosticsScreen";
-import { OverviewScreen } from "./features/overview/OverviewScreen";
+import { LibraryScreen } from "./features/library/LibraryScreen";
+import { ProjectsScreen } from "./features/projects/ProjectsScreen";
 import { SettingsScreen } from "./features/configuration/SettingsScreen";
 import { SetupScreen } from "./features/setup/SetupScreen";
 import { OnboardingWizard } from "./features/setup/OnboardingWizard";
-import { WorkspaceScreen } from "./features/workspace/WorkspaceScreen";
+import { TasksScreen } from "./features/tasks/TasksScreen";
 import { useApp } from "./state/AppContext";
 import { useEffect, useState } from "react";
 import { resolveHttpBase } from "./api/http";
@@ -31,12 +32,8 @@ function Routed() {
         const st = await fetchSetupStatus(base, session.token);
         if (!cancelled) {
           setSetupDone(Boolean(st.onboardingCompleted || st.state === "READY"));
-          if (st.onboardingCompleted || st.state === "READY") {
-            /* stay on current nav */
-          }
         }
       } catch {
-        // Sin API de setup (Gateway antiguo): no bloquear consola clásica
         if (!cancelled) setSetupDone(true);
       }
     })();
@@ -46,7 +43,6 @@ function Routed() {
   }, [session]);
 
   if (!session) {
-    // Host Electron inyecta sesión; remoto manual sigue usando SetupScreen.
     return <SetupScreen mode="welcome" />;
   }
 
@@ -66,21 +62,20 @@ function Routed() {
       <OnboardingWizard
         onCompleted={() => {
           setSetupDone(true);
-          setNav("chat");
+          setNav("agent");
         }}
       />
     );
   }
 
-  const hostUnreachable =
-    Boolean(healthError) || wsStatus === "error";
+  const hostUnreachable = Boolean(healthError) || wsStatus === "error";
   const showNotReadyGate =
     hostUnreachable && nav !== "diagnostics" && nav !== "settings";
 
   if (wsStatus === "connecting" && !health && !healthError) {
     return (
       <Shell>
-        <div className="panel">
+        <div className="panel" style={{ margin: 24 }}>
           <h1>Conectando…</h1>
           <p className="lead">Contactando al Agent Host.</p>
         </div>
@@ -93,24 +88,30 @@ function Routed() {
   ) : (
     (() => {
       switch (nav) {
-        case "overview":
-          return <OverviewScreen />;
-        case "chat":
-          return <ChatScreen />;
+        case "agent":
+          return <AgentSpaceScreen />;
+        case "conversation":
+          return <ConversationScreen />;
         case "conversations":
-          return <ConversationsScreen />;
-        case "capabilities":
-          return <CapabilitiesScreen />;
-        case "workspace":
-          return <WorkspaceScreen />;
-        case "connections":
-          return <ConnectionsScreen />;
+          return <ConversationsListScreen />;
+        case "projects":
+          return <ProjectsScreen />;
+        case "tasks":
+          return <TasksScreen />;
+        case "automations":
+          return <AutomationsScreen />;
+        case "library":
+          return <LibraryScreen />;
         case "settings":
           return <SettingsScreen />;
         case "diagnostics":
-          return <DiagnosticsScreen />;
+          return (
+            <div className="screen">
+              <DiagnosticsScreen />
+            </div>
+          );
         default:
-          return <OverviewScreen />;
+          return <AgentSpaceScreen />;
       }
     })()
   );

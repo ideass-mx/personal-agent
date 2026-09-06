@@ -30,6 +30,7 @@ import type {
   DiagnosticInfo,
   HealthSnapshot,
   NavId,
+  SettingsSectionId,
 } from "../types";
 import { HITL_TIMEOUT_MS } from "../lib/toolActivity";
 import { humanizeError } from "../lib/sanitize";
@@ -40,6 +41,13 @@ type AppState = {
   session: ConnectionConfig | null;
   nav: NavId;
   setNav: (n: NavId) => void;
+  settingsSection: SettingsSectionId;
+  setSettingsSection: (s: SettingsSectionId) => void;
+  openSettings: (section?: SettingsSectionId) => void;
+  sidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+  accountMenuOpen: boolean;
+  setAccountMenuOpen: (open: boolean) => void;
   health: HealthSnapshot | null;
   healthError: string | null;
   refreshHealth: () => Promise<void>;
@@ -79,7 +87,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<ConnectionConfig | null>(() =>
     loadSession(),
   );
-  const [nav, setNav] = useState<NavId>("overview");
+  const [nav, setNav] = useState<NavId>("agent");
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSectionId>("profile");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [health, setHealth] = useState<HealthSnapshot | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [wsStatus, setWsStatus] = useState<WsStatus>("disconnected");
@@ -270,10 +282,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       socketRef.current = sock;
       sock.connect();
-      setNav(normalized ? "chat" : "overview");
+      setNav("agent");
     },
     [disconnect, handleServer],
   );
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((v) => !v);
+  }, []);
+
+  const openSettings = useCallback((section: SettingsSectionId = "profile") => {
+    setSettingsSection(section);
+    setNav("settings");
+    setAccountMenuOpen(false);
+  }, []);
 
   useEffect(() => {
     if (session) {
@@ -299,7 +321,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       if (!session) return;
       setActive(id);
-      setNav("chat");
+      setNav("conversation");
       setBannerError(null);
       try {
         const base = resolveHttpBase(session);
@@ -328,11 +350,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setConversations((prev) => [created, ...prev]);
       setActive(created.id);
       setMessages([]);
-      setNav("chat");
+      setNav("conversation");
     } catch {
       setActive(null);
       setMessages([]);
-      setNav("chat");
+      setNav("conversation");
     }
   }, [session]);
 
@@ -383,6 +405,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       session,
       nav,
       setNav,
+      settingsSection,
+      setSettingsSection,
+      openSettings,
+      sidebarCollapsed,
+      toggleSidebar,
+      accountMenuOpen,
+      setAccountMenuOpen,
       health,
       healthError,
       refreshHealth,
@@ -392,6 +421,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         disconnect();
         clearSession();
         setSession(null);
+        setAccountMenuOpen(false);
       },
       conversations,
       activeConversationId,
@@ -407,11 +437,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toolBanner,
       busy,
       bannerError,
-        bannerDiagnostic,
+      bannerDiagnostic,
     }),
     [
       session,
       nav,
+      settingsSection,
+      openSettings,
+      sidebarCollapsed,
+      toggleSidebar,
+      accountMenuOpen,
       health,
       healthError,
       refreshHealth,

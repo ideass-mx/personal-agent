@@ -266,7 +266,7 @@ export function OnboardingWizard({
 
   function onTalk() {
     onCompleted?.();
-    setNav("chat");
+    setNav("agent");
   }
 
   const providerList =
