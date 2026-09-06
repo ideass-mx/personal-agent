@@ -83,12 +83,13 @@ test("host mode opens external browser instead of embedding web app", () => {
   assert.match(src, /requestBrowserLaunchUrl/);
   assert.match(src, /shell\.openExternal/);
   assert.match(src, /browserOpenedForCurrentStartup/);
+  assert.match(src, /ensureAutomaticBrowserLaunch/);
   assert.match(src, /classifyBrowserOpenError/);
   assert.match(src, /showHostSplashMessage/);
   const bootIdx = src.indexOf("async function bootHostMode");
   const bootSlice = src.slice(bootIdx, bootIdx + 2600);
   assert.doesNotMatch(bootSlice, /loadURL\(url\)/);
-  assert.match(bootSlice, /openPersonalAgentInBrowser/);
+  assert.match(bootSlice, /ensureAutomaticBrowserLaunch/);
   assert.doesNotMatch(bootSlice, /createWindow\(\{\s*hostUi:\s*true/);
   assert.doesNotMatch(bootSlice, /host-splash\.html/);
 });
@@ -120,6 +121,26 @@ test("host happy path delays tray until boot completes", () => {
   const bootIdx = src.indexOf("async function bootHostMode");
   const bootSlice = src.slice(bootIdx, bootIdx + 2600);
   assert.match(bootSlice, /ensureTray\(\)/);
+});
+
+test("automatic browser launch is idempotent and second-instance does not auto-open", () => {
+  const src = fs.readFileSync(mainPath, "utf8");
+  assert.match(src, /browserLaunchState\s*=\s*"IDLE"/);
+  assert.match(src, /browserLaunchState\s*=\s*"OPENING"/);
+  assert.match(src, /browserLaunchState\s*=\s*"OPENED"/);
+  assert.match(src, /browserLaunchState\s*=\s*"FAILED"/);
+  assert.match(src, /ensureAutomaticBrowserLaunch\("bootHostMode",\s*reason\)/);
+  const secondIdx = src.indexOf('app.on("second-instance"');
+  const secondSlice = src.slice(secondIdx, secondIdx + 700);
+  assert.match(secondSlice, /browser_open_skipped/);
+  assert.doesNotMatch(secondSlice, /openPersonalAgentInBrowser\(/);
+});
+
+test("explicit user opens still allowed and retry remains separate", () => {
+  const src = fs.readFileSync(mainPath, "utf8");
+  assert.match(src, /reason:\s*"user_requested_browser_launch"/);
+  assert.match(src, /return await bootHostMode\("user_retry"\)/);
+  assert.match(src, /source:\s*"ipc\.open-console"/);
 });
 
 function pathToFileUrl(p) {

@@ -18,6 +18,7 @@ const {
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
+const crypto = require("node:crypto");
 const config = require("./lib/config.cjs");
 const { mapAgentState, labelForState } = require("./lib/states.cjs");
 const {
@@ -66,6 +67,28 @@ const shutdownRequested = process.argv.includes(SHUTDOWN_HOST_ARG);
 let hostModeActive = false;
 let lastConsolePort = 8787;
 let browserOpenedForCurrentStartup = false;
+let browserLaunchState = "IDLE";
+let automaticBrowserLaunchPromise = null;
+let hostBootPromise = null;
+let hostStartupId = createHostStartupId();
+
+function createHostStartupId() {
+  return `PA-START-${crypto.randomUUID().replace(/-/g, "").slice(0, 12).toUpperCase()}`;
+}
+
+function logHostBrowser(event, details = {}) {
+  return logOnboarding("HOST_BROWSER", event, {
+    startupId: hostStartupId,
+    pid: process.pid,
+    ppid: process.ppid,
+    source: details.source || "unknown",
+    reason: details.reason || "unknown",
+    browserOpenedForCurrentStartup,
+    browserLaunchState,
+    gatewayPort: lastConsolePort,
+    ...details,
+  });
+}
 
 function resolveProductRoot() {
   if (process.env.PERSONAL_AGENT_PRODUCT_ROOT) {
@@ -234,7 +257,19 @@ if (!singleInstanceLock) {
       void shutdownHost("uninstall");
       return;
     }
-    void showProductWindow();
+    logHostBrowser("browser_open_skipped", {
+      source: "second-instance",
+      reason: "second_instance",
+      note: "Second instance does not trigger automatic browser launch.",
+    });
+    if (!hostModeActive) {
+      void showProductWindow();
+      return;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
 }
 
@@ -509,7 +544,10 @@ async function showProductWindow() {
   if (hostModeActive) {
     const snap = supervisor?.snapshot?.() || {};
     if (snap.running && snap.bootReady) {
-      await openPersonalAgentInBrowser();
+      await openPersonalAgentInBrowser({
+        source: "showProductWindow",
+        reason: "user_requested_browser_launch",
+      });
       return;
     }
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -534,11 +572,53 @@ async function showProductWindow() {
   mainWindow.show();
 }
 
-async function openPersonalAgentInBrowser() {
+async function openPersonalAgentInBrowser(input = {}) {
+  const source = input.source || "unknown";
+  const reason = input.reason || "unknown";
+  logHostBrowser("browser_open_attempt", { source, reason });
   const token = config.getHubToken();
   const launchUrl = await requestBrowserLaunchUrl(lastConsolePort, token);
   await shell.openExternal(launchUrl);
+  logHostBrowser("browser_open_success", {
+    source,
+    reason,
+    url: "localhost",
+  });
   return { ok: true, url: launchUrl };
+}
+
+async function ensureAutomaticBrowserLaunch(source, reason) {
+  if (browserLaunchState === "OPENED" || browserOpenedForCurrentStartup) {
+    logHostBrowser("browser_open_skipped", {
+      source,
+      reason,
+      note: "Automatic browser launch already completed for this startup.",
+    });
+    return { ok: true, alreadyOpened: true };
+  }
+  if (automaticBrowserLaunchPromise) {
+    logHostBrowser("browser_open_skipped", {
+      source,
+      reason,
+      note: "Automatic browser launch already in progress.",
+    });
+    return automaticBrowserLaunchPromise;
+  }
+  browserLaunchState = "OPENING";
+  automaticBrowserLaunchPromise = (async () => {
+    try {
+      const result = await openPersonalAgentInBrowser({ source, reason });
+      browserOpenedForCurrentStartup = true;
+      browserLaunchState = "OPENED";
+      return result;
+    } catch (err) {
+      browserLaunchState = "FAILED";
+      throw err;
+    } finally {
+      automaticBrowserLaunchPromise = null;
+    }
+  })();
+  return automaticBrowserLaunchPromise;
 }
 
 function ensureTray() {
@@ -552,66 +632,83 @@ function ensureTray() {
 /**
  * Fase 3/7.6: host mode — Gateway sin Tailscale gate; Web UI es el onboarding.
  */
-async function bootHostMode() {
-  hostModeActive = true;
-  browserOpenedForCurrentStartup = false;
-  config.ensureHubToken();
-  const cfg = config.loadConfig();
-  const port = cfg.hubPort || 8787;
-  lastConsolePort = port;
+async function bootHostMode(reason = "automatic_start") {
+  if (hostBootPromise) return hostBootPromise;
+  hostBootPromise = (async () => {
+    hostModeActive = true;
+    hostStartupId = createHostStartupId();
+    browserOpenedForCurrentStartup = false;
+    browserLaunchState = "IDLE";
+    automaticBrowserLaunchPromise = null;
+    config.ensureHubToken();
+    const cfg = config.loadConfig();
+    const port = cfg.hubPort || 8787;
+    lastConsolePort = port;
 
-  logOnboarding("HOST", "gateway_start", { port });
-  const started = await supervisor.start();
-  if (!started.ok && !started.already) {
-    logOnboarding("HOST", "gateway_start_failed", {
-      error: started.error || "start_failed",
-    });
-    await showHostSplashMessage({
-      title: "Personal Agent",
-      message: "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.",
-      details: "El host no pudo iniciar el agente correctamente.",
-    });
-    return { ok: false, error: started.error || "start_failed" };
-  }
-
-  try {
-    await waitForHealth(port, 90000);
-  } catch {
-    logOnboarding("HOST", "health_timeout", { port });
-    await showHostSplashMessage({
-      title: "Personal Agent",
-      message: "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.",
-      details: "El agente no respondió al health check a tiempo.",
-    });
-    return { ok: false, error: "health_timeout" };
-  }
-
-  lastNetworkReady = true; // localhost product path; remote Tailscale is optional later
-  ensureTray();
-  try {
-    if (!browserOpenedForCurrentStartup) {
-      await openPersonalAgentInBrowser();
-      browserOpenedForCurrentStartup = true;
+    logOnboarding("HOST", "gateway_start", { port, startupId: hostStartupId, reason });
+    const started = await supervisor.start();
+    if (!started.ok && !started.already) {
+      logOnboarding("HOST", "gateway_start_failed", {
+        error: started.error || "start_failed",
+        startupId: hostStartupId,
+        reason,
+      });
+      await showHostSplashMessage({
+        title: "Personal Agent",
+        message: "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.",
+        details: "El host no pudo iniciar el agente correctamente.",
+      });
+      return { ok: false, error: started.error || "start_failed" };
     }
-  } catch (err) {
-    const browserError = classifyBrowserOpenError(err);
-    logOnboarding("HOST", browserError.event, {
-      ...(browserError.errorCode ? { errorCode: browserError.errorCode } : {}),
-      ...(browserError.error ? { error: browserError.error } : {}),
+
+    try {
+      await waitForHealth(port, 90000);
+    } catch {
+      logOnboarding("HOST", "health_timeout", { port, startupId: hostStartupId, reason });
+      await showHostSplashMessage({
+        title: "Personal Agent",
+        message: "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.",
+        details: "El agente no respondió al health check a tiempo.",
+      });
+      return { ok: false, error: "health_timeout" };
+    }
+
+    lastNetworkReady = true; // localhost product path; remote Tailscale is optional later
+    ensureTray();
+    try {
+      await ensureAutomaticBrowserLaunch("bootHostMode", reason);
+    } catch (err) {
+      const browserError = classifyBrowserOpenError(err);
+      browserLaunchState = "FAILED";
+      logOnboarding("HOST", browserError.event, {
+        ...(browserError.errorCode ? { errorCode: browserError.errorCode } : {}),
+        ...(browserError.error ? { error: browserError.error } : {}),
+        startupId: hostStartupId,
+        reason,
+      });
+      await showHostSplashMessage(browserError);
+      return {
+        ok: false,
+        error: browserError.classification,
+        errorCode: browserError.errorCode,
+      };
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.hide();
+    }
+    logOnboarding("HOST", "browser_open", {
+      url: "localhost",
+      startupId: hostStartupId,
+      reason,
     });
-    await showHostSplashMessage(browserError);
-    return {
-      ok: false,
-      error: browserError.classification,
-      errorCode: browserError.errorCode,
-    };
+    publishState();
+    return { ok: true };
+  })();
+  try {
+    return await hostBootPromise;
+  } finally {
+    hostBootPromise = null;
   }
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.hide();
-  }
-  logOnboarding("HOST", "browser_open", { url: "localhost" });
-  publishState();
-  return { ok: true };
 }
 
 function buildTrayTemplate() {
@@ -1188,7 +1285,10 @@ function wireIpc() {
     return { ok: true };
   });
   ipcMain.handle("open-console", () => {
-    return openPersonalAgentInBrowser();
+    return openPersonalAgentInBrowser({
+      source: "ipc.open-console",
+      reason: "user_requested_browser_launch",
+    });
   });
   ipcMain.handle("copy-diagnostics", async () => copyDiagnosticsToClipboard());
   ipcMain.handle("retry-host-boot", async () => {
@@ -1200,7 +1300,7 @@ function wireIpc() {
       if (!snap.running && supervisor) {
         await supervisor.stop().catch(() => {});
       }
-      return await bootHostMode();
+      return await bootHostMode("user_retry");
     } catch (err) {
       return {
         ok: false,
