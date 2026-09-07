@@ -5,6 +5,7 @@ import {
 } from "../../lib/diagnostics";
 import {
   applyComposerAutosize,
+  COMPOSER_TEXTAREA_MIN_PX,
   composerEnterShouldSend,
 } from "../../lib/composerKeyboard";
 import { useApp } from "../../state/AppContext";
@@ -28,6 +29,7 @@ export function ConversationScreen() {
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [composerTall, setComposerTall] = useState(false);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -41,10 +43,10 @@ export function ConversationScreen() {
   useLayoutEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    applyComposerAutosize(el);
+    const result = applyComposerAutosize(el);
+    setComposerTall(result.heightPx > COMPOSER_TEXTAREA_MIN_PX + 2);
   }, [draft, isBlank]);
 
-  // Autofocus on blank / conversation switch.
   useEffect(() => {
     if (wsStatus !== "authenticated") return;
     const id = window.setTimeout(() => {
@@ -55,13 +57,17 @@ export function ConversationScreen() {
 
   const composer = (
     <form
-      className={`composer ${isBlank ? "composer-hero" : "composer-dock"}`}
+      className={`composer ${isBlank ? "composer-hero" : "composer-dock"} ${
+        composerTall ? "is-expanded" : "is-compact"
+      }`}
       onSubmit={(e) => {
         e.preventDefault();
         if (canSend) send();
       }}
     >
-      <div className="composer-shell">
+      <div
+        className={`composer-shell ${composerTall ? "is-tall" : "is-compact"}`}
+      >
         <textarea
           ref={textareaRef}
           className="composer-input"
@@ -159,14 +165,11 @@ export function ConversationScreen() {
             {messages.map((m) =>
               m.role === "user" ? (
                 <div key={m.id} className="msg user">
-                  <p style={{ whiteSpace: "pre-wrap" }}>{m.text}</p>
+                  <p>{m.text}</p>
                 </div>
               ) : m.role === "assistant" ? (
                 <div key={m.id} className="msg agent" data-agent="personal">
-                  <span className="cap-chip" data-agent="personal">
-                    Personal Agent
-                  </span>
-                  <p style={{ whiteSpace: "pre-wrap" }}>
+                  <p>
                     {m.text}
                     {m.streaming ? "▍" : ""}
                   </p>

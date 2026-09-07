@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("PHASE 58.5 conversation sidebar", () => {
-  it("ConversationSidebarList has ⋯, Fijar/Desfijar, Eliminar, confirm, sections", () => {
+  it("ConversationSidebarList: single list, IconPin, Fijar/Desfijar/Eliminar, ⋯", () => {
     const src = fs.readFileSync(
       path.join(
         root,
@@ -24,9 +24,15 @@ describe("PHASE 58.5 conversation sidebar", () => {
     assert.match(src, /Eliminar/);
     assert.match(src, /Eliminar conversación/);
     assert.match(src, /Esta acción no se puede deshacer/);
-    assert.match(src, /Fijadas/);
-    assert.match(src, /Conversaciones/);
+    assert.match(src, /IconPin/);
+    assert.match(src, /IconTrash/);
+    assert.match(src, /<ul className="conv-list">/);
+    assert.doesNotMatch(src, /["']Fijadas["']/);
+    assert.doesNotMatch(src, /["']Conversaciones["']/);
+    assert.doesNotMatch(src, /conv-section-label/);
+    assert.doesNotMatch(src, /className=["']conv-section/);
     assert.match(src, /conv-confirm/);
+    assert.match(src, /conv-pin-slot/);
     assert.match(src, /setConversationPinned/);
     assert.match(src, /removeConversation/);
     assert.match(src, /title=\{fullTitle\}/);

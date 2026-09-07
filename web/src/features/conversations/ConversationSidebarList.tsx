@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { conversationListLabel } from "../../lib/conversationLabel";
 import { useApp } from "../../state/AppContext";
 import type { ConversationMeta } from "../../types";
+import { IconPin, IconTrash } from "../../components/icons";
 
 const SIDEBAR_LIMIT = 50;
 
 /**
- * Lista de conversaciones del sidebar (PHASE 58.5):
- * secciones Fijadas / Conversaciones, menú ⋯ y confirmación de borrado.
+ * Lista única de conversaciones (PHASE 58.5 refine):
+ * pinned primero (orden del servidor), pin monocromático a la izquierda, menú ⋯.
+ * Sin secciones «Fijadas» / «Conversaciones».
  */
 export function ConversationSidebarList() {
   const {
@@ -43,8 +45,6 @@ export function ConversationSidebarList() {
   }, [menuId]);
 
   const visible = conversations.slice(0, SIDEBAR_LIMIT);
-  const pinned = visible.filter((c) => c.pinned);
-  const unpinned = visible.filter((c) => !c.pinned);
   const confirmTarget = confirmId
     ? conversations.find((c) => c.id === confirmId)
     : null;
@@ -74,12 +74,12 @@ export function ConversationSidebarList() {
           onClick={() => void selectConversation(c.id)}
           title={fullTitle}
         >
+          <span className="conv-pin-slot" aria-hidden>
+            {c.pinned ? (
+              <IconPin className="conv-pin-icon" aria-hidden />
+            ) : null}
+          </span>
           <span className="truncate">{label}</span>
-          {c.pinned ? (
-            <span className="conv-pin-glyph" aria-hidden title="Fijada">
-              📌
-            </span>
-          ) : null}
         </button>
         <button
           type="button"
@@ -103,6 +103,7 @@ export function ConversationSidebarList() {
                 void setConversationPinned(c.id, !c.pinned);
               }}
             >
+              <IconPin size={14} aria-hidden />
               {c.pinned ? "Desfijar" : "Fijar"}
             </button>
             <button
@@ -114,6 +115,7 @@ export function ConversationSidebarList() {
                 setConfirmId(c.id);
               }}
             >
+              <IconTrash size={14} aria-hidden />
               Eliminar
             </button>
           </div>
@@ -124,20 +126,7 @@ export function ConversationSidebarList() {
 
   return (
     <>
-      <div className="conv-list">
-        {pinned.length > 0 ? (
-          <div className="conv-section">
-            <div className="conv-section-label">Fijadas</div>
-            <ul>{pinned.map(renderRow)}</ul>
-          </div>
-        ) : null}
-        <div className="conv-section">
-          {pinned.length > 0 ? (
-            <div className="conv-section-label">Conversaciones</div>
-          ) : null}
-          <ul>{unpinned.map(renderRow)}</ul>
-        </div>
-      </div>
+      <ul className="conv-list">{visible.map(renderRow)}</ul>
 
       {confirmTarget ? (
         <div className="conv-confirm-backdrop" role="presentation">

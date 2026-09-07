@@ -27,10 +27,10 @@ function parsePx(declaration: string, prop: string): number {
 }
 
 describe("PHASE 58.5 message + overflow UX", () => {
-  it("msg p font >= 16; user bubble radius >= 20", () => {
+  it("msg p font-size 16; user bubble radius >= 20", () => {
     const msgP = block("\\.msg p");
     const fontSize = parsePx(msgP, "font-size");
-    assert.ok(fontSize >= 16, `font-size ${fontSize} >= 16`);
+    assert.equal(fontSize, 16);
     assert.match(msgP, /line-height:\s*1\.6/);
     assert.match(msgP, /white-space:\s*pre-wrap/);
 
@@ -57,16 +57,33 @@ describe("PHASE 58.5 message + overflow UX", () => {
     );
   });
 
-  it("sidebar conv sections / menu / confirm styles exist", () => {
-    assert.match(css, /\.conv-section-label\s*\{/);
+  it("sidebar pin slot / menu / confirm; no section labels", () => {
+    assert.doesNotMatch(css, /\.conv-section-label\b/);
+    assert.doesNotMatch(css, /\.conv-section\b/);
+    assert.match(css, /\.conv-pin-slot\s*\{/);
+    assert.match(css, /\.conv-pin-icon\s*\{/);
     assert.match(css, /\.conv-row\s*\{/);
     assert.match(css, /\.conv-menu-btn\s*\{/);
     assert.match(css, /\.conv-menu\s*\{/);
     assert.match(css, /\.conv-confirm\s*\{/);
+    assert.match(block("\\.conv-menu button"), /display:\s*flex/);
+    assert.match(block("\\.conv-menu button"), /gap:\s*8px/);
   });
 
-  it("agent cap-chip can say Personal Agent", () => {
-    assert.match(thread, /Personal Agent/);
-    assert.match(thread, /whiteSpace:\s*["']pre-wrap["']/);
+  it("no Personal Agent / cap-chip in ConversationThreadScreen", () => {
+    assert.doesNotMatch(thread, /Personal Agent/);
+    assert.doesNotMatch(thread, /cap-chip/);
+    assert.match(block("\\.msg p"), /white-space:\s*pre-wrap/);
+  });
+
+  it("hero composer-shell: border 0, radius >= 28; blank translateY", () => {
+    const heroShell = block("\\.composer-hero \\.composer-shell");
+    assert.match(heroShell, /border:\s*0/);
+    const radius = parsePx(heroShell, "border-radius");
+    assert.ok(radius >= 28, `border-radius ${radius} >= 28`);
+
+    const blankContent = block("\\.blank-state-content");
+    assert.match(blankContent, /translateY/);
+    assert.doesNotMatch(blankContent, /\d+vh/);
   });
 });

@@ -193,19 +193,6 @@
   padding: 0;
 }
 
-.conv-section {
-  margin-bottom: 6px;
-}
-
-.conv-section-label {
-  padding: 8px 10px 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .conv-row {
   position: relative;
   display: flex;
@@ -226,14 +213,25 @@
 .conv-row-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding-right: 4px;
+  text-align: left;
 }
 
-.conv-pin-glyph {
-  flex: 0 0 auto;
-  font-size: 10px;
-  opacity: 0.55;
-  margin-left: 4px;
+.conv-pin-slot {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.conv-pin-icon {
+  color: color-mix(in srgb, var(--muted) 75%, var(--ink));
+  opacity: 0.85;
 }
 
 .conv-menu-btn {
@@ -279,7 +277,9 @@
 }
 
 .conv-menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   border: 0;
   background: transparent;
@@ -1075,7 +1075,7 @@ tr:last-child td {
   letter-spacing: -0.02em;
 }
 
-/* Blank: bloque centrado (sin ::before/::after). */
+/* Blank: centrado ligeramente hacia arriba (sin vh / bottom:0). */
 .blank-state {
   flex: 1;
   min-height: 0;
@@ -1087,12 +1087,13 @@ tr:last-child td {
 }
 
 .blank-state-content {
-  width: min(760px, calc(100% - 48px));
+  width: min(720px, calc(100% - 48px));
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 28px;
+  gap: 24px;
   text-align: center;
+  transform: translateY(-8%);
 }
 
 .blank-heading {
@@ -1111,7 +1112,7 @@ tr:last-child td {
   scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   padding-bottom: 16px;
   width: min(760px, calc(100% - 48px));
   margin: 0 auto;
@@ -1132,16 +1133,16 @@ tr:last-child td {
 
 .msg.agent {
   align-self: flex-start;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  max-width: min(720px, 100%);
+  display: block;
   background: transparent;
+  padding: 0;
 }
 
 .msg p {
   margin: 0;
   line-height: 1.6;
-  font-size: 16.5px;
+  font-size: 16px;
   white-space: pre-wrap;
 }
 
@@ -1152,7 +1153,6 @@ tr:last-child td {
   color: var(--muted);
 }
 
-/* Composer: caja moderna; botón integrado. */
 .composer {
   display: block;
   width: 100%;
@@ -1180,22 +1180,40 @@ tr:last-child td {
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
-  padding: 12px 12px 12px 16px;
-  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  padding: 10px 12px 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   border-radius: 18px;
   background: var(--surface);
+}
+
+.composer-hero .composer-shell {
+  border: 0;
+  border-radius: 28px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--sunken));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  min-height: 54px;
+  padding: 8px 10px 8px 18px;
+}
+
+.composer-hero .composer-shell.is-compact {
+  align-items: center;
+}
+
+.composer-hero .composer-shell.is-tall {
+  align-items: flex-end;
+  border-radius: 22px;
 }
 
 .composer-input {
   flex: 1;
   min-width: 0;
   width: 100%;
-  min-height: 54px;
+  min-height: 36px;
   max-height: 240px;
   border: 0;
   background: transparent;
   border-radius: 0;
-  padding: 10px 0;
+  padding: 6px 0;
   margin: 0;
   outline: none;
   resize: none;
@@ -1204,6 +1222,11 @@ tr:last-child td {
   font-size: 16px;
   color: var(--ink);
   box-shadow: none;
+}
+
+.composer-dock .composer-input {
+  min-height: 54px;
+  padding: 10px 0;
 }
 
 .composer-input:focus {
@@ -1219,13 +1242,17 @@ tr:last-child td {
 .composer-send {
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: 999px;
   padding: 0;
   flex-shrink: 0;
   font-size: 16px;
   line-height: 1;
   align-self: flex-end;
-  margin-bottom: 2px;
+  margin-bottom: 0;
+}
+
+.composer-hero .composer-shell.is-compact .composer-send {
+  align-self: center;
 }
 
 .account-name {

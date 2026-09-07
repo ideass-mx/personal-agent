@@ -38,12 +38,13 @@ describe("PHASE 58.4 blank composer layout", () => {
     assert.match(thread, /blank-state-content/);
   });
 
-  it("blank-state is centered flex; content capped at 760px; no vh", () => {
+  it("blank-state is centered flex; content capped at 720px; translateY, no vh", () => {
     const blank = block("\\.blank-state");
     assert.match(blank, /align-items:\s*center/);
     assert.match(blank, /justify-content:\s*center/);
     const content = block("\\.blank-state-content");
-    assert.match(content, /width:\s*min\(\s*760px,\s*calc\(100%\s*-\s*48px\)/);
+    assert.match(content, /width:\s*min\(\s*720px,\s*calc\(100%\s*-\s*48px\)/);
+    assert.match(content, /translateY/);
     assert.doesNotMatch(content, /\d+vh/);
     assert.doesNotMatch(content, /margin-top/);
   });
@@ -61,27 +62,30 @@ describe("PHASE 58.4 blank composer layout", () => {
     }
   });
 
-  it("msg p readability >= 16px (16.5)", () => {
+  it("msg p readability font-size 16px", () => {
     const msgP = block("\\.msg p");
     const fontSize = parsePx(msgP, "font-size");
-    assert.ok(fontSize >= 16, `font-size ${fontSize} >= 16`);
-    assert.equal(fontSize, 16.5);
+    assert.equal(fontSize, 16);
     assert.match(msgP, /line-height:\s*1\.6/);
   });
 
-  it("composer-input min 54 / max 240 / font 16px", () => {
+  it("composer-input min 36 / max 240 / font 16px; dock min 54", () => {
     const input = block("\\.composer-input");
-    assert.equal(parsePx(input, "min-height"), 54);
+    assert.equal(parsePx(input, "min-height"), 36);
     assert.equal(parsePx(input, "max-height"), 240);
     assert.equal(parsePx(input, "font-size"), 16);
     assert.match(input, /line-height:\s*1\.55/);
-    assert.match(input, /padding:\s*10px 0/);
+    assert.match(input, /padding:\s*6px 0/);
+    const dockInput = block("\\.composer-dock \\.composer-input");
+    assert.equal(parsePx(dockInput, "min-height"), 54);
+    assert.match(dockInput, /padding:\s*10px 0/);
   });
 
-  it("composer-shell keeps align-items flex-end; cap-chip stays ~11px", () => {
+  it("composer-shell flex-end; hero shell border 0 / radius >= 28", () => {
     assert.match(block("\\.composer-shell"), /align-items:\s*flex-end/);
-    const chip = block("\\.cap-chip");
-    assert.equal(parsePx(chip, "font-size"), 11);
+    const heroShell = block("\\.composer-hero \\.composer-shell");
+    assert.match(heroShell, /border:\s*0/);
+    assert.ok(parsePx(heroShell, "border-radius") >= 28);
   });
 
   it("composer-shell exists; hero/dock static; no bottom:0 on blank composer", () => {

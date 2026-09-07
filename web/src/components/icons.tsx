@@ -169,3 +169,21 @@ export function IconSpark(p: IconProps) {
     </svg>
   );
 }
+
+/** Pin monocromático (sidebar fijadas). */
+export function IconPin(p: IconProps) {
+  return (
+    <svg {...base({ size: 14, ...p })}>
+      <path d="M9 3h6l-1.2 7H17l-5 7-5-7h3.2L9 3z" />
+      <path d="M12 17v4" />
+    </svg>
+  );
+}
+
+export function IconTrash(p: IconProps) {
+  return (
+    <svg {...base({ size: 14, ...p })}>
+      <path d="M4 7h16M9 7V5h6v2M8 7l1 12h6l1-12" />
+    </svg>
+  );
+}

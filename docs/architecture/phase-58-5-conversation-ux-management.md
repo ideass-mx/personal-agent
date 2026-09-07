@@ -6,7 +6,7 @@
 ## Objetivo
 
 Gestión humana de conversaciones en la Agent Console web: fijar / desfijar,
-eliminar con confirmación, sidebar por secciones, y burbujas de mensaje más
+eliminar con confirmación, sidebar legible, y burbujas de mensaje más
 legibles — sobre APIs Gateway ya expuestas.
 
 ## Gateway (ya implementado)
@@ -25,11 +25,21 @@ legibles — sobre APIs Gateway ya expuestas.
 | `patchConversationPinned` / `deleteConversation` | cliente HTTP |
 | `compareConversationsForSidebar` | fijadas primero, luego `updatedAt\|\|createdAt` |
 | `AppContext` | `setConversationPinned`, `removeConversation` (optimista; fallo → refresh) |
-| `ConversationSidebarList` | secciones Fijadas / Conversaciones, menú ⋯, confirm pequeño |
-| CSS | `.msg.user` radio 22px; `.msg.agent` abierto; sidebar menu/confirm |
+| `ConversationSidebarList` | lista única (sin secciones Fijadas/Conversaciones); `IconPin` a la izquierda; menú ⋯ con pin/trash + texto |
+| `ConversationThreadScreen` | sin label «Personal Agent» / cap-chip; composer hero pill (`is-compact` / `is-tall`) |
+| CSS | `.msg.user` radio 22px; `.msg p` 16px; blank `translateY(-8%)`; hero shell sin borde, radius 28; `.conv-pin-slot` 16px |
 
 Al eliminar la conversación activa: limpia mensajes, `active=null`, nav
 `conversation` (blank New Chat).
+
+## Refine visual (58.5)
+
+- Sidebar: una sola `<ul class="conv-list">`; pin monocromo en slot fijo; sin
+  `.conv-section` / labels de sección.
+- Composer New Chat: pill (border 0, radius ≥ 28); compact centra send;
+  tall reduce radius a 22.
+- Thread blank: centrado con `translateY` (sin `vh` / `bottom: 0`).
+- Sin etiqueta de agente en el hilo.
 
 ## Tests
 
