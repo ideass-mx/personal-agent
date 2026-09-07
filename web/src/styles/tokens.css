@@ -1,15 +1,15 @@
 :root {
-  /* Shell neutro */
-  --shell-bg: #f6f7f9;
-  --surface: #ffffff;
-  --ink: #161820;
-  --muted: #6b7180;
-  --line: #e7e9ef;
-  --sunken: #f1f2f6;
-  --danger: #c0352b;
-  --danger-soft: #fceceb;
-  --ok: #1a7f4b;
-  --warning: #b57816;
+  /* Dark product theme — minimal LLM premium */
+  --shell-bg: #0d0f12;
+  --surface: #161a20;
+  --ink: #f2f4f8;
+  --muted: #8b93a7;
+  --line: #2a303c;
+  --sunken: #1c2129;
+  --danger: #f07178;
+  --danger-soft: #3a1f24;
+  --ok: #3dd68c;
+  --warning: #e6b84d;
 
   /* Tipografía */
   --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
@@ -17,39 +17,37 @@
   --font-agent: "Newsreader", Georgia, "Times New Roman", serif;
 
   /* Forma */
-  --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 14px;
-  --shadow-sm: 0 1px 2px rgba(22, 24, 32, 0.04),
-    0 1px 3px rgba(22, 24, 32, 0.06);
-  --shadow: 0 4px 16px rgba(22, 24, 32, 0.06),
-    0 1px 3px rgba(22, 24, 32, 0.04);
-  --shadow-lg: 0 12px 40px rgba(22, 24, 32, 0.12);
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
 
   --sidebar-w: 272px;
   --sidebar-collapsed: 64px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
-  /* Default accent (Personal) — sobreescrito por data-agent */
-  --accent: #5b5bd6;
-  --accent-soft: color-mix(in srgb, var(--accent) 12%, white);
-  --accent-ink: color-mix(in srgb, var(--accent) 82%, black);
+  /* Accent único y controlado */
+  --accent: #7c8cff;
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  --accent-ink: #e8ebff;
 }
 
 [data-agent="personal"] {
-  --accent: #5b5bd6;
+  --accent: #7c8cff;
 }
 [data-agent="research"] {
-  --accent: #0e9488;
+  --accent: #3dbeb0;
 }
 [data-agent="trading"] {
-  --accent: #b57816;
+  --accent: #e6b84d;
 }
 [data-agent="office"] {
-  --accent: #2563c9;
+  --accent: #6b9dff;
 }
 [data-agent="computer"] {
-  --accent: #8a3ff0;
+  --accent: #b78cff;
 }
 
 *,
@@ -62,6 +60,7 @@ html,
 body,
 #root {
   height: 100%;
+  color-scheme: dark;
 }
 
 body {
@@ -91,7 +90,7 @@ a {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 28%, white);
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .agent-voice {

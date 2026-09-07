@@ -153,7 +153,9 @@ export function mountSetupHttp(
       let record = getSetupState();
       if (
         record.state === SetupStates.AGENT_READY ||
-        record.state === SetupStates.ONBOARDING
+        record.state === SetupStates.ONBOARDING ||
+        record.state === SetupStates.READY ||
+        record.state === SetupStates.VERIFIED
       ) {
         record = transitionSetupState(SetupStates.LLM_REQUIRED, {
           llmProvider: provider,

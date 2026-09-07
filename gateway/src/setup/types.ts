@@ -143,8 +143,8 @@ const EDGES: Record<SetupState, readonly SetupState[]> = {
     SetupStates.LLM_REQUIRED,
     SetupStates.LLM_CONNECTED,
   ],
-  VERIFIED: [SetupStates.READY],
-  READY: [SetupStates.READY],
+  VERIFIED: [SetupStates.READY, SetupStates.LLM_REQUIRED],
+  READY: [SetupStates.READY, SetupStates.LLM_REQUIRED],
   INSTALLATION_ERROR: [SetupStates.INSTALLING, SetupStates.INSTALLED],
   GATEWAY_ERROR: [
     SetupStates.INSTALLED,

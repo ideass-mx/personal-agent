@@ -1,5 +1,6 @@
 /**
  * Helpers puros del flujo de onboarding (testables sin React).
+ * PROFILE y LLM CONFIGURATION son estados independientes.
  */
 import type { SetupStatusDto } from "../../types";
 
@@ -21,11 +22,42 @@ export type SetupProviderInfo = {
   available: boolean;
 };
 
+/** LLM setup is complete only when a real credential exists. */
+export function isLlmConfigured(s: Pick<SetupStatusDto, "llmConfigured">): boolean {
+  return Boolean(s.llmConfigured);
+}
+
+/**
+ * Application ready for chat requires LLM configured.
+ * Profile is gated separately in App.tsx.
+ */
+export function isApplicationReadyForChat(
+  s: Pick<SetupStatusDto, "llmConfigured" | "onboardingCompleted" | "state">,
+): boolean {
+  return isLlmConfigured(s);
+}
+
+/**
+ * Derive wizard step from setup status.
+ * NEVER treat SQLite READY as done if llmConfigured is false
+ * (stale state after uninstall/key purge).
+ */
 export function stepFromStatus(s: SetupStatusDto): OnboardingStep {
-  if (s.onboardingCompleted || s.state === "READY") return "done";
-  if (s.state === "VERIFIED") return "done";
+  if (isLlmConfigured(s) && (s.onboardingCompleted || s.state === "READY" || s.state === "VERIFIED")) {
+    return "done";
+  }
+  // Stale READY / VERIFIED without a real key → force LLM configuration.
+  if (
+    !isLlmConfigured(s) &&
+    (s.state === "READY" ||
+      s.state === "VERIFIED" ||
+      s.state === "LLM_CONNECTED" ||
+      s.onboardingCompleted)
+  ) {
+    return "llm_intro";
+  }
   if (s.state === "VERIFYING" || s.state === "VERIFICATION_ERROR") return "verifying";
-  if (s.state === "LLM_CONNECTED") return "verifying";
+  if (s.state === "LLM_CONNECTED" && isLlmConfigured(s)) return "verifying";
   if (
     s.state === "LLM_REQUIRED" ||
     s.state === "LLM_CONFIGURATION_ERROR" ||
@@ -54,3 +86,6 @@ export function responseLooksLikeSecretLeak(raw: string): boolean {
   if (/"apiKey"\s*:/.test(lower) || /"api_key"\s*:/.test(lower)) return true;
   return false;
 }
+
+/** Display plan label (local stub until billing exists). */
+export const USER_PLAN_LABEL = "Plan Personal";

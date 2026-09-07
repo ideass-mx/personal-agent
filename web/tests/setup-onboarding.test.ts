@@ -4,10 +4,13 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
+  isApplicationReadyForChat,
+  isLlmConfigured,
   isProviderSelectable,
   providerComingSoonLabel,
   responseLooksLikeSecretLeak,
   stepFromStatus,
+  USER_PLAN_LABEL,
 } from "../src/features/setup/setup-flow.ts";
 import type { SetupStatusDto } from "../src/types.ts";
 import {
@@ -43,7 +46,7 @@ describe("setup-flow", () => {
     assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "agent_ready");
   });
 
-  it("READY opens done (chat gate)", () => {
+  it("READY with llmConfigured opens done", () => {
     assert.equal(
       stepFromStatus(
         dto({
@@ -54,6 +57,33 @@ describe("setup-flow", () => {
         }),
       ),
       "done",
+    );
+  });
+
+  it("READY without llmConfigured forces llm_intro (stale after uninstall)", () => {
+    assert.equal(
+      stepFromStatus(
+        dto({
+          state: "READY",
+          onboardingCompleted: true,
+          llmConfigured: false,
+          verified: true,
+        }),
+      ),
+      "llm_intro",
+    );
+  });
+
+  it("profile/llm matrix via isApplicationReadyForChat", () => {
+    assert.equal(isLlmConfigured(dto({ llmConfigured: false })), false);
+    assert.equal(isLlmConfigured(dto({ llmConfigured: true })), true);
+    assert.equal(
+      isApplicationReadyForChat(dto({ llmConfigured: false, state: "READY" })),
+      false,
+    );
+    assert.equal(
+      isApplicationReadyForChat(dto({ llmConfigured: true, state: "READY" })),
+      true,
     );
   });
 
@@ -97,6 +127,10 @@ describe("setup-flow", () => {
       responseLooksLikeSecretLeak('{"credential":"sk-ant-secret"}'),
       true,
     );
+  });
+
+  it("USER_PLAN_LABEL is Plan Personal", () => {
+    assert.equal(USER_PLAN_LABEL, "Plan Personal");
   });
 });
 

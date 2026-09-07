@@ -172,7 +172,8 @@ function gatewayEnv() {
   if (cfg.workspaceRoot) {
     env.AGENT_FILESYSTEM_ROOT = cfg.workspaceRoot;
   }
-  if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
+  // Always set (even empty) so inherited OS ANTHROPIC_API_KEY cannot survive uninstall.
+  env.ANTHROPIC_API_KEY = apiKey || "";
   env.PERSONAL_AGENT_DB = path.join(data.dbDir, "personal-agent.db");
   env.PERSONAL_AGENT_OBJECTS_DIR = data.objectsDir;
   env.PERSONAL_AGENT_CREDENTIALS_DIR = data.credentialsDir;
@@ -231,6 +232,16 @@ async function shutdownHost(reason = "app_quit") {
       }
     } catch {
       /* ignore */
+    }
+    // Uninstall path: purge secrets while we still own the process (avoids locked files).
+    if (reason === "uninstall" || reason === "uninstall_helper") {
+      try {
+        const { purgeInstallSecrets } = require("./lib/uninstall-secret-cleanup.cjs");
+        purgeInstallSecrets(config.productDataRoot());
+        logOnboarding("HOST", "uninstall_secrets_purged", {});
+      } catch {
+        /* best-effort — Inno also deletes */
+      }
     }
     try {
       if (mainWindow && !mainWindow.isDestroyed()) {

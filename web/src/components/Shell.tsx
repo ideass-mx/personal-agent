@@ -218,8 +218,8 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="avatar">{initials || "PA"}</span>
             {!sidebarCollapsed ? (
               <span className="account-meta">
-                <strong className="truncate">{displayName}</strong>
-                <span className="muted">Tu agente</span>
+                <strong className="truncate account-name">{displayName}</strong>
+                <span className="muted account-plan">Plan Personal</span>
               </span>
             ) : null}
           </button>

@@ -1,65 +1,45 @@
-# PHASE 58 — First Run, User Onboarding & Conversation Identity
+# PHASE 58 / 58.1 — First Run, Onboarding, LLM Credentials & Dark UX
 
-**Status:** PARTIAL (código + tests automáticos; E2E Windows real pendiente)  
-**Fecha:** 2026-09-07 (final fix: LLM uninstall + Home)
+**Status:** PARTIAL (automatizado PASS; E2E Windows real pendiente)  
+**Fecha:** 2026-09-07
 
-## 1. Estado anterior
-
-- `ensureLocalIdentity()` creaba `local-user` con nombre `"Usuario local"` sin onboarding humano.
-- La UI mostraba `session.deviceName` en lugar del nombre del usuario.
-- Badge permanente `● Listo` en el sidebar.
-- Conversaciones sin `summary`; la sidebar usaba IDs.
-- Uninstall Inno borraba secretos solo si el usuario confirmaba YES (el token LLM podía sobrevivir).
-- Tras onboarding, la entrada era `AgentSpaceScreen` (Home/dashboard antigua).
-
-## 2. Causa
-
-Separación incompleta identidad técnica vs perfil; metadata de conversación ausente; cleanup de uninstall **opcional** para `config/secrets.json` y `credentials/llm/`; navegación por defecto `nav=agent` → Home antigua.
-
-## 3. Onboarding
+## Modelo de estados
 
 ```text
-Session → ProfileNameScreen (profile_completed=0)
-       → OnboardingWizard (LLM) si !llmConfigured
-       → ConversationScreen (Personal Agent)
+PROFILE: name + profile_completed
+LLM CONFIGURATION: provider + credential + llmConfigured
+APPLICATION READY: profile_completed AND llmConfigured
 ```
 
-## 4–5. User / nombre
+No se mezclan. `state === READY` en SQLite **sin** clave real no es onboarding completo.
 
-`users.name` + `users.profile_completed` (`013`). API `GET/PATCH /v1/identity/me`.
+## Flujo
 
-## 6–7. Uninstall / secretos LLM
+```text
+Launch → ProfileName (si !profile_completed)
+      → OnboardingWizard LLM (si !llmConfigured)
+      → ConversationScreen (Personal Agent)
+```
 
-**Inventario LLM:**
+## Almacenamiento LLM
 
 | Secret | Location |
 |--------|----------|
-| `anthropicApiKey` | `%LOCALAPPDATA%\Ideass\PersonalAgent\config\secrets.json` |
-| Provider key | `...\credentials\llm\{provider}.api_key` |
+| Anthropic key | `%LOCALAPPDATA%\Ideass\PersonalAgent\credentials\llm\anthropic.api_key` |
 | Legacy | `...\credentials\anthropic.api_key` |
+| Desktop secrets.json | ya **no** guarda `anthropicApiKey` (migra a credentials/llm) |
 
-**Siempre** (sin preguntar): borrar `secrets.json`, `credentials/llm`, `credentials/`, `config/`, `device-identity/`, `runtime/`.  
-**Opcional YES:** `data/`, `logs/`, `objects/` (conversaciones). Workspace nunca.
+`gatewayEnv` siempre define `ANTHROPIC_API_KEY` (vacío si no hay key) para no heredar env del SO.
 
-`GET /v1/setup/status` ahora refleja clave real (`llmConfigured` / `onboardingCompleted` → false si no hay key).
+## Uninstall
 
-Helper de prueba: `desktop/lib/uninstall-secret-cleanup.cjs`.
+1. `--shutdown-host` → `purgeInstallSecrets(productDataRoot())`
+2. Inno `PurgeProductSecrets` (LOCALAPPDATA + APPDATA) con reintento
+3. Opcional: borrar `data/` / logs / objects
 
-## 8–11. Conversation metadata
+## UX 58.1
 
-Sin cambios en este final fix (title/summary deterministas, persistidos).
-
-## Home antigua
-
-`AgentSpaceScreen` eliminada del producto web. Entrada = `ConversationScreen` (`nav=conversation`).
-
-## Tests
-
-- `desktop/tests/uninstall-cleanup.test.cjs` (Inno paths + purge funcional)
-- `gateway/tests/identity/phase58-first-run-onboarding.test.ts`
-- `web/tests/conversation-label.test.ts`
-
-## Riesgos
-
-- E2E Windows real no ejecutado en este entorno.
-- Si el usuario conserva `data/` tras uninstall, el setup LLM se vuelve a pedir porque la clave ya no existe.
+- Header: nombre + **Plan Personal** (no “Tu agente”)
+- Sin Home/`AgentSpaceScreen`
+- Blank: “¿En qué te ayudo?” + composer centrado abajo + autofocus
+- Tema oscuro por defecto (`tokens.css`)

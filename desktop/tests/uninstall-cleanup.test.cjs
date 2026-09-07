@@ -10,6 +10,7 @@ const {
   purgeInstallSecrets,
   llmSecretsPresent,
 } = require("../lib/uninstall-secret-cleanup.cjs");
+const config = require("../lib/config.cjs");
 
 const issPath = path.join(
   __dirname,
@@ -20,62 +21,67 @@ const issPath = path.join(
   "personal-agent.iss",
 );
 
-describe("PHASE 58 uninstall secret cleanup (Inno)", () => {
-  it("always deletes LLM secret paths (not only optional data wipe)", () => {
+describe("PHASE 58.1 uninstall secret cleanup (Inno)", () => {
+  it("always deletes LLM secret paths via PurgeProductSecrets", () => {
     const src = fs.readFileSync(issPath, "utf8");
     assert.match(src, /function InitializeUninstall/);
-    // Mandatory LLM / install secret cleanup appears before optional MsgBox data wipe.
-    const secretsIdx = src.indexOf(
-      "DeleteFile(ExpandConstant('{localappdata}\\Ideass\\PersonalAgent\\config\\secrets.json'))",
-    );
-    const llmIdx = src.indexOf(
-      "DelTree(ExpandConstant('{localappdata}\\Ideass\\PersonalAgent\\credentials\\llm')",
-    );
-    const credIdx = src.indexOf(
-      "DelTree(ExpandConstant('{localappdata}\\Ideass\\PersonalAgent\\credentials')",
-    );
+    assert.match(src, /procedure PurgeProductSecrets/);
+    assert.match(src, /ewWaitUntilTerminated/);
+    assert.match(src, /userappdata}\\Ideass\\PersonalAgent/);
+    const secretsIdx = src.indexOf("config\\secrets.json");
+    const llmIdx = src.indexOf("credentials\\llm");
     const msgIdx = src.indexOf("¿Eliminar también conversaciones");
-    assert.ok(secretsIdx > 0, "must DeleteFile secrets.json");
-    assert.ok(llmIdx > 0, "must DelTree credentials\\llm");
-    assert.ok(credIdx > 0, "must DelTree credentials");
-    assert.ok(msgIdx > secretsIdx, "LLM purge must run before optional data prompt");
-    assert.ok(msgIdx > llmIdx, "llm dir purge before optional prompt");
+    assert.ok(secretsIdx > 0, "must purge secrets.json");
+    assert.ok(llmIdx > 0, "must purge credentials\\llm");
+    assert.ok(msgIdx > secretsIdx, "LLM purge before optional data prompt");
     assert.match(src, /workspace NUNCA se borra/i);
   });
 
-  it("purgeInstallSecrets removes anthropic key from secrets.json and credentials/llm", () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pa-uninstall-llm-"));
-    const configDir = path.join(root, "config");
-    const llmDir = path.join(root, "credentials", "llm");
-    fs.mkdirSync(configDir, { recursive: true });
-    fs.mkdirSync(llmDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(configDir, "secrets.json"),
-      JSON.stringify({
-        hubToken: "h".repeat(32),
-        anthropicApiKey: "sk-ant-test-should-not-survive",
-      }),
-      "utf8",
-    );
-    fs.writeFileSync(
-      path.join(llmDir, "anthropic.api_key"),
-      "sk-ant-test-file-key",
-      "utf8",
-    );
-    fs.writeFileSync(
-      path.join(root, "credentials", "anthropic.api_key"),
-      "sk-ant-legacy-key",
-      "utf8",
-    );
-    fs.mkdirSync(path.join(root, "data"), { recursive: true });
-    fs.writeFileSync(path.join(root, "data", "keep.db"), "sqlite-placeholder");
+  it("credential lifecycle: write → exists → purge → gone → no silent restore path in secrets", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pa-llm-cycle-"));
+    const prev = process.env.PERSONAL_AGENT_DATA_DIR;
+    process.env.PERSONAL_AGENT_DATA_DIR = root;
+    try {
+      config.setAnthropicApiKey("sk-ant-test-lifecycle-key-zzzz");
+      const llmFile = path.join(root, "credentials", "llm", "anthropic.api_key");
+      assert.equal(fs.existsSync(llmFile), true);
+      assert.equal(fs.readFileSync(llmFile, "utf8").trim(), "sk-ant-test-lifecycle-key-zzzz");
+      // Must not keep dual copy in secrets.json
+      const secretsPath = path.join(root, "config", "secrets.json");
+      if (fs.existsSync(secretsPath)) {
+        const secrets = JSON.parse(fs.readFileSync(secretsPath, "utf8"));
+        assert.equal(secrets.anthropicApiKey, undefined);
+      }
+      assert.equal(llmSecretsPresent(root), true);
+      assert.equal(config.getAnthropicApiKey(), "sk-ant-test-lifecycle-key-zzzz");
 
-    assert.equal(llmSecretsPresent(root), true);
-    purgeInstallSecrets(root);
-    assert.equal(llmSecretsPresent(root), false);
-    assert.equal(fs.existsSync(path.join(root, "config", "secrets.json")), false);
-    assert.equal(fs.existsSync(path.join(root, "credentials")), false);
-    // Conversations DB path must not be deleted by secret purge alone.
-    assert.equal(fs.existsSync(path.join(root, "data", "keep.db")), true);
+      purgeInstallSecrets(root);
+
+      assert.equal(llmSecretsPresent(root), false);
+      assert.equal(fs.existsSync(llmFile), false);
+      assert.equal(config.getAnthropicApiKey(), "");
+      // Conversations DB path must survive secret purge alone.
+      fs.mkdirSync(path.join(root, "data"), { recursive: true });
+      fs.writeFileSync(path.join(root, "data", "keep.db"), "x");
+      purgeInstallSecrets(root);
+      assert.equal(fs.existsSync(path.join(root, "data", "keep.db")), true);
+    } finally {
+      if (prev === undefined) delete process.env.PERSONAL_AGENT_DATA_DIR;
+      else process.env.PERSONAL_AGENT_DATA_DIR = prev;
+      try {
+        fs.rmSync(root, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+
+  it("main.js clears inherited ANTHROPIC_API_KEY when no persisted key", () => {
+    const mainSrc = fs.readFileSync(
+      path.join(__dirname, "..", "main.js"),
+      "utf8",
+    );
+    assert.match(mainSrc, /ANTHROPIC_API_KEY\s*=\s*apiKey\s*\|\|\s*[\"'][\"']/);
+    assert.match(mainSrc, /purgeInstallSecrets/);
   });
 });

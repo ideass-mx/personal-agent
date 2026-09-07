@@ -83,8 +83,13 @@ export function OnboardingWizard({
         const s = await refresh();
         if (!s) return;
         await loadProviders();
-        if (s.onboardingCompleted || s.state === "READY") {
+        // Solo "done" si hay credencial LLM real — no confiar solo en state READY.
+        if (s.llmConfigured && (s.onboardingCompleted || s.state === "READY" || s.state === "VERIFIED")) {
           setStep("done");
+          return;
+        }
+        if (!s.llmConfigured) {
+          setStep(stepFromStatus(s));
           return;
         }
         if (sessionStorage.getItem("pa_host_bootstrap") === "1") {

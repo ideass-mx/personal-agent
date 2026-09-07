@@ -47,16 +47,12 @@ function Routed() {
       try {
         const st = await fetchSetupStatus(base, session.token);
         if (!cancelled) {
-          // llmConfigured refleja clave real (uninstall puede borrar el token).
-          setSetupDone(
-            Boolean(
-              st.llmConfigured &&
-                (st.onboardingCompleted || st.state === "READY"),
-            ),
-          );
+          // PROFILE y LLM son independientes: chat solo si llmConfigured.
+          setSetupDone(Boolean(st.llmConfigured));
         }
       } catch {
-        if (!cancelled) setSetupDone(true);
+        // Fail closed: sin estado de setup no asumir LLM listo.
+        if (!cancelled) setSetupDone(false);
       }
     })();
     return () => {

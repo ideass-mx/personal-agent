@@ -126,14 +126,49 @@ function getHubToken() {
   return loadSecrets().hubToken || ensureHubToken();
 }
 
-function setAnthropicApiKey(key) {
-  const secrets = loadSecrets();
-  const trimmed = String(key || "").trim();
+function llmKeyFile() {
+  return path.join(ensureDirs().credentialsDir, "llm", "anthropic.api_key");
+}
+
+function legacyLlmKeyFile() {
+  return path.join(ensureDirs().credentialsDir, "anthropic.api_key");
+}
+
+function writeLlmKeyFile(trimmed) {
+  const file = llmKeyFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   if (trimmed) {
-    secrets.anthropicApiKey = trimmed;
+    fs.writeFileSync(file, trimmed, "utf8");
+    try {
+      fs.chmodSync(file, 0o600);
+    } catch {
+      /* Windows may ignore */
+    }
+    const legacy = legacyLlmKeyFile();
+    fs.writeFileSync(legacy, trimmed, "utf8");
+    try {
+      fs.chmodSync(legacy, 0o600);
+    } catch {
+      /* ignore */
+    }
   } else {
-    delete secrets.anthropicApiKey;
+    for (const p of [file, legacyLlmKeyFile()]) {
+      try {
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      } catch {
+        /* ignore */
+      }
+    }
   }
+}
+
+function setAnthropicApiKey(key) {
+  const trimmed = String(key || "").trim();
+  // Canonical store matches Gateway: credentials/llm/*.api_key
+  writeLlmKeyFile(trimmed);
+  // Remove dual-copy from secrets.json so uninstall/env cannot resurrect it.
+  const secrets = loadSecrets();
+  delete secrets.anthropicApiKey;
   saveSecrets(secrets);
   const cfg = loadConfig();
   cfg.anthropicApiKeySet = Boolean(trimmed);
@@ -141,7 +176,35 @@ function setAnthropicApiKey(key) {
 }
 
 function getAnthropicApiKey() {
-  return loadSecrets().anthropicApiKey || "";
+  const file = llmKeyFile();
+  if (fs.existsSync(file)) {
+    try {
+      const raw = fs.readFileSync(file, "utf8").trim();
+      if (raw) return raw;
+    } catch {
+      /* fall through */
+    }
+  }
+  const legacy = legacyLlmKeyFile();
+  if (fs.existsSync(legacy)) {
+    try {
+      const raw = fs.readFileSync(legacy, "utf8").trim();
+      if (raw) return raw;
+    } catch {
+      /* fall through */
+    }
+  }
+  // One-time migration from legacy secrets.json → credentials/llm
+  const fromSecrets = loadSecrets().anthropicApiKey;
+  if (typeof fromSecrets === "string" && fromSecrets.trim()) {
+    const trimmed = fromSecrets.trim();
+    writeLlmKeyFile(trimmed);
+    const secrets = loadSecrets();
+    delete secrets.anthropicApiKey;
+    saveSecrets(secrets);
+    return trimmed;
+  }
+  return "";
 }
 
 function maskToken(token) {

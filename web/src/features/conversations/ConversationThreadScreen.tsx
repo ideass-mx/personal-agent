@@ -22,6 +22,7 @@ export function ConversationScreen() {
     wsStatus,
   } = useApp();
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
@@ -33,18 +34,53 @@ export function ConversationScreen() {
   const canSend =
     wsStatus === "authenticated" && draft.trim().length > 0 && !busy;
 
+  // Autofocus only on main blank agent surface (no modal/onboarding here).
+  useEffect(() => {
+    if (wsStatus !== "authenticated") return;
+    const id = window.setTimeout(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    }, 40);
+    return () => window.clearTimeout(id);
+  }, [wsStatus, isBlank, activeConversationId]);
+
+  const composer = (
+    <form
+      className={`composer ${isBlank ? "composer-hero" : ""}`}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (canSend) send();
+      }}
+    >
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="Escribe lo que necesitas…"
+        aria-label="Mensaje"
+        disabled={wsStatus !== "authenticated"}
+        autoComplete="off"
+      />
+      <button
+        type="submit"
+        className="btn btn-primary composer-send"
+        disabled={!canSend}
+        aria-label="Enviar"
+      >
+        ➤
+      </button>
+    </form>
+  );
+
   return (
-    <div className="conversation-screen" data-agent="personal">
+    <div
+      className={`conversation-screen ${isBlank ? "is-blank" : ""}`}
+      data-agent="personal"
+    >
       {!isBlank ? (
         <header className="screen-header">
           <div>
             <h1>{meta?.title || "Conversación"}</h1>
-            <p className="muted">
-              {activeConversationId
-                ? `ID ${activeConversationId.slice(0, 8)}…`
-                : "Nueva conversación"}
-              {meta?.workspaceId ? ` · espacio ${meta.workspaceId.slice(0, 8)}…` : ""}
-            </p>
+            {meta?.summary ? <p className="muted">{meta.summary}</p> : null}
           </div>
         </header>
       ) : null}
@@ -84,54 +120,39 @@ export function ConversationScreen() {
       ) : null}
 
       {isBlank ? (
-        <div className="blank-hero fade-in">
+        <div className="blank-stage fade-in">
           <p className="agent-voice hero-voice">¿En qué te ayudo?</p>
-          <p className="muted">
-            El mismo hilo puede atravesar varias capacidades cuando el protocolo las exponga.
-          </p>
+          {composer}
         </div>
       ) : (
-        <div className="thread">
-          {messages.map((m) =>
-            m.role === "user" ? (
-              <div key={m.id} className="msg user">
-                <p>{m.text}</p>
-              </div>
-            ) : m.role === "assistant" ? (
-              <div key={m.id} className="msg agent" data-agent="personal">
-                <span className="cap-chip" data-agent="personal">
-                  Personal
-                </span>
-                <p>{m.text}{m.streaming ? "▍" : ""}</p>
-              </div>
-            ) : (
-              <div key={m.id} className="msg system muted">
-                <p>{m.text}</p>
-              </div>
-            ),
-          )}
-          <div ref={endRef} />
-        </div>
+        <>
+          <div className="thread">
+            {messages.map((m) =>
+              m.role === "user" ? (
+                <div key={m.id} className="msg user">
+                  <p>{m.text}</p>
+                </div>
+              ) : m.role === "assistant" ? (
+                <div key={m.id} className="msg agent" data-agent="personal">
+                  <span className="cap-chip" data-agent="personal">
+                    Personal
+                  </span>
+                  <p>
+                    {m.text}
+                    {m.streaming ? "▍" : ""}
+                  </p>
+                </div>
+              ) : (
+                <div key={m.id} className="msg system muted">
+                  <p>{m.text}</p>
+                </div>
+              ),
+            )}
+            <div ref={endRef} />
+          </div>
+          {composer}
+        </>
       )}
-
-      <form
-        className={`composer ${isBlank ? "centered" : ""}`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (canSend) send();
-        }}
-      >
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Escribe un mensaje…"
-          aria-label="Mensaje"
-          disabled={wsStatus !== "authenticated"}
-        />
-        <button type="submit" className="btn btn-primary" disabled={!canSend}>
-          Enviar
-        </button>
-      </form>
     </div>
   );
 }

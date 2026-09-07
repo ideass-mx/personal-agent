@@ -116,10 +116,64 @@ begin
     ExpandConstant('{#MyAppShutdownParams}'),
     ExpandConstant('{app}'),
     SW_HIDE,
-    ewNoWait,
+    ewWaitUntilTerminated,
     ResultCode
   );
-  Sleep(2000);
+  // Extra settle time if process already exiting / file handles releasing.
+  Sleep(3000);
+end;
+
+procedure PurgeProductSecrets(const Root: String);
+begin
+  // Explicit LLM paths first, then trees. Repeat after short delay for locks.
+  DeleteFile(Root + '\config\secrets.json');
+  DeleteFile(Root + '\credentials\anthropic.api_key');
+  DelTree(Root + '\credentials\llm', True, True, True);
+  DelTree(Root + '\credentials', True, True, True);
+  DelTree(Root + '\config', True, True, True);
+  DelTree(Root + '\device-identity', True, True, True);
+  DelTree(Root + '\runtime', True, True, True);
+  Sleep(500);
+  DeleteFile(Root + '\config\secrets.json');
+  DeleteFile(Root + '\credentials\anthropic.api_key');
+  DelTree(Root + '\credentials\llm', True, True, True);
+  DelTree(Root + '\credentials', True, True, True);
+  DelTree(Root + '\config', True, True, True);
+  DelTree(Root + '\device-identity', True, True, True);
+  DelTree(Root + '\runtime', True, True, True);
+end;
+
+function InitializeUninstall(): Boolean;
+var
+  LocalRoot: String;
+  RoamingRoot: String;
+begin
+  Result := True;
+  RequestHostShutdownForUninstall();
+
+  // ALWAYS: LLM API keys + install secrets (must not survive reinstall silently).
+  LocalRoot := ExpandConstant('{localappdata}\Ideass\PersonalAgent');
+  RoamingRoot := ExpandConstant('{userappdata}\Ideass\PersonalAgent');
+  PurgeProductSecrets(LocalRoot);
+  // Defense in depth: never used for LLM today, but clear if present.
+  if DirExists(RoamingRoot) then
+    PurgeProductSecrets(RoamingRoot);
+
+  if MsgBox('¿Eliminar también conversaciones y datos locales del agente (base de datos, logs, objetos)?' + #13#10 +
+            '(Las credenciales LLM e identidad de instalación ya se eliminaron.)' + #13#10 +
+            '(La carpeta de trabajo / workspace NUNCA se borra.)',
+            mbConfirmation, MB_YESNO) = IDYES then
+  begin
+    DelTree(LocalRoot + '\data', True, True, True);
+    DelTree(LocalRoot + '\logs', True, True, True);
+    DelTree(LocalRoot + '\objects', True, True, True);
+    if DirExists(RoamingRoot) then
+    begin
+      DelTree(RoamingRoot + '\data', True, True, True);
+      DelTree(RoamingRoot + '\logs', True, True, True);
+      DelTree(RoamingRoot + '\objects', True, True, True);
+    end;
+  end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -142,29 +196,3 @@ begin
   end;
 end;
 
-function InitializeUninstall(): Boolean;
-begin
-  Result := True;
-  RequestHostShutdownForUninstall();
-
-  // ALWAYS: LLM API keys + install secrets (must not survive reinstall silently).
-  // Inventory: config\secrets.json (anthropicApiKey), credentials\llm\*.api_key,
-  // credentials\anthropic.api_key (legacy), plus install credentials / device identity.
-  DeleteFile(ExpandConstant('{localappdata}\Ideass\PersonalAgent\config\secrets.json'));
-  DeleteFile(ExpandConstant('{localappdata}\Ideass\PersonalAgent\credentials\anthropic.api_key'));
-  DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\credentials\llm'), True, True, True);
-  DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\credentials'), True, True, True);
-  DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\config'), True, True, True);
-  DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\device-identity'), True, True, True);
-  DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\runtime'), True, True, True);
-
-  if MsgBox('¿Eliminar también conversaciones y datos locales del agente (base de datos, logs, objetos)?' + #13#10 +
-            '(Las credenciales LLM e identidad de instalación ya se eliminaron.)' + #13#10 +
-            '(La carpeta de trabajo / workspace NUNCA se borra.)',
-            mbConfirmation, MB_YESNO) = IDYES then
-  begin
-    DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\data'), True, True, True);
-    DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\logs'), True, True, True);
-    DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\objects'), True, True, True);
-  end;
-end;
