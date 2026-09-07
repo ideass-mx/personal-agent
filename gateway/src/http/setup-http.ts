@@ -49,13 +49,14 @@ export function mountSetupHttp(
     const record = getSetupState();
     const dto = toSetupStatusDto(record);
     const providerId = record.llmProvider || "anthropic";
-    if (hasProviderApiKeyConfigured(providerId) && !dto.llmConfigured) {
-      return c.json({
-        ...dto,
-        llmConfigured: true,
-      });
-    }
-    return c.json(dto);
+    // Reflect real credential files/env — uninstall may wipe keys while SQLite
+    // still says READY; UI must not treat onboarding as done without a key.
+    const keyOk = hasProviderApiKeyConfigured(providerId);
+    return c.json({
+      ...dto,
+      llmConfigured: keyOk,
+      onboardingCompleted: Boolean(dto.onboardingCompleted && keyOk),
+    });
   });
 
   app.get("/v1/setup/providers", (c) => {

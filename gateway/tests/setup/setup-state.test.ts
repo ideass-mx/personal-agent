@@ -243,6 +243,35 @@ describe("GET /v1/setup/status", () => {
     assert.equal(raw.toLowerCase().includes("sk-ant"), false);
   });
 
+  it("READY without real LLM key reports llmConfigured false (uninstall cleanup)", async () => {
+    replaceSetupStateForTests({
+      state: SetupStates.READY,
+      installationReady: true,
+      llmConfigured: true,
+      verified: true,
+      onboardingCompleted: true,
+      llmProvider: "anthropic",
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      updatedAt: new Date().toISOString(),
+    });
+    delete process.env.ANTHROPIC_API_KEY;
+    const app = new Hono();
+    mountSetupHttp(app, { hubToken: HUB });
+    const res = await app.request("/v1/setup/status", {
+      headers: { Authorization: `Bearer ${HUB}` },
+    });
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      llmConfigured: boolean;
+      onboardingCompleted: boolean;
+      state: string;
+    };
+    assert.equal(body.state, SetupStates.READY);
+    assert.equal(body.llmConfigured, false);
+    assert.equal(body.onboardingCompleted, false);
+  });
+
   it("POST transition advances and rejects illegal", async () => {
     replaceSetupStateForTests({
       state: SetupStates.AGENT_READY,

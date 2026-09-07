@@ -1,6 +1,5 @@
 import { HitlModal } from "./components/HitlModal";
 import { Shell } from "./components/Shell";
-import { AgentSpaceScreen } from "./features/agent/AgentSpaceScreen";
 import { AutomationsScreen } from "./features/automations/AutomationsScreen";
 import { ConversationScreen } from "./features/conversations/ConversationThreadScreen";
 import { ConversationsListScreen } from "./features/conversations/ConversationsListScreen";
@@ -48,7 +47,13 @@ function Routed() {
       try {
         const st = await fetchSetupStatus(base, session.token);
         if (!cancelled) {
-          setSetupDone(Boolean(st.onboardingCompleted || st.state === "READY"));
+          // llmConfigured refleja clave real (uninstall puede borrar el token).
+          setSetupDone(
+            Boolean(
+              st.llmConfigured &&
+                (st.onboardingCompleted || st.state === "READY"),
+            ),
+          );
         }
       } catch {
         if (!cancelled) setSetupDone(true);
@@ -90,7 +95,7 @@ function Routed() {
       <OnboardingWizard
         onCompleted={() => {
           setSetupDone(true);
-          setNav("agent");
+          setNav("conversation");
         }}
       />
     );
@@ -116,8 +121,6 @@ function Routed() {
   ) : (
     (() => {
       switch (nav) {
-        case "agent":
-          return <AgentSpaceScreen />;
         case "conversation":
           return <ConversationScreen />;
         case "conversations":
@@ -139,7 +142,7 @@ function Routed() {
             </div>
           );
         default:
-          return <AgentSpaceScreen />;
+          return <ConversationScreen />;
       }
     })()
   );

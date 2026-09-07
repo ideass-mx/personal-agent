@@ -90,7 +90,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<ConnectionConfig | null>(() =>
     loadSession(),
   );
-  const [nav, setNav] = useState<NavId>("agent");
+  const [nav, setNav] = useState<NavId>("conversation");
   const [settingsSection, setSettingsSection] =
     useState<SettingsSectionId>("profile");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -275,7 +275,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       socketRef.current = sock;
       sock.connect();
-      setNav("agent");
+      setNav("conversation");
     },
     [disconnect, handleServer],
   );

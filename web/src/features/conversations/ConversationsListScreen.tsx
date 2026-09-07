@@ -17,7 +17,7 @@ function conversationLabel(c: {
 
 /** Lista agregada de conversaciones (HTTP Gateway). */
 export function ConversationsListScreen() {
-  const { conversations, selectConversation, newConversation, setNav } = useApp();
+  const { conversations, selectConversation, newConversation } = useApp();
 
   return (
     <div className="screen" data-agent="personal">
@@ -34,9 +34,13 @@ export function ConversationsListScreen() {
       {conversations.length === 0 ? (
         <div className="placeholder-card fade-in">
           <strong>No hay conversaciones</strong>
-          <p className="muted">Crea una o escribe desde el espacio del agente.</p>
-          <button type="button" className="btn btn-primary" onClick={() => setNav("agent")}>
-            Ir al agente
+          <p className="muted">Crea una o escribe directamente al agente.</p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void newConversation()}
+          >
+            Empezar a hablar
           </button>
         </div>
       ) : (

@@ -69,7 +69,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <button
             type="button"
             className="brand"
-            onClick={() => setNav("agent")}
+            onClick={() => setNav("conversation")}
             title="Personal Agent"
           >
             <span className="brand-mark" aria-hidden />

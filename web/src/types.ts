@@ -1,6 +1,5 @@
 /** Navegación: sustantivos que el usuario posee (no capacidades). */
 export type NavId =
-  | "agent"
   | "conversation"
   | "conversations"
   | "projects"
