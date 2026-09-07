@@ -15,6 +15,11 @@ import { toLLMToolDescriptor } from "../tools/descriptor.ts";
 import { toProviderSafeToolName } from "../tools/provider-safe-name.ts";
 import type { AgentTool, ToolResult } from "../tools/types.ts";
 import {
+  evaluateToolSafety,
+  toolSafetyDeniedResult,
+  toolSafetyDiagnosticMetadata,
+} from "../tools/safety.ts";
+import {
   createDefaultAgentDefinition,
   type AgentDefinition,
 } from "./definition.ts";
@@ -53,6 +58,11 @@ export interface AgentTurnInput {
   /** Identidad opaca del turno (binding de confirmaciones). No es un objeto Session. */
   sessionId?: string;
   userMessage: string;
+  /**
+   * Frontera de identidad (PHASE 57.2). Opcional para tests legacy;
+   * producción WS siempre la resuelve.
+   */
+  userContext?: import("../identity/types.ts").UserContext;
   /**
    * Puerto de confirmación para tools con executionMode "confirm".
    * Si falta y una tool pide confirm → fail-closed (no ejecuta).
@@ -159,6 +169,9 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
             inputLength: input.userMessage.length,
             hasConversationId: Boolean(input.conversationId),
             hasDeviceId: Boolean(input.deviceId),
+            userId: input.userContext?.userId,
+            agentId: input.userContext?.agentId,
+            authKind: input.userContext?.authKind,
           },
         });
 
@@ -261,18 +274,35 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           const resultBlocks: LLMContentBlock[] = [];
           for (const call of toolCalls) {
             const tool = tools.get(call.name);
+            const evaluation = evaluateToolSafety({
+              toolName: call.name,
+              policy: agent.toolPolicy,
+              executionMode: tool?.executionMode,
+              userContext: input.userContext,
+            });
+            diagnostics?.record({
+              diagnosticId,
+              component: "AGENT_RUNTIME",
+              stage: "TOOL_SELECTION",
+              level:
+                evaluation.decision === "DENIED" ? "WARN" : "INFO",
+              event: "TOOL_POLICY_DECISION",
+              metadata: toolSafetyDiagnosticMetadata(evaluation, {
+                sessionId: input.userContext?.sessionId ?? input.sessionId,
+                deviceId: input.userContext?.deviceId ?? input.deviceId,
+                userId: input.userContext?.userId,
+                agentId: input.userContext?.agentId,
+              }),
+            });
+
             let result: ToolResult;
 
-            if (!tool) {
-              result = {
-                ok: false,
-                error: {
-                  code: "tool_not_found",
-                  message: `Herramienta no encontrada: ${call.name}`,
-                },
-              };
-            } else if (tool.executionMode === "confirm") {
-              if (!input.confirmation || !input.sessionId) {
+            if (evaluation.decision === "DENIED") {
+              result = toolSafetyDeniedResult(evaluation, Boolean(tool));
+            } else if (evaluation.decision === "CONFIRMATION_REQUIRED") {
+              if (!tool) {
+                result = toolSafetyDeniedResult(evaluation, false);
+              } else if (!input.confirmation || !input.sessionId) {
                 result = confirmationUnavailableResult();
               } else {
                 const confirmationId = `cf_${randomUUID()}`;
@@ -310,9 +340,15 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                     result = confirmationInconsistentResult();
                   } else {
                     const toolNow = tools.get(op.toolName);
+                    const recheck = evaluateToolSafety({
+                      toolName: op.toolName,
+                      policy: agent.toolPolicy,
+                      executionMode: toolNow?.executionMode,
+                      userContext: input.userContext,
+                    });
                     if (
                       !toolNow ||
-                      toolNow.executionMode !== "confirm" ||
+                      recheck.decision !== "CONFIRMATION_REQUIRED" ||
                       toolNow.name !== op.toolName
                     ) {
                       result = confirmationInconsistentResult();
@@ -328,12 +364,17 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                 }
               }
             } else {
-              result = await executeToolSafe(() =>
-                tool.execute(call.input, {
-                  conversationId,
-                  deviceId: input.deviceId,
-                }),
-              );
+              // ALLOWED
+              if (!tool) {
+                result = toolSafetyDeniedResult(evaluation, false);
+              } else {
+                result = await executeToolSafe(() =>
+                  tool.execute(call.input, {
+                    conversationId,
+                    deviceId: input.deviceId,
+                  }),
+                );
+              }
             }
 
             const mapped = toolResultForLlm(result);

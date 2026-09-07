@@ -3,6 +3,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { describe, it } from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  allowsProductAgentId,
+  allowsUserContextNodeIdField,
+} from "./product-agent-id-allowlist.ts";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -57,7 +61,10 @@ describe("PHASE 17 Active Workspace (documental)", () => {
         const text = readFileSync(file, "utf8");
         assert.doesNotMatch(text, FORBIDDEN, file);
         const rel = path.relative(repoRoot, file).replace(/\\/g, "/");
-        if (rel.endsWith("config.ts") || rel.includes("/pairing/") || rel.includes("pairing-http") || rel.includes("agents/registry") || rel.includes("agents/manager") || rel.includes("agents/definition") || rel.includes("http/server.ts")) {
+        if (allowsProductAgentId(rel)) {
+          if (!allowsUserContextNodeIdField(rel)) {
+            assert.doesNotMatch(text, /\bnodeId\b/, file);
+          }
           continue;
         }
         assert.doesNotMatch(text, /\bagentId\b/, file);
@@ -72,7 +79,12 @@ describe("PHASE 17 Active Workspace (documental)", () => {
     assert.doesNotMatch(readFileSync(PROTO, "utf8"), /workspaceId/);
     const schema = readFileSync(SCHEMA, "utf8");
     assert.doesNotMatch(schema, /active_workspace/);
-    assert.doesNotMatch(schema, /CREATE TABLE users/i);
+    // User local (PHASE 57.2) vive en migraciones, no como Active Workspace.
+    const identityMig = readFileSync(
+      path.join(repoRoot, "db/migrations/009_identity_foundation.sql"),
+      "utf8",
+    );
+    assert.match(identityMig, /CREATE TABLE users/);
     assert.equal(existsSync(PHASE17), true);
   });
 });

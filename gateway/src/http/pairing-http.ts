@@ -1,9 +1,9 @@
 /**
- * HTTP control plane for Desktop pairing (Bearer = install credential / HUB_TOKEN).
- * Does not expose pairing secrets after create except the one-time create response.
+ * HTTP pairing for Desktop host (Bearer install credential).
+ * AuthZ: owner of PersonalAgent + install_compat host transport.
+ * Device revoke cascades AuthSessions + WS kill (PHASE 57.4).
  */
 import type { Context, Hono } from "hono";
-import { timingSafeEqual } from "node:crypto";
 import QRCode from "qrcode";
 import {
   approvePairingSession,
@@ -13,23 +13,11 @@ import {
   listAwaitingConfirmation,
   listTrustedDevices,
   rejectPairingSession,
-  revokeTrustedDevice,
 } from "../pairing/store.ts";
+import { revokeTrustedDevice } from "../identity/device-revoke.ts";
 import { takePairingWaiter } from "../pairing/waiters.ts";
 import type { ServerMessage } from "../../../packages/protocol/messages.ts";
-
-function tokenMatches(candidate: string, expected: string): boolean {
-  const a = Buffer.from(candidate);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-function bearer(c: Context): string | null {
-  const header = c.req.header("Authorization");
-  if (!header) return null;
-  const m = /^Bearer\s+(\S+)$/i.exec(header.trim());
-  return m?.[1] ?? null;
-}
+import { requireOwnerHost } from "./owner-auth.ts";
 
 function sendWs(
   ws: { readyState: number; OPEN: number; send: (s: string) => void },
@@ -46,17 +34,11 @@ export function mountPairingHttp(
     getPreferredWsEndpoint: () => string;
   },
 ): void {
-  const requireInstall = (c: Context) => {
-    const t = bearer(c);
-    if (!t || !tokenMatches(t, deps.hubToken)) {
-      return c.json({ ok: false, error: "unauthorized" }, 401);
-    }
-    return null;
-  };
+  const requireHost = (c: Context) => requireOwnerHost(c, deps.hubToken);
 
   app.post("/v1/pairing/sessions", async (c) => {
-    const denied = requireInstall(c);
-    if (denied) return denied;
+    const gated = requireHost(c);
+    if (gated instanceof Response) return gated;
     const agentId = deps.getAgentId();
     if (!agentId) {
       return c.json({ ok: false, error: "agent_id_missing" }, 400);
@@ -92,8 +74,8 @@ export function mountPairingHttp(
   });
 
   app.get("/v1/pairing/sessions/:id", (c) => {
-    const denied = requireInstall(c);
-    if (denied) return denied;
+    const gated = requireHost(c);
+    if (gated instanceof Response) return gated;
     const row = getPairingSession(c.req.param("id"));
     if (!row) return c.json({ ok: false, error: "not_found" }, 404);
     return c.json({
@@ -108,14 +90,14 @@ export function mountPairingHttp(
   });
 
   app.get("/v1/pairing/pending", (c) => {
-    const denied = requireInstall(c);
-    if (denied) return denied;
+    const gated = requireHost(c);
+    if (gated instanceof Response) return gated;
     return c.json({ ok: true, pending: listAwaitingConfirmation() });
   });
 
   app.post("/v1/pairing/sessions/:id/approve", (c) => {
-    const denied = requireInstall(c);
-    if (denied) return denied;
+    const gated = requireHost(c);
+    if (gated instanceof Response) return gated;
     const id = c.req.param("id");
     const result = approvePairingSession(id);
     if (!result.ok) {
@@ -140,8 +122,8 @@ export function mountPairingHttp(
   });
 
   app.post("/v1/pairing/sessions/:id/reject", (c) => {
-    const denied = requireInstall(c);
-    if (denied) return denied;
+    const gated = requireHost(c);
+    if (gated instanceof Response) return gated;
     const id = c.req.param("id");
     const result = rejectPairingSession(id);
     if (!result.ok) return c.json(result, 400);
@@ -162,8 +144,8 @@ export function mountPairingHttp(
   });
 
   app.get("/v1/pairing/trusted-devices", (c) => {
-    const denied = requireInstall(c);
-    if (denied) return denied;
+    const gated = requireHost(c);
+    if (gated instanceof Response) return gated;
     return c.json({
       ok: true,
       devices: listTrustedDevices().map((d) => ({
@@ -179,18 +161,29 @@ export function mountPairingHttp(
   });
 
   app.post("/v1/pairing/trusted-devices/:deviceId/revoke", (c) => {
-    const denied = requireInstall(c);
-    if (denied) return denied;
+    const gated = requireHost(c);
+    if (gated instanceof Response) return gated;
     const deviceId = c.req.param("deviceId");
-    const result = revokeTrustedDevice(deviceId);
+    const result = revokeTrustedDevice(
+      deviceId,
+      gated.principal.userContext,
+    );
     if (!result.ok) {
-      return c.json(result, result.code === "not_found" ? 404 : 400);
+      const status =
+        result.code === "not_found"
+          ? 404
+          : result.code === "owner_mismatch" || result.code === "agent_not_found"
+            ? 403
+            : 400;
+      return c.json(result, status);
     }
     return c.json({
       ok: true,
       deviceId,
       status: result.status,
       alreadyRevoked: result.alreadyRevoked,
+      sessionsRevoked: result.sessionsRevoked.length,
+      connectionsKilled: result.connectionsKilled,
     });
   });
 }

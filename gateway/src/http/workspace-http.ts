@@ -1,8 +1,8 @@
 /**
  * API HTTP de Workspace (Gateway). No es el protocolo WS.
  * El Agent Runtime no importa este módulo.
+ * PHASE 57.7: auth via authenticateHttpRequest (install_compat local-only).
  */
-import { timingSafeEqual } from "node:crypto";
 import type { Context, Hono } from "hono";
 import {
   createConversation,
@@ -14,6 +14,11 @@ import { listConversationMessages } from "../memory/history.ts";
 import { resolveWorkspaceForConversation } from "../memory/resolve-workspace-for-conversation.ts";
 import type { WorkspaceSqlDb } from "../workspace/sqlite-workspace-store.ts";
 import type { WorkspaceStore } from "../workspace/types.ts";
+import {
+  authenticateHttpRequest,
+  httpErrorBody,
+} from "./bearer-auth.ts";
+import { assertAgentOwner } from "../identity/owner.ts";
 
 export type WorkspaceHttpDeps = {
   workspaces: WorkspaceStore;
@@ -21,26 +26,18 @@ export type WorkspaceHttpDeps = {
   sql?: WorkspaceSqlDb;
 };
 
-function tokenMatches(candidate: string, expected: string): boolean {
-  const a = Buffer.from(candidate);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
-function bearerToken(header: string | undefined): string | undefined {
-  if (!header) return undefined;
-  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
-  return match?.[1];
-}
-
 function errorBody(code: string, message: string): { error: { code: string; message: string } } {
-  return { error: { code, message } };
+  return httpErrorBody(code, message);
 }
 
 function requireAuth(c: Context, hubToken: string): Response | undefined {
-  const token = bearerToken(c.req.header("Authorization"));
-  if (!token || !tokenMatches(token, hubToken)) {
+  const principal = authenticateHttpRequest(c, hubToken);
+  if (!principal) {
     return c.json(errorBody("unauthorized", "Token inválido o ausente."), 401);
+  }
+  const ownership = assertAgentOwner(principal.userContext);
+  if (!ownership.ok) {
+    return c.json(errorBody(ownership.code, ownership.message), 403);
   }
   return undefined;
 }

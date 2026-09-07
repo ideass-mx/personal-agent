@@ -3,6 +3,7 @@ import { SegmentedControl, Toggle } from "../../components/controls";
 import { MVP_CAPABILITIES } from "../../lib/capabilities";
 import { useApp } from "../../state/AppContext";
 import type { SettingsSectionId } from "../../types";
+import { TrustedDevicesPanel } from "./TrustedDevicesPanel";
 
 type NavItem =
   | { kind: "item"; id: SettingsSectionId; label: string }
@@ -241,18 +242,19 @@ export function SettingsScreen() {
               </span>
             </div>
             <div className="settings-row">
-              <strong>Dispositivos (health)</strong>
-              <span className="muted">
-                {health?.devices?.length ? health.devices.join(", ") : "Ninguno"}
-              </span>
-            </div>
-            <div className="settings-row">
               <strong>Host</strong>
               <span className="muted mono">{session?.httpBase || "(same origin)"}</span>
             </div>
-            <p className="muted" style={{ fontSize: 13 }}>
-              Emparejamiento de teléfono y servicios externos se gestionan en setup / host
-              desktop — sin inventar APIs aquí.
+
+            <TrustedDevicesPanel
+              httpBase={session?.httpBase || ""}
+              token={session?.token || ""}
+              currentDeviceId={session?.deviceId}
+            />
+
+            <p className="muted" style={{ fontSize: 13, marginTop: 16 }}>
+              El emparejamiento de un teléfono nuevo se inicia desde el host
+              (Desktop). Revocar un dispositivo cierra sus sesiones de inmediato.
             </p>
           </Section>
         ) : null}

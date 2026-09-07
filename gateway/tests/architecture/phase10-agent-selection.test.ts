@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { describe, it } from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { allowsProductAgentId } from "./product-agent-id-allowlist.ts";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -52,16 +53,8 @@ describe("PHASE 10 Agent selection (documental)", () => {
         const text = readFileSync(file, "utf8");
         assert.doesNotMatch(text, FORBIDDEN, file);
         const rel = path.relative(repoRoot, file).replace(/\\/g, "/");
-        // agentId = identidad canónica del producto (PHASE 51b/53), no selector multi-agent.
-        if (
-          rel.endsWith("config.ts") ||
-          rel.endsWith("http/server.ts") ||
-          rel.includes("/pairing/") ||
-          rel.includes("pairing-http") ||
-          rel.includes("agents/definition") ||
-          rel.includes("agents/registry") ||
-          rel.includes("agents/manager")
-        ) {
+        // agentId = identidad canónica del producto (PHASE 51b/53/57.2), no selector multi-agent.
+        if (allowsProductAgentId(rel)) {
           continue;
         }
         assert.doesNotMatch(text, /\bagentId\b/, file);

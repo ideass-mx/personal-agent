@@ -4,6 +4,9 @@
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { db } from "../db/database.ts";
+import { ensureLocalIdentity } from "../identity/ensure-local.ts";
+import { setTrustedDeviceOwnership } from "../identity/store.ts";
+import { isLikelyEd25519SpkiBase64 } from "../../../packages/device-crypto/index.ts";
 
 export const PAIRING_TTL_MS = 5 * 60 * 1000;
 
@@ -66,12 +69,15 @@ export function getPairingSession(id: string): {
   deviceId: string | null;
   deviceName: string | null;
   platform: string | null;
+  publicKey: string | null;
+  keyAlgorithm: string | null;
 } | null {
   expireOverdue();
   const row = db
     .prepare(
       `SELECT id, status, expires_at AS expiresAt, device_id AS deviceId,
-              device_name AS deviceName, platform
+              device_name AS deviceName, platform,
+              public_key AS publicKey, key_algorithm AS keyAlgorithm
        FROM pairing_sessions WHERE id = ?`,
     )
     .get(id) as
@@ -82,6 +88,8 @@ export function getPairingSession(id: string): {
         deviceId: string | null;
         deviceName: string | null;
         platform: string | null;
+        publicKey: string | null;
+        keyAlgorithm: string | null;
       }
     | undefined;
   return row ?? null;
@@ -94,6 +102,9 @@ export function acceptPairingRequest(input: {
   deviceId: string;
   deviceName?: string;
   platform?: string;
+  /** SPKI base64; private key never sent (PHASE 57.8). */
+  publicKey?: string;
+  keyAlgorithm?: string;
 }):
   | { ok: true }
   | {
@@ -180,17 +191,42 @@ export function acceptPairingRequest(input: {
   }
 
   // Atomic: only the first PENDING ? AWAITING wins.
+  const publicKey = input.publicKey?.trim() || null;
+  const keyAlgorithm =
+    publicKey && (input.keyAlgorithm === "Ed25519" || !input.keyAlgorithm)
+      ? "Ed25519"
+      : null;
+  if (publicKey) {
+    if (keyAlgorithm !== "Ed25519") {
+      return {
+        ok: false,
+        code: "pairing_invalid",
+        message: "keyAlgorithm debe ser Ed25519.",
+      };
+    }
+    if (!isLikelyEd25519SpkiBase64(publicKey)) {
+      return {
+        ok: false,
+        code: "pairing_invalid",
+        message: "publicKey Ed25519 inválida.",
+      };
+    }
+  }
+
   const updated = db
     .prepare(
       `UPDATE pairing_sessions
        SET status = 'AWAITING_CONFIRMATION',
-           device_id = ?, device_name = ?, platform = ?
+           device_id = ?, device_name = ?, platform = ?,
+           public_key = ?, key_algorithm = ?
        WHERE id = ? AND status = 'PENDING'`,
     )
     .run(
       input.deviceId,
       input.deviceName ?? null,
       input.platform ?? null,
+      publicKey,
+      keyAlgorithm,
       row.id,
     );
 
@@ -284,6 +320,27 @@ export function approvePairingSession(id: string):
   const deviceId = row.deviceId;
   const deviceName = row.deviceName;
   const platform = row.platform;
+  const publicKey = row.publicKey;
+  const keyAlgorithm = row.keyAlgorithm;
+  const identity = ensureLocalIdentity();
+  const identityStatus =
+    publicKey && keyAlgorithm === "Ed25519" ? "crypto_enrolled" : "legacy";
+
+  if (publicKey) {
+    const taken = db
+      .prepare(
+        `SELECT device_id FROM trusted_devices
+         WHERE public_key = ? AND status = 'ACTIVE' AND device_id != ?`,
+      )
+      .get(publicKey, deviceId) as { device_id: string } | undefined;
+    if (taken) {
+      return {
+        ok: false,
+        code: "public_key_conflict",
+        message: "La clave pública ya pertenece a otro dispositivo activo.",
+      };
+    }
+  }
 
   let approved = false;
   const tx = db.transaction(() => {
@@ -299,20 +356,31 @@ export function approvePairingSession(id: string):
     }
     db.prepare(
       `INSERT INTO trusted_devices
-         (device_id, name, platform, paired_at, last_seen, permissions, status, credential_hash)
-       VALUES (?, ?, ?, datetime('now'), datetime('now'), ?, 'ACTIVE', ?)
+         (device_id, name, platform, paired_at, last_seen, permissions, status,
+          credential_hash, user_id, agent_id, public_key, key_algorithm, identity_status)
+       VALUES (?, ?, ?, datetime('now'), datetime('now'), ?, 'ACTIVE', ?, ?, ?, ?, ?, ?)
        ON CONFLICT(device_id) DO UPDATE SET
          name = excluded.name,
          platform = COALESCE(excluded.platform, platform),
          last_seen = datetime('now'),
          status = 'ACTIVE',
-         credential_hash = excluded.credential_hash`,
+         credential_hash = excluded.credential_hash,
+         user_id = excluded.user_id,
+         agent_id = excluded.agent_id,
+         public_key = excluded.public_key,
+         key_algorithm = excluded.key_algorithm,
+         identity_status = excluded.identity_status`,
     ).run(
       deviceId,
       deviceName,
       platform,
       JSON.stringify(["agent.connect"]),
       credentialHash,
+      identity.user.id,
+      identity.agent.id,
+      publicKey,
+      keyAlgorithm,
+      identityStatus,
     );
     approved = true;
   });
@@ -325,6 +393,11 @@ export function approvePairingSession(id: string):
       message: "La sesion ya fue aprobada.",
     };
   }
+
+  setTrustedDeviceOwnership(deviceId, {
+    userId: identity.user.id,
+    agentId: identity.agent.id,
+  });
 
   return {
     ok: true,
@@ -401,10 +474,32 @@ export function revokeTrustedDevice(deviceId: string):
     `UPDATE trusted_devices
      SET status = 'REVOKED',
          credential_hash = '',
+         public_key = NULL,
+         key_algorithm = NULL,
+         identity_status = 'legacy',
          last_seen = datetime('now')
      WHERE device_id = ? AND status = 'ACTIVE'`,
   ).run(deviceId);
   return { ok: true, status: "REVOKED", alreadyRevoked: false };
+}
+
+/** Ownership columns on trusted_devices (PHASE 57.2); null if unknown device. */
+export function getTrustedDeviceOwnership(
+  deviceId: string,
+): { userId: string | null; agentId: string | null; status: TrustedDeviceStatus } | null {
+  const row = db
+    .prepare(
+      `SELECT user_id AS userId, agent_id AS agentId, status
+       FROM trusted_devices WHERE device_id = ?`,
+    )
+    .get(deviceId) as
+    | {
+        userId: string | null;
+        agentId: string | null;
+        status: TrustedDeviceStatus;
+      }
+    | undefined;
+  return row ?? null;
 }
 
 export function touchTrustedDevice(deviceId: string): void {
@@ -424,23 +519,42 @@ export function listTrustedDevices(): Array<{
   lastSeen: string | null;
   permissions: string;
   status: TrustedDeviceStatus;
+  identityStatus: "legacy" | "crypto_enrolled";
+  hasPublicKey: boolean;
 }> {
-  return db
-    .prepare(
-      `SELECT device_id AS deviceId, name, platform,
-              paired_at AS pairedAt, last_seen AS lastSeen,
-              permissions, status
-       FROM trusted_devices ORDER BY paired_at DESC`,
-    )
-    .all() as Array<{
-    deviceId: string;
-    name: string | null;
-    platform: string | null;
-    pairedAt: string;
-    lastSeen: string | null;
-    permissions: string;
-    status: TrustedDeviceStatus;
-  }>;
+  return (
+    db
+      .prepare(
+        `SELECT device_id AS deviceId, name, platform,
+                paired_at AS pairedAt, last_seen AS lastSeen,
+                permissions, status,
+                identity_status AS identityStatus,
+                CASE WHEN public_key IS NOT NULL THEN 1 ELSE 0 END AS hasPublicKey
+         FROM trusted_devices ORDER BY paired_at DESC`,
+      )
+      .all() as Array<{
+      deviceId: string;
+      name: string | null;
+      platform: string | null;
+      pairedAt: string;
+      lastSeen: string | null;
+      permissions: string;
+      status: TrustedDeviceStatus;
+      identityStatus: string;
+      hasPublicKey: number;
+    }>
+  ).map((d) => ({
+    deviceId: d.deviceId,
+    name: d.name,
+    platform: d.platform,
+    pairedAt: d.pairedAt,
+    lastSeen: d.lastSeen,
+    permissions: d.permissions,
+    status: d.status,
+    identityStatus:
+      d.identityStatus === "crypto_enrolled" ? "crypto_enrolled" : "legacy",
+    hasPublicKey: d.hasPublicKey === 1,
+  }));
 }
 
 export function buildPairingUri(input: {

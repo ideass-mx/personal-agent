@@ -13,6 +13,9 @@ process.env.PERSONAL_AGENT_OBJECTS_DIR = path.join(tmp, "objects");
 process.env.PERSONAL_AGENT_ID = "77777777-7777-4777-8777-777777777777";
 fs.mkdirSync(path.join(tmp, "data"), { recursive: true });
 
+const { runMigrations } = await import("../../src/db/database.ts");
+runMigrations();
+
 const { createSqliteDiagnosticsStore } = await import(
   "../../src/diagnostics/store.ts"
 );

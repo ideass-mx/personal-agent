@@ -52,4 +52,26 @@ class Ed25519DeviceCryptoTest {
         assertEquals(a.publicKeyRawBase64, b.publicKeyRawBase64)
         assertEquals(a.privateKeyPkcs8Base64, b.privateKeyPkcs8Base64)
     }
+
+    @Test
+    fun keyPairMatches_trueForGenerated_falseWhenPrivateSwapped() {
+        val a = Ed25519DeviceCrypto.generate()
+        val b = Ed25519DeviceCrypto.generate()
+        assertTrue(Ed25519DeviceCrypto.keyPairMatches(a))
+        val swapped = a.copy(privateKeyPkcs8Base64 = b.privateKeyPkcs8Base64)
+        assertFalse(Ed25519DeviceCrypto.keyPairMatches(swapped))
+    }
+
+    @Test
+    fun publicKeySpkiBase64_hasEd25519OidPrefix() {
+        val identity = Ed25519DeviceCrypto.generate()
+        val spki = java.util.Base64.getDecoder().decode(
+            Ed25519DeviceCrypto.publicKeySpkiBase64(identity),
+        )
+        assertEquals(44, spki.size)
+        val prefix = byteArrayOf(
+            0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+        )
+        assertTrue(spki.copyOfRange(0, 12).contentEquals(prefix))
+    }
 }

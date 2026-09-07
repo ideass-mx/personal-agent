@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Auto Backup (API < 31): mismas exclusiones que data_extraction_rules. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="gateway_device_identity.xml" />
+    <exclude domain="sharedpref" path="gateway_device_tokens.xml" />
+</full-backup-content>

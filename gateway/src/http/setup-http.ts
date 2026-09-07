@@ -3,10 +3,8 @@
  * No secrets in responses. Source of truth: setup_state SQLite.
  */
 import type { Context, Hono } from "hono";
-import {
-  authenticateHttpRequest,
-  httpErrorBody,
-} from "./bearer-auth.ts";
+import { httpErrorBody } from "./bearer-auth.ts";
+import { requireOwnerHost } from "./owner-auth.ts";
 import {
   getSetupState,
   transitionSetupState,
@@ -38,16 +36,15 @@ export function mountSetupHttp(
   },
 ): void {
   const runVerify = deps.verifyLlm ?? verifyProviderConnectivity;
-  const requireInstall = (c: Context) => {
-    const principal = authenticateHttpRequest(c, deps.hubToken);
-    if (!principal || principal.kind !== "install") {
-      return c.json(httpErrorBody("unauthorized", "No autorizado"), 401);
-    }
+  /** Owner + host install transport (install_compat). Not install≡owner. */
+  const requireHost = (c: Context) => {
+    const gated = requireOwnerHost(c, deps.hubToken);
+    if (gated instanceof Response) return gated;
     return null;
   };
 
   app.get("/v1/setup/status", (c) => {
-    const denied = requireInstall(c);
+    const denied = requireHost(c);
     if (denied) return denied;
     const record = getSetupState();
     const dto = toSetupStatusDto(record);
@@ -62,13 +59,13 @@ export function mountSetupHttp(
   });
 
   app.get("/v1/setup/providers", (c) => {
-    const denied = requireInstall(c);
+    const denied = requireHost(c);
     if (denied) return denied;
     return c.json({ ok: true, providers: listProviders() });
   });
 
   app.post("/v1/setup/transition", async (c) => {
-    const denied = requireInstall(c);
+    const denied = requireHost(c);
     if (denied) return denied;
     const body = (await c.req.json().catch(() => ({}))) as {
       state?: string;
@@ -103,7 +100,7 @@ export function mountSetupHttp(
    * Nunca devuelve la clave.
    */
   app.post("/v1/setup/llm", async (c) => {
-    const denied = requireInstall(c);
+    const denied = requireHost(c);
     if (denied) return denied;
     const body = (await c.req.json().catch(() => ({}))) as {
       provider?: string;
@@ -190,7 +187,7 @@ export function mountSetupHttp(
    * Prueba real vía LLMProvider (mismo contrato que AgentRuntime).
    */
   app.post("/v1/setup/verify", async (c) => {
-    const denied = requireInstall(c);
+    const denied = requireHost(c);
     if (denied) return denied;
     const record0 = getSetupState();
     const providerId = record0.llmProvider || "anthropic";

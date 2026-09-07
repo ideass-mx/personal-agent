@@ -87,7 +87,8 @@ test("host mode opens external browser instead of embedding web app", () => {
   assert.match(src, /classifyBrowserOpenError/);
   assert.match(src, /showHostSplashMessage/);
   const bootIdx = src.indexOf("async function bootHostMode");
-  const bootSlice = src.slice(bootIdx, bootIdx + 2600);
+  // Include PHASE 57.10 host device enrollment before browser/tray boot steps.
+  const bootSlice = src.slice(bootIdx, bootIdx + 4000);
   assert.doesNotMatch(bootSlice, /loadURL\(url\)/);
   assert.match(bootSlice, /ensureAutomaticBrowserLaunch/);
   assert.doesNotMatch(bootSlice, /createWindow\(\{\s*hostUi:\s*true/);
@@ -119,7 +120,8 @@ test("host happy path delays tray until boot completes", () => {
   const readySlice = src.slice(readyIdx, readyIdx + 900);
   assert.doesNotMatch(readySlice, /createTray\(\)\s*;\s*\n\s*const legacyOnboarding/);
   const bootIdx = src.indexOf("async function bootHostMode");
-  const bootSlice = src.slice(bootIdx, bootIdx + 2600);
+  // Include PHASE 57.10 host device enrollment before tray creation.
+  const bootSlice = src.slice(bootIdx, bootIdx + 4000);
   assert.match(bootSlice, /ensureTray\(\)/);
 });
 

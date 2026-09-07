@@ -49,6 +49,9 @@ const {
   hasPersistedPairingAuth,
 } = require("./lib/agent-identity.cjs");
 const {
+  ensureHostDeviceEnrollment,
+} = require("./lib/device-identity.cjs");
+const {
   ensurePairingCredentials,
   preserveExistingPairing,
   getPairingStatus,
@@ -60,6 +63,7 @@ const {
   requestBrowserLaunchUrl,
   classifyBrowserOpenError,
 } = require("./lib/host-boot.cjs");
+const { resolveGatewayLaunch } = require("./lib/agent-process.cjs");
 
 /** true when product UX is Web (default). Legacy Electron onboarding only if env flag. */
 const SHUTDOWN_HOST_ARG = "--shutdown-host";
@@ -671,6 +675,45 @@ async function bootHostMode(reason = "automatic_start") {
         details: "El agente no respondió al health check a tiempo.",
       });
       return { ok: false, error: "health_timeout" };
+    }
+
+    // PHASE 57.10: host DeviceKeyStore + Gateway trusted device (idempotent).
+    try {
+      const launch = resolveGatewayLaunch(productRoot);
+      const deviceEnroll = await ensureHostDeviceEnrollment({
+        productRoot,
+        port,
+        hubToken: config.getHubToken(),
+        nodeCmd: launch.nodeCmd || "node",
+        log: logOnboarding,
+      });
+      if (!deviceEnroll.ok) {
+        logOnboarding("HOST", "device_identity_failed", {
+          error: deviceEnroll.error,
+          startupId: hostStartupId,
+          reason,
+        });
+        await showHostSplashMessage({
+          title: "Personal Agent",
+          message:
+            deviceEnroll.userMessage ||
+            "No pudimos preparar este dispositivo. Inténtalo de nuevo.",
+          details: "La identidad de este equipo no pudo inicializarse.",
+        });
+        return { ok: false, error: deviceEnroll.error || "device_identity_failed" };
+      }
+    } catch {
+      logOnboarding("HOST", "device_identity_failed", {
+        error: "device_identity_exception",
+        startupId: hostStartupId,
+        reason,
+      });
+      await showHostSplashMessage({
+        title: "Personal Agent",
+        message: "No pudimos preparar este dispositivo. Inténtalo de nuevo.",
+        details: "La identidad de este equipo no pudo inicializarse.",
+      });
+      return { ok: false, error: "device_identity_failed" };
     }
 
     lastNetworkReady = true; // localhost product path; remote Tailscale is optional later

@@ -35,9 +35,12 @@ describe("PHASE 33 security & product isolation (audit)", () => {
     assert.doesNotMatch(server, /\/health[\s\S]{0,200}requireAuth|Bearer/);
 
     const http = read("gateway/src/http/workspace-http.ts");
-    assert.match(http, /requireAuth/);
+    assert.match(http, /requireAuth|authenticateHttpRequest/);
     assert.match(http, /\/conversations\/:id\/messages/);
-    assert.match(http, /timingSafeEqual/);
+    // Timing-safe compare lives in bearer-auth (shared); workspace uses authenticateHttpRequest.
+    const bearer = read("gateway/src/http/bearer-auth.ts");
+    assert.match(bearer, /timingSafeEqual/);
+    assert.match(bearer, /authenticateHttpRequest/);
   });
 
   it("WS: auth primero; token timing-safe; no mensajes pre-auth", () => {

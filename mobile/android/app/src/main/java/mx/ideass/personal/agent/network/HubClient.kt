@@ -1,8 +1,13 @@
 package mx.ideass.personal.agent.network
 
+import android.content.Context
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import mx.ideass.personal.agent.app.AppPreferences
 import mx.ideass.personal.agent.app.HubConfig
+import mx.ideass.personal.agent.gateway.auth.DeviceIdentityStore
+import mx.ideass.personal.agent.gateway.auth.Ed25519DeviceCrypto
+import mx.ideass.personal.agent.gateway.auth.KeystoreEncryptedStringStore
 import mx.ideass.personal.agent.protocol.ClientMessage
 import mx.ideass.personal.agent.protocol.ProtocolJson
 import mx.ideass.personal.agent.protocol.ServerMessage
@@ -47,7 +52,11 @@ import kotlin.math.pow
 @Singleton
 class HubClient @Inject constructor(
     private val preferences: AppPreferences,
+    @ApplicationContext private val appContext: Context,
 ) {
+    private val identityStore = DeviceIdentityStore(
+        KeystoreEncryptedStringStore(appContext, DeviceIdentityStore.PREFS_NAME),
+    )
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val client = OkHttpClient.Builder()
         .pingInterval(30, TimeUnit.SECONDS)
@@ -134,7 +143,15 @@ class HubClient @Inject constructor(
         pairingSecret: String,
         deviceName: String,
     ): Result<String> {
-        val deviceId = preferences.getOrCreateDeviceId()
+        val identity = try {
+            identityStore.loadOrCreate()
+        } catch (e: Exception) {
+            Log.e(TAG, "device_identity_unavailable", e)
+            return Result.failure(Exception("No pudimos preparar este dispositivo. Inténtalo de nuevo."))
+        }
+        preferences.setDeviceId(identity.deviceId)
+        val publicKey = Ed25519DeviceCrypto.publicKeySpkiBase64(identity)
+        val deviceId = identity.deviceId
         return suspendCancellableCoroutine { cont ->
             val settled = AtomicBoolean(false)
             fun settle(result: Result<String>) {
@@ -156,6 +173,8 @@ class HubClient @Inject constructor(
                             deviceId = deviceId,
                             deviceName = deviceName.trim().ifBlank { null },
                             platform = "android",
+                            publicKey = publicKey,
+                            keyAlgorithm = "Ed25519",
                         )
                         webSocket.send(ProtocolJson.encodeToString(ClientMessage.serializer(), req))
                     }

@@ -1,9 +1,11 @@
 import type { Context, Hono } from "hono";
 import { config } from "../config.ts";
+import { httpErrorBody } from "./bearer-auth.ts";
+import { requireOwnerHost } from "./owner-auth.ts";
 import {
-  authenticateHttpRequest,
-  httpErrorBody,
-} from "./bearer-auth.ts";
+  isLoopbackHostHeader,
+  isLoopbackRequest,
+} from "./remote-access.ts";
 import {
   browserBootstrapHtml,
   browserSessionSetCookie,
@@ -11,27 +13,13 @@ import {
   createBrowserLaunchSession,
 } from "./browser-session.ts";
 
-function isLoopbackHost(c: Context): boolean {
-  const host = c.req.header("host")?.toLowerCase() || "";
-  return (
-    host.startsWith("127.0.0.1:") ||
-    host.startsWith("localhost:") ||
-    host === "127.0.0.1" ||
-    host === "localhost" ||
-    host.startsWith("[::1]:") ||
-    host === "[::1]"
-  );
-}
-
 export function mountBrowserBootstrapHttp(
   app: Hono,
   deps: { hubToken: string },
 ): void {
   app.post("/v1/host/browser-sessions", async (c) => {
-    const principal = authenticateHttpRequest(c, deps.hubToken);
-    if (!principal || principal.kind !== "install") {
-      return c.json(httpErrorBody("unauthorized", "No autorizado"), 401);
-    }
+    const gated = requireOwnerHost(c, deps.hubToken);
+    if (gated instanceof Response) return gated;
     const body = (await c.req.json().catch(() => ({}))) as {
       deviceId?: string;
       deviceName?: string;
@@ -50,7 +38,8 @@ export function mountBrowserBootstrapHttp(
   });
 
   app.get("/v1/host/browser-sessions/:id", (c) => {
-    if (!isLoopbackHost(c)) {
+    // OWNER_LOCAL activate: Host header + peer address (when remote bind).
+    if (!isLoopbackHostHeader(c.req.header("host")) || !isLoopbackRequest(c)) {
       return c.json(
         httpErrorBody("localhost_only", "Solo disponible desde este equipo."),
         403,
@@ -73,4 +62,3 @@ export function mountBrowserBootstrapHttp(
     );
   });
 }
-

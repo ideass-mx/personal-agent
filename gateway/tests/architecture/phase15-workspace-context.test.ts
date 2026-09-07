@@ -3,6 +3,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { describe, it } from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  allowsProductAgentId,
+  allowsUserContextNodeIdField,
+} from "./product-agent-id-allowlist.ts";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -57,7 +61,10 @@ describe("PHASE 15 Workspace context (documental)", () => {
         const text = readFileSync(file, "utf8");
         assert.doesNotMatch(text, FORBIDDEN, file);
         const rel = path.relative(repoRoot, file).replace(/\\/g, "/");
-        if (rel.endsWith("config.ts") || rel.includes("/pairing/") || rel.includes("pairing-http") || rel.includes("agents/registry") || rel.includes("agents/manager") || rel.includes("agents/definition") || rel.includes("http/server.ts")) {
+        if (allowsProductAgentId(rel)) {
+          if (!allowsUserContextNodeIdField(rel)) {
+            assert.doesNotMatch(text, /\bnodeId\b/, file);
+          }
           continue;
         }
         assert.doesNotMatch(text, /\bagentId\b/, file);

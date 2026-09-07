@@ -209,6 +209,15 @@ class AppPreferences @Inject constructor(
         return created
     }
 
+    /** Align preferences with cryptographic Device identity (PHASE 57.10). */
+    suspend fun setDeviceId(deviceId: String) {
+        val trimmed = deviceId.trim()
+        require(trimmed.isNotEmpty()) { "deviceId_blank" }
+        context.dataStore.edit { prefs ->
+            prefs[Keys.DeviceId] = trimmed
+        }
+    }
+
     val activeNeuralVoiceId: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[Keys.ActiveNeuralVoiceId]?.trim()?.takeIf { it.isNotEmpty() }
     }

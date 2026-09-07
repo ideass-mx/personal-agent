@@ -28,6 +28,20 @@ import {
   BROWSER_AUTH_COOKIE,
   verifyBrowserCookieSession,
 } from "../http/browser-session.ts";
+import {
+  resolveUserContextFromAuthSession,
+} from "../identity/context.ts";
+import {
+  resolveDeviceAuthSession,
+  resolveInstallCompatSession,
+} from "../identity/auth-session-resolve.ts";
+import { isSessionActive } from "../identity/auth-session-store.ts";
+import { getAuthSessionById } from "../identity/auth-session-store.ts";
+import { isLoopbackAddress, isLoopbackBind } from "../http/remote-access.ts";
+import {
+  issueDeviceAuthChallenge,
+  verifyDeviceAuthSignature,
+} from "../identity/device-auth.ts";
 
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -39,12 +53,35 @@ function installTokenMatches(candidate: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/** Ensure product AuthSession still ACTIVE; else kill connection. */
+function requireActiveAuthSession(session: Session): boolean {
+  if (!session.authSessionId || !isSessionActive(session.authSessionId)) {
+    session.authenticated = false;
+    send(session.ws, {
+      type: "error",
+      code: "auth_failed",
+      message: "Sesión revocada o expirada.",
+    });
+    session.ws.close();
+    return false;
+  }
+  return true;
+}
+
 export function attachGateway(
   server: Server,
   runtime: AgentRuntime,
   diagnostics?: SqliteDiagnosticsStore,
 ): void {
   async function reply(session: Session, msg: UserMessage): Promise<void> {
+    if (!requireActiveAuthSession(session)) return;
+    const authSession = getAuthSessionById(session.authSessionId!);
+    if (!authSession) {
+      requireActiveAuthSession(session);
+      return;
+    }
+    const userContext = resolveUserContextFromAuthSession(authSession);
+
     const diagnosticId = diagnostics?.createDiagnosticId() || "PA-UNKNOWN";
     session.replying = true;
     const waiter = createConfirmationWaiter({
@@ -64,6 +101,7 @@ export function attachGateway(
         conversationIdKnown: Boolean(msg.conversationId),
         deviceId: session.deviceId,
         inputLength: msg.text.length,
+        authSessionId: session.authSessionId,
       },
     });
     try {
@@ -73,6 +111,7 @@ export function attachGateway(
         diagnosticId,
         sessionId: session.id,
         userMessage: msg.text,
+        userContext,
         confirmation: waiter.port,
       })) {
         switch (event.type) {
@@ -135,17 +174,106 @@ export function attachGateway(
     }
   }
 
-  function handleAuth(session: Session, parsed: Extract<
-    import("../../../packages/protocol/messages.ts").ClientMessage,
-    { type: "auth" }
-  >): void {
+  function handleAuth(
+    session: Session,
+    parsed: Extract<
+      import("../../../packages/protocol/messages.ts").ClientMessage,
+      { type: "auth" }
+    >,
+  ): void {
     const kind = parsed.authKind ?? "install";
     let ok = false;
-    if (kind === "device") {
+    let authSessionId: string | undefined;
+
+    if (kind === "device_crypto") {
+      if (!parsed.challengeId) {
+        send(session.ws, {
+          type: "error",
+          code: "device_auth_failed",
+          message: "challengeId requerido para device_crypto.",
+        });
+        session.ws.close();
+        return;
+      }
+      const verified = verifyDeviceAuthSignature({
+        deviceId: parsed.deviceId,
+        challengeId: parsed.challengeId,
+        signatureBase64: parsed.token,
+      });
+      if (!verified.ok) {
+        if (diagnostics) {
+          diagnostics.record({
+            diagnosticId: diagnostics.createDiagnosticId(),
+            component: "GATEWAY",
+            stage: "WEBSOCKET",
+            level: "WARN",
+            event: verified.replay
+              ? "DEVICE_AUTH_REPLAY_REJECTED"
+              : verified.reason === "revoked"
+                ? "DEVICE_AUTH_REVOKED"
+                : "DEVICE_AUTH_FAILED",
+            metadata: {
+              deviceId: parsed.deviceId,
+              reason: verified.reason,
+              transport: "ws",
+            },
+          });
+        }
+        send(session.ws, {
+          type: "error",
+          code: verified.replay ? "device_auth_replay" : "device_auth_failed",
+          message: verified.message,
+        });
+        session.ws.close();
+        return;
+      }
+      ok = true;
+      authSessionId = verified.session.id;
+      touchTrustedDevice(parsed.deviceId);
+      if (diagnostics) {
+        diagnostics.record({
+          diagnosticId: diagnostics.createDiagnosticId(),
+          component: "GATEWAY",
+          stage: "WEBSOCKET",
+          level: "INFO",
+          event: "DEVICE_AUTH_SUCCESS",
+          metadata: {
+            deviceId: parsed.deviceId,
+            sessionId: verified.session.id,
+            transport: "ws",
+          },
+        });
+      }
+    } else if (kind === "device") {
       ok = verifyDeviceCredential(parsed.deviceId, parsed.token);
       if (ok) touchTrustedDevice(parsed.deviceId);
     } else {
-      // Legacy install credential (HUB_TOKEN / env) — compatibility path.
+      // install_compat: LOCAL-ONLY when remote bind is enabled (PHASE 57.7).
+      const localPeer =
+        isLoopbackBind(config.bindHost) ||
+        isLoopbackAddress(session.remoteAddress);
+      if (!localPeer) {
+        if (diagnostics) {
+          diagnostics.record({
+            diagnosticId: diagnostics.createDiagnosticId(),
+            component: "GATEWAY",
+            stage: "WEBSOCKET",
+            level: "WARN",
+            event: "REMOTE_AUTH_REJECTED",
+            metadata: {
+              reason: "install_compat_remote_forbidden",
+              transport: "ws",
+            },
+          });
+        }
+        send(session.ws, {
+          type: "error",
+          code: "auth_failed",
+          message: "Credencial de instalación no válida en acceso remoto.",
+        });
+        session.ws.close();
+        return;
+      }
       ok = installTokenMatches(parsed.token);
     }
     if (!ok) {
@@ -157,14 +285,115 @@ export function attachGateway(
       session.ws.close();
       return;
     }
+
+    // Identity is immutable once set: refuse re-auth that would change principal.
+    if (session.authenticated && session.authSessionId) {
+      send(session.ws, {
+        type: "error",
+        code: "auth_failed",
+        message: "La conexión ya está autenticada.",
+      });
+      return;
+    }
+
+    if (kind === "device_crypto") {
+      session.authSessionId = authSessionId;
+      session.authKind = "device";
+    } else if (kind === "device") {
+      const { session: authSession } = resolveDeviceAuthSession({
+        deviceId: parsed.deviceId,
+      });
+      session.authSessionId = authSession.id;
+      session.authKind = "device";
+    } else {
+      const { session: authSession } = resolveInstallCompatSession({
+        deviceId: parsed.deviceId,
+      });
+      session.authSessionId = authSession.id;
+      session.authKind = "install";
+    }
+
     session.authenticated = true;
     session.deviceId = parsed.deviceId;
     session.deviceName = parsed.deviceName;
     touchDevice(parsed.deviceId, parsed.deviceName);
+    if (
+      diagnostics &&
+      !isLoopbackBind(config.bindHost) &&
+      !isLoopbackAddress(session.remoteAddress)
+    ) {
+      diagnostics.record({
+        diagnosticId: diagnostics.createDiagnosticId(),
+        component: "GATEWAY",
+        stage: "WEBSOCKET",
+        level: "INFO",
+        event: "REMOTE_SESSION_ACCEPTED",
+        metadata: {
+          transport: "ws",
+          deviceId: parsed.deviceId,
+          sessionId: session.authSessionId,
+          authKind: kind,
+        },
+      });
+    }
     send(session.ws, { type: "auth_ok", deviceId: parsed.deviceId });
     console.log(
       `[gateway] dispositivo conectado: ${parsed.deviceId} (authKind=${kind})`,
     );
+  }
+
+  function handleDeviceAuthChallengeRequest(
+    session: Session,
+    parsed: Extract<
+      import("../../../packages/protocol/messages.ts").ClientMessage,
+      { type: "device_auth_challenge" }
+    >,
+  ): void {
+    if (diagnostics) {
+      diagnostics.record({
+        diagnosticId: diagnostics.createDiagnosticId(),
+        component: "GATEWAY",
+        stage: "WEBSOCKET",
+        level: "INFO",
+        event: "DEVICE_AUTH_STARTED",
+        metadata: { deviceId: parsed.deviceId, transport: "ws" },
+      });
+    }
+    const issued = issueDeviceAuthChallenge(parsed.deviceId);
+    if (!issued.ok) {
+      if (diagnostics) {
+        diagnostics.record({
+          diagnosticId: diagnostics.createDiagnosticId(),
+          component: "GATEWAY",
+          stage: "WEBSOCKET",
+          level: "WARN",
+          event:
+            issued.reason === "revoked"
+              ? "DEVICE_AUTH_REVOKED"
+              : "DEVICE_AUTH_FAILED",
+          metadata: {
+            deviceId: parsed.deviceId,
+            reason: issued.reason,
+            transport: "ws",
+          },
+        });
+      }
+      send(session.ws, {
+        type: "error",
+        code:
+          issued.reason === "revoked" ? "device_auth_failed" : "device_auth_failed",
+        message: issued.message,
+      });
+      session.ws.close();
+      return;
+    }
+    send(session.ws, {
+      type: "device_auth_challenge",
+      deviceId: issued.deviceId,
+      challengeId: issued.challengeId,
+      challenge: issued.challenge,
+      expiresAt: issued.expiresAt,
+    });
   }
 
   function handlePairingRequest(
@@ -180,6 +409,8 @@ export function attachGateway(
       deviceId: parsed.deviceId,
       deviceName: parsed.deviceName,
       platform: parsed.platform,
+      publicKey: parsed.publicKey,
+      keyAlgorithm: parsed.keyAlgorithm,
     });
     if (!result.ok) {
       send(session.ws, {
@@ -232,6 +463,10 @@ export function attachGateway(
         handleAuth(session, parsed);
         return;
       }
+      if (parsed.type === "device_auth_challenge") {
+        handleDeviceAuthChallengeRequest(session, parsed);
+        return;
+      }
       if (parsed.type === "pairing_request") {
         handlePairingRequest(session, parsed);
         return;
@@ -239,11 +474,14 @@ export function attachGateway(
       send(session.ws, {
         type: "error",
         code: "auth_required",
-        message: "Envía `auth` o `pairing_request` antes que cualquier otro mensaje.",
+        message:
+          "Envía `auth`, `device_auth_challenge` o `pairing_request` antes que cualquier otro mensaje.",
       });
       session.ws.close();
       return;
     }
+
+    if (!requireActiveAuthSession(session)) return;
 
     switch (parsed.type) {
       case "ping":
@@ -279,6 +517,7 @@ export function attachGateway(
         void reply(session, parsed);
         return;
       case "auth":
+      case "device_auth_challenge":
       case "pairing_request":
         return;
     }
@@ -288,6 +527,7 @@ export function attachGateway(
 
   wss.on("connection", (ws, req) => {
     const session = createSession(ws);
+    session.remoteAddress = req.socket?.remoteAddress;
     const browserAuth = verifyBrowserCookieSession(
       cookieToken(req.headers.cookie, BROWSER_AUTH_COOKIE),
     );
@@ -295,6 +535,8 @@ export function attachGateway(
       session.authenticated = true;
       session.deviceId = browserAuth.deviceId;
       session.deviceName = browserAuth.deviceName;
+      session.authKind = "browser";
+      session.authSessionId = browserAuth.authSessionId;
       touchDevice(browserAuth.deviceId, browserAuth.deviceName);
       send(session.ws, { type: "auth_ok", deviceId: browserAuth.deviceId });
     }

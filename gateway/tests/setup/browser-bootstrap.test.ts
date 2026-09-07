@@ -40,7 +40,7 @@ after(() => {
 });
 
 describe("browser bootstrap auth", () => {
-  it("creates one-shot browser launch URL and authenticates setup via cookie", async () => {
+  it("creates one-shot browser launch URL; cookie is browser (not install)", async () => {
     const app = new Hono();
     mountBrowserBootstrapHttp(app, { hubToken: HUB });
 
@@ -76,10 +76,11 @@ describe("browser bootstrap auth", () => {
 
     const extracted = cookieToken(browserCookie, BROWSER_AUTH_COOKIE);
     assert.ok(extracted);
-    assert.deepEqual(verifyBrowserCookieSession(extracted), {
-      deviceId: createJson.deviceId,
-      deviceName: createJson.deviceName,
-    });
+    const verified = verifyBrowserCookieSession(extracted);
+    assert.ok(verified);
+    assert.equal(verified!.deviceId, createJson.deviceId);
+    assert.match(verified!.authSessionId, /^as_/);
+
     const principal = authenticateHttpRequest(
       {
         req: {
@@ -93,7 +94,10 @@ describe("browser bootstrap auth", () => {
       } as unknown as Parameters<typeof authenticateHttpRequest>[0],
       HUB,
     );
-    assert.deepEqual(principal, { kind: "install" });
+    assert.ok(principal);
+    assert.equal(principal!.kind, "browser");
+    assert.equal(principal!.userContext.authKind, "browser");
+    assert.notEqual(principal!.kind, "install");
   });
 
   it("rejects non-loopback activation host", async () => {

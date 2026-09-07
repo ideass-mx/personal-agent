@@ -1,4 +1,10 @@
 import { randomUUID } from "node:crypto";
+import {
+  browserSessionExpiresAt,
+  issueBrowserAuthSession,
+  resolveBrowserAuthSession,
+} from "../identity/auth-session-resolve.ts";
+import { isSessionActive } from "../identity/auth-session-store.ts";
 
 export const BROWSER_AUTH_COOKIE = "pa_browser_auth";
 
@@ -9,25 +15,13 @@ type PendingLaunch = {
   expiresAtMs: number;
 };
 
-type BrowserCookieSession = {
-  token: string;
-  deviceId: string;
-  deviceName: string;
-  expiresAtMs: number;
-};
-
 const pendingLaunches = new Map<string, PendingLaunch>();
-const browserSessions = new Map<string, BrowserCookieSession>();
 
 const LAUNCH_TTL_MS = 60_000;
-const COOKIE_TTL_MS = 12 * 60 * 60 * 1000;
 
-function cleanup(now = Date.now()): void {
+function cleanupPending(now = Date.now()): void {
   for (const [id, row] of pendingLaunches) {
     if (row.expiresAtMs <= now) pendingLaunches.delete(id);
-  }
-  for (const [token, row] of browserSessions) {
-    if (row.expiresAtMs <= now) browserSessions.delete(token);
   }
 }
 
@@ -40,7 +34,7 @@ export function createBrowserLaunchSession(input?: {
   deviceName: string;
   expiresAt: string;
 } {
-  cleanup();
+  cleanupPending();
   const activationId = randomUUID();
   const deviceId = input?.deviceId?.trim() || `browser_${randomUUID()}`;
   const deviceName = input?.deviceName?.trim() || "Navegador";
@@ -64,37 +58,47 @@ export function consumeBrowserLaunchSession(activationId: string): {
   deviceId: string;
   deviceName: string;
   expiresAt: string;
+  authSessionId: string;
 } | null {
-  cleanup();
+  cleanupPending();
   const pending = pendingLaunches.get(activationId);
   if (!pending) return null;
   pendingLaunches.delete(activationId);
   const cookieToken = randomUUID();
-  const expiresAtMs = Date.now() + COOKIE_TTL_MS;
-  browserSessions.set(cookieToken, {
-    token: cookieToken,
+  const expiresAt = browserSessionExpiresAt();
+  const session = issueBrowserAuthSession({
     deviceId: pending.deviceId,
     deviceName: pending.deviceName,
-    expiresAtMs,
+    cookieToken,
+    expiresAt,
   });
   return {
     cookieToken,
     deviceId: pending.deviceId,
     deviceName: pending.deviceName,
-    expiresAt: new Date(expiresAtMs).toISOString(),
+    expiresAt,
+    authSessionId: session.id,
   };
 }
 
+/**
+ * Cookie proof → browser AuthSession (ACTIVE only).
+ * Returns device metadata for WS auto-auth; session id is product Session.
+ */
 export function verifyBrowserCookieSession(
   cookieToken: string | undefined,
-): { deviceId: string; deviceName: string } | null {
-  cleanup();
-  if (!cookieToken) return null;
-  const row = browserSessions.get(cookieToken);
-  if (!row) return null;
+): {
+  deviceId: string;
+  deviceName: string;
+  authSessionId: string;
+} | null {
+  const resolved = resolveBrowserAuthSession(cookieToken);
+  if (!resolved) return null;
+  if (!isSessionActive(resolved.session.id)) return null;
   return {
-    deviceId: row.deviceId,
-    deviceName: row.deviceName,
+    deviceId: resolved.session.deviceId || resolved.deviceName,
+    deviceName: resolved.deviceName,
+    authSessionId: resolved.session.id,
   };
 }
 
@@ -141,4 +145,3 @@ export function browserBootstrapHtml(input: {
 </body>
 </html>`;
 }
-

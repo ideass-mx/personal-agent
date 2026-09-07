@@ -68,6 +68,19 @@ object Ed25519DeviceCrypto {
         return b64Url.encodeToString(raw)
     }
 
+    /**
+     * SPKI DER base64 (with padding) — wire format expected by Gateway (PHASE 57.8).
+     * OID 1.3.101.112 (Ed25519).
+     */
+    fun publicKeySpkiBase64(identity: DeviceIdentity): String {
+        val raw = b64Decoder.decode(identity.publicKeyRawBase64)
+        require(raw.size == 32) { "ed25519_public_must_be_32_bytes" }
+        val prefix = byteArrayOf(
+            0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00,
+        )
+        return Base64.getEncoder().encodeToString(prefix + raw)
+    }
+
     fun signPayload(payload: String, identity: DeviceIdentity): String {
         val privateKeyBytes = b64Decoder.decode(identity.privateKeyPkcs8Base64)
         val pkInfo = PrivateKeyInfo.getInstance(privateKeyBytes)
@@ -94,6 +107,20 @@ object Ed25519DeviceCrypto {
             val payloadBytes = payload.toByteArray(Charsets.UTF_8)
             verifier.update(payloadBytes, 0, payloadBytes.size)
             verifier.verifySignature(sigBytes)
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /**
+     * Comprueba que la private key almacenada corresponde a la public key
+     * (sign + verify locales). No exporta material privado.
+     */
+    fun keyPairMatches(identity: DeviceIdentity): Boolean {
+        return try {
+            val probe = "pa.device-identity.coherence"
+            val signature = signPayload(probe, identity)
+            verifyPayload(probe, signature, identity)
         } catch (_: Throwable) {
             false
         }

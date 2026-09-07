@@ -1,0 +1,11 @@
+{
+  "name": "@mxideass/device-crypto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ed25519 Device identity + DeviceKeyStore (PHASE 57.8–57.9).",
+  "type": "module",
+  "exports": { ".": "./index.ts" },
+  "optionalDependencies": {
+    "@primno/dpapi": "^2.0.1"
+  }
+}

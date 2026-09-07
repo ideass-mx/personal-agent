@@ -6,6 +6,8 @@ import kotlinx.serialization.json.Json
 /**
  * Persistencia cifrada de la identidad Ed25519 del dispositivo.
  * La MasterKey vive en Android Keystore; el material Ed25519 viaja cifrado en reposo.
+ *
+ * Si el blob existe pero está corrupto o incoherente, falla (no regenera en silencio).
  */
 class DeviceIdentityStore(
     private val secureStore: SecureStringStore,
@@ -19,10 +21,8 @@ class DeviceIdentityStore(
         cached?.let { return it }
         val existing = load()
         if (existing != null) {
-            val derived = runCatching {
-                Ed25519DeviceCrypto.deviceIdFromPublicKeyRawBase64(existing.publicKeyRawBase64)
-            }.getOrNull()
-            val identity = if (derived != null && derived != existing.deviceId) {
+            val derived = Ed25519DeviceCrypto.deviceIdFromPublicKeyRawBase64(existing.publicKeyRawBase64)
+            val identity = if (derived != existing.deviceId) {
                 existing.copy(deviceId = derived).also { save(it) }
             } else {
                 existing
@@ -42,15 +42,27 @@ class DeviceIdentityStore(
     fun publicKeyBase64Url(identity: DeviceIdentity = loadOrCreate()): String =
         Ed25519DeviceCrypto.publicKeyBase64Url(identity)
 
+    /**
+     * @return null solo si no hay identidad persistida (primera ejecución).
+     * @throws IllegalStateException si el almacenamiento tiene datos ilegibles o incoherentes.
+     */
     private fun load(): DeviceIdentity? {
         val raw = secureStore.getString(KEY_IDENTITY) ?: return null
-        return runCatching {
+        val parsed = runCatching {
             json.decodeFromString(DeviceIdentity.serializer(), raw)
-        }.getOrNull()?.takeIf {
-            it.deviceId.isNotBlank() &&
-                it.publicKeyRawBase64.isNotBlank() &&
-                it.privateKeyPkcs8Base64.isNotBlank()
+        }.getOrElse { cause ->
+            throw IllegalStateException("device_identity_corrupt", cause)
         }
+        if (parsed.deviceId.isBlank() ||
+            parsed.publicKeyRawBase64.isBlank() ||
+            parsed.privateKeyPkcs8Base64.isBlank()
+        ) {
+            throw IllegalStateException("device_identity_incomplete")
+        }
+        if (!Ed25519DeviceCrypto.keyPairMatches(parsed)) {
+            throw IllegalStateException("device_identity_keypair_mismatch")
+        }
+        return parsed
     }
 
     private fun save(identity: DeviceIdentity) {

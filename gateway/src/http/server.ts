@@ -5,6 +5,7 @@ import path from "node:path";
 import type { AgentRuntime } from "../agents/runtime.ts";
 import { config } from "../config.ts";
 import { runMigrations } from "../db/database.ts";
+import { ensureLocalIdentity } from "../identity/ensure-local.ts";
 import { connectedDevices } from "../sessions/index.ts";
 import { attachGateway } from "../ws/index.ts";
 import { mountWorkspaceHttp } from "./workspace-http.ts";
@@ -13,6 +14,13 @@ import { mountArtifactHttp } from "./artifact-http.ts";
 import { mountBrowserBootstrapHttp } from "./browser-bootstrap-http.ts";
 import { mountDiagnosticsHttp } from "./diagnostics-http.ts";
 import { mountSetupHttp } from "./setup-http.ts";
+import { mountDevicesHttp } from "./devices-http.ts";
+import { mountDeviceAuthHttp } from "./device-auth-http.ts";
+import {
+  isLoopbackRequest,
+  isRemoteAccessEnabled,
+  logRemoteAccessEnabled,
+} from "./remote-access.ts";
 import type { SqliteDiagnosticsStore } from "../diagnostics/store.ts";
 import { productVersionForHealth } from "../product-version.ts";
 import { resolveConsoleStaticRoot } from "./console-static.ts";
@@ -106,11 +114,34 @@ export function startServer(
   extras?: StartServerExtras,
 ): StartedHubServer {
   runMigrations();
+  const identity = ensureLocalIdentity();
+  process.stderr.write(
+    `[gateway] identity user=${identity.user.id} agent=${identity.agent.id}` +
+      `${identity.created ? " (created)" : ""}\n`,
+  );
+  logRemoteAccessEnabled({ bindHost: config.bindHost, port: config.port });
+  if (isRemoteAccessEnabled(config.bindHost) && extras?.diagnostics) {
+    extras.diagnostics.record({
+      diagnosticId: extras.diagnostics.createDiagnosticId(),
+      component: "GATEWAY",
+      stage: "REQUEST_RECEIVED",
+      level: "WARN",
+      event: "REMOTE_ACCESS_ENABLED",
+      metadata: {
+        bindHost: config.bindHost,
+        port: config.port,
+      },
+    });
+  }
 
   const app = new Hono();
   mountDevCors(app);
 
   app.get("/health", (c) => {
+    // Off-loopback: availability only (PHASE 57.7). No inventory/secrets.
+    if (!isLoopbackRequest(c)) {
+      return c.json({ ok: true });
+    }
     const health = resolveHealth(extras);
     const product = productVersionForHealth();
     return c.json({
@@ -148,6 +179,12 @@ export function startServer(
     hubToken: config.hubToken,
   });
 
+  mountDevicesHttp(app, {
+    hubToken: config.hubToken,
+  });
+
+  mountDeviceAuthHttp(app, { hubToken: config.hubToken });
+
   mountBrowserBootstrapHttp(app, {
     hubToken: config.hubToken,
   });
@@ -176,19 +213,27 @@ export function startServer(
     );
   }
 
-  const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-    process.stderr.write(
-      `[gateway] HTTP en http://localhost:${info.port}\n`,
-    );
-    process.stderr.write(
-      `[gateway] WebSocket en ws://localhost:${info.port}/ws\n`,
-    );
-    if (consoleRoot) {
+  const server = serve(
+    {
+      fetch: app.fetch,
+      port: config.port,
+      hostname: config.bindHost,
+    },
+    (info) => {
+      const host = config.bindHost;
       process.stderr.write(
-        `[gateway] Agent Console en http://localhost:${info.port}/\n`,
+        `[gateway] HTTP en http://${host}:${info.port} (bind=${host})\n`,
       );
-    }
-  });
+      process.stderr.write(
+        `[gateway] WebSocket en ws://${host}:${info.port}/ws\n`,
+      );
+      if (consoleRoot) {
+        process.stderr.write(
+          `[gateway] Agent Console en http://${host}:${info.port}/\n`,
+        );
+      }
+    },
+  );
 
   attachGateway(server as import("node:http").Server, runtime, extras?.diagnostics);
 

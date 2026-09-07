@@ -33,6 +33,11 @@ export type GatewayConfig = {
   /** Persistent Agent identity (from Desktop). Optional for legacy .env boots. */
   readonly agentId: string | null;
   readonly port: number;
+  /**
+   * Bind address. Default loopback (PHASE 57.4).
+   * Opt-in remote: HUB_HOST=0.0.0.0 (not recommended yet).
+   */
+  readonly bindHost: string;
   readonly migrationsDir: string;
   readonly dbFile: string;
   /**
@@ -69,6 +74,7 @@ export const config: GatewayConfig = {
     process.env.PERSONAL_AGENT_HOST_ID?.trim() ||
     null,
   port: Number(process.env.HUB_PORT ?? 8787),
+  bindHost: (process.env.HUB_HOST?.trim() || "127.0.0.1"),
 
   migrationsDir: existsSync(packagedMigrations)
     ? packagedMigrations

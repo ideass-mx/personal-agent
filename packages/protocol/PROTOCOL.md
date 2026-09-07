@@ -5,31 +5,48 @@ Los espejos (`messages.ts`, `Messages.kt`) se adaptan a este documento, nunca al
 
 - Transporte: WebSocket en `ws://<hub>:<puerto>/ws`
 - Formato: JSON, un mensaje por frame, discriminado por el campo `type`
-- Primera obligación del cliente: enviar `auth` **o** `pairing_request`
-  antes que cualquier otra cosa.
+- Primera obligación del cliente: enviar `auth`, `device_auth_challenge`
+  **o** `pairing_request` antes que cualquier otra cosa.
   Cualquier otro mensaje previo a autenticación / pairing exitoso cierra la conexión.
 - Todo mensaje post-auth lleva el origen implícito en la sesión
-  (`deviceId` se declara en `auth` o en `pairing_request`).
+  (`deviceId` se declara en `auth`, `device_auth_challenge` o `pairing_request`).
 
 ## Cliente → Servidor
+
+### `device_auth_challenge`
+```json
+{
+  "type": "device_auth_challenge",
+  "deviceId": "xiaomi-15t"
+}
+```
+Solicita un challenge de un solo uso para autenticación Ed25519 (PHASE 57.8).
+Solo válido en sesión no autenticada. El Gateway responde con
+`device_auth_challenge` (servidor) o `error`.
 
 ### `auth`
 ```json
 {
   "type": "auth",
-  "token": "<credential>",
+  "token": "<credential-or-signature>",
   "deviceId": "xiaomi-15t",
   "deviceName": "Xiaomi 15T",
-  "authKind": "install"
+  "authKind": "install",
+  "challengeId": "ch_…"
 }
 ```
 `deviceId`: estable por dispositivo (lo inventa el cliente y lo persiste).
 `deviceName`: opcional, legible para humanos.
 `token`:
 - `authKind` omitido o `"install"`: secreto de instalación legacy (`HUB_TOKEN` /
-  env del Hub). Compatibilidad con clientes existentes.
-- `authKind` `"device"`: credencial de dispositivo de confianza emitida al
-  completar un Pairing Session (no es el secreto del QR; no es `HUB_TOKEN`).
+  env del Hub). Compatibilidad con clientes existentes. **Solo loopback**
+  cuando remote access está habilitado (PHASE 57.7).
+- `authKind` `"device"`: credencial opaca de dispositivo (legacy hash; migración).
+- `authKind` `"device_crypto"`: firma Ed25519 (base64) del mensaje de dominio
+  `DeviceAuth` sobre el challenge; requiere `challengeId` del challenge activo.
+  Ver `docs/architecture/device-cryptographic-identity.md`.
+
+`challengeId`: obligatorio si `authKind` es `"device_crypto"`; ignorado en otros.
 
 ### `pairing_request`
 ```json
@@ -39,12 +56,17 @@ Los espejos (`messages.ts`, `Messages.kt`) se adaptan a este documento, nunca al
   "pairingSecret": "<temporary>",
   "deviceId": "android-…",
   "deviceName": "Xiaomi 15T",
-  "platform": "android"
+  "platform": "android",
+  "publicKey": "<base64-spki>",
+  "keyAlgorithm": "Ed25519"
 }
 ```
 Inicia emparejamiento con una Pairing Session temporal (QR). Solo válido como
 primer mensaje (sesión no autenticada). El Hub valida hash, TTL y estado
 `PENDING`; pasa a confirmación en Desktop. **No** autentica la sesión aún.
+`publicKey` / `keyAlgorithm` (opcionales, PHASE 57.8): identidad criptográfica
+generada **en el dispositivo**; el Gateway solo almacena la clave pública tras
+aprobación. La private key **nunca** se envía.
 
 ### `user_message`
 ```json
@@ -84,6 +106,19 @@ Latido opcional del cliente. El Hub responde `pong`.
 { "type": "auth_ok", "deviceId": "xiaomi-15t" }
 ```
 
+### `device_auth_challenge` (servidor)
+```json
+{
+  "type": "device_auth_challenge",
+  "deviceId": "xiaomi-15t",
+  "challengeId": "ch_…",
+  "challenge": "<hex>",
+  "expiresAt": "2026-09-06T12:00:00.000Z"
+}
+```
+Challenge aleatorio de un solo uso. El cliente firma el mensaje de dominio
+(no el challenge desnudo) y responde con `auth` + `authKind: "device_crypto"`.
+
 ### `pairing_pending`
 ```json
 {
@@ -104,8 +139,10 @@ El Hub aceptó el secreto temporal; falta aprobación humana en Desktop.
 }
 ```
 `status`: `approved` | `rejected` | `expired`.
-`deviceCredential` solo si `approved` (mostrar una vez; el cliente lo persiste).
-Tras `approved`, el cliente debe autenticarse con `auth` + `authKind: "device"`.
+`deviceCredential` solo si `approved` (mostrar una vez; el cliente lo persiste
+como compatibilidad legacy). Tras `approved`, el cliente preferible se autentica
+con challenge-response (`device_crypto`); `authKind: "device"` sigue válido
+para dispositivos legacy sin `publicKey`.
 
 ### `assistant_chunk`
 ```json

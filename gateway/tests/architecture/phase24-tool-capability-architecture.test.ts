@@ -56,7 +56,9 @@ describe("PHASE 24 Tool / Capability architecture (audit)", () => {
 
     const runtime = readFileSync(RUNTIME, "utf8");
     assert.match(runtime, /export interface AgentRuntimeTools/);
-    assert.match(runtime, /executionMode === "confirm"/);
+    // PHASE 57.5: Tool Safety evaluate → HITL; still no MCP inside Runtime.
+    assert.match(runtime, /evaluateToolSafety/);
+    assert.match(runtime, /CONFIRMATION_REQUIRED/);
     assert.doesNotMatch(runtime, /from "\.\.\/tools\/mcp-/);
     assert.doesNotMatch(runtime, /better-sqlite3|hono|workspace-http/);
 

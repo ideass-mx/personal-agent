@@ -1,6 +1,6 @@
 /**
  * Protocolo personal-agent v1 — espejo Kotlin (android).
- * Fuente de verdad: packages/protocol/PROTOCOL.md.
+ * Fuente de verdad: packages/protocol/PROTOCOL.md / packages/protocol/Messages.kt.
  */
 package mx.ideass.personal.agent.protocol
 
@@ -12,12 +12,19 @@ import kotlinx.serialization.json.JsonElement
 sealed interface ClientMessage {
 
     @Serializable
+    @SerialName("device_auth_challenge")
+    data class DeviceAuthChallengeRequest(
+        val deviceId: String,
+    ) : ClientMessage
+
+    @Serializable
     @SerialName("auth")
     data class Auth(
         val token: String,
         val deviceId: String,
         val deviceName: String? = null,
         val authKind: String? = null,
+        val challengeId: String? = null,
     ) : ClientMessage
 
     @Serializable
@@ -28,6 +35,8 @@ sealed interface ClientMessage {
         val deviceId: String,
         val deviceName: String? = null,
         val platform: String? = null,
+        val publicKey: String? = null,
+        val keyAlgorithm: String? = null,
     ) : ClientMessage
 
     @Serializable
@@ -70,6 +79,15 @@ sealed interface ServerMessage {
     @Serializable
     @SerialName("auth_ok")
     data class AuthOk(val deviceId: String) : ServerMessage
+
+    @Serializable
+    @SerialName("device_auth_challenge")
+    data class DeviceAuthChallenge(
+        val deviceId: String,
+        val challengeId: String,
+        val challenge: String,
+        val expiresAt: String,
+    ) : ServerMessage
 
     @Serializable
     @SerialName("pairing_pending")

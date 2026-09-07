@@ -1673,3 +1673,104 @@ button.linkish {
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
 }
+
+/* PHASE 57.6 — Trusted Devices */
+.trusted-devices {
+  margin-top: 28px;
+  max-width: 560px;
+}
+.trusted-devices-title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+}
+.trusted-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.trusted-device-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.trusted-device-card.is-revoked {
+  opacity: 0.65;
+}
+.trusted-device-main {
+  min-width: 0;
+}
+.trusted-device-main strong {
+  display: block;
+}
+.trusted-device-main p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.btn-danger-outline {
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--danger, #b42318) 55%, transparent);
+  background: transparent;
+  color: var(--danger, #b42318);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.btn-danger-outline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-secondary {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-md, 8px);
+  padding: 8px 14px;
+  cursor: pointer;
+  font: inherit;
+}
+.settings-error {
+  color: var(--danger, #b42318);
+  font-size: 14px;
+  margin: 8px 0;
+}
+.trusted-device-modal {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, #000 45%, transparent);
+  display: grid;
+  place-items: center;
+  z-index: 80;
+  padding: 16px;
+}
+.trusted-device-modal-card {
+  width: min(420px, 100%);
+  background: var(--bg, #fff);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: 0 12px 40px color-mix(in srgb, #000 18%, transparent);
+}
+.trusted-device-modal-card h4 {
+  margin: 0 0 8px;
+}
+.trusted-device-modal-card p {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.trusted-device-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.trusted-device-revoked {
+  margin-top: 20px;
+}
