@@ -8,6 +8,7 @@ import {
   isLlmConfigured,
   isProviderSelectable,
   providerComingSoonLabel,
+  resolveProductSurfaceGate,
   responseLooksLikeSecretLeak,
   stepFromStatus,
   USER_PLAN_LABEL,
@@ -91,6 +92,37 @@ describe("setup-flow", () => {
         dto({ llmConfigured: true, state: "READY", onboardingCompleted: true }),
       ),
       true,
+    );
+  });
+
+  it("PHASE 58.4 surface gate: profile → llm → conversation; READY sin nombre no salta", () => {
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: false,
+        llmConfigured: false,
+      }),
+      "profile",
+    );
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: false,
+        llmConfigured: true,
+      }),
+      "profile",
+    );
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: true,
+        llmConfigured: false,
+      }),
+      "llm",
+    );
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: true,
+        llmConfigured: true,
+      }),
+      "conversation",
     );
   });
 

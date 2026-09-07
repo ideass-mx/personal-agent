@@ -41,8 +41,14 @@ export async function listConversations(
   base: string,
   token: string,
 ): Promise<ConversationMeta[]> {
-  // Prefer listing via workspaces: fetch all workspaces then conversations.
-  // Also support orphan conversations by creating via POST when needed.
+  const res = await fetch(`${base}/conversations?limit=50`, {
+    headers: authHeaders(token),
+  });
+  if (res.ok) {
+    const list = (await res.json()) as ConversationMeta[];
+    return Array.isArray(list) ? list : [];
+  }
+  // Fallback legacy: listar por workspaces si el Gateway no expone GET /conversations.
   const wsRes = await fetch(`${base}/workspaces`, {
     headers: authHeaders(token),
   });
@@ -59,7 +65,6 @@ export async function listConversations(
     const list = (await cRes.json()) as ConversationMeta[];
     all.push(...list);
   }
-  // Deduplicate by id
   const map = new Map(all.map((c) => [c.id, c]));
   return [...map.values()].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),

@@ -8,6 +8,7 @@ import {
   createConversation,
   getConversation,
   listConversationsByWorkspace,
+  listRecentConversations,
   setConversationWorkspace,
 } from "../memory/conversation-workspace.ts";
 import { listConversationMessages } from "../memory/history.ts";
@@ -218,6 +219,17 @@ export function mountWorkspaceHttp(app: Hono, deps: WorkspaceHttpDeps): void {
       }
       return c.json(errorBody("bad_request", message), 400);
     }
+  });
+
+  app.get("/conversations", (c) => {
+    const denied = requireAuth(c, hubToken);
+    if (denied) return denied;
+    const limitRaw = c.req.query("limit");
+    const limit = limitRaw ? Number(limitRaw) : 50;
+    const conversations = sql
+      ? listRecentConversations(limit, sql)
+      : listRecentConversations(limit);
+    return c.json(conversations);
   });
 
   app.get("/conversations/:id", (c) => {

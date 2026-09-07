@@ -133,14 +133,6 @@ export function attachGateway(
             });
             break;
           case "done":
-            try {
-              const { maybeAnnotateConversation } = await import(
-                "../memory/conversation-meta.ts"
-              );
-              maybeAnnotateConversation(conversationId, msg.text);
-            } catch {
-              /* best-effort metadata */
-            }
             diagnostics?.record({
               diagnosticId,
               component: "GATEWAY",
@@ -154,6 +146,20 @@ export function attachGateway(
               messageId: event.messageId,
               conversationId: event.conversationId,
             });
+            // Semantic title/summary after the turn (LLM + fallback). Never blocks UX.
+            void (async () => {
+              try {
+                const { maybeAnnotateConversationAsync } = await import(
+                  "../memory/conversation-meta.ts"
+                );
+                await maybeAnnotateConversationAsync(
+                  conversationId,
+                  msg.text,
+                );
+              } catch {
+                /* best-effort metadata — never fail the turn */
+              }
+            })();
             break;
           case "error":
             diagnostics?.record({

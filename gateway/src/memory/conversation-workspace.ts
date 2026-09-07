@@ -174,3 +174,25 @@ export function listConversationsByWorkspace(
     .all(workspaceId) as ConversationRow[];
   return rows.map(mapRow);
 }
+
+/**
+ * Conversaciones recientes (incl. sin Workspace). Para sidebar / lista humana.
+ */
+export function listRecentConversations(
+  limit = 50,
+  sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
+): ConversationRecord[] {
+  const safeLimit = Math.min(Math.max(1, Math.floor(limit) || 50), 200);
+  const { hasUpdatedAt } = conversationColumns(sql);
+  const order = hasUpdatedAt
+    ? "ORDER BY updated_at DESC, created_at DESC, id DESC"
+    : "ORDER BY created_at DESC, id DESC";
+  const rows = sql
+    .prepare(
+      `${selectConversationSql(sql)}
+       ${order}
+       LIMIT ?`,
+    )
+    .all(safeLimit) as ConversationRow[];
+  return rows.map(mapRow);
+}

@@ -46,7 +46,7 @@ export function ProfileNameScreen({
   return (
     <div className="setup-center">
       <div className="panel fade-in" style={{ maxWidth: 420 }}>
-        <h1>¿Cómo te llamas?</h1>
+        <h1>¿Cómo quieres que te llame?</h1>
         <p className="lead">
           Así te reconocerá el agente. Puedes cambiarlo después en configuración.
         </p>

@@ -22,6 +22,22 @@ export type SetupProviderInfo = {
   available: boolean;
 };
 
+/** Post-session surface after Welcome/pairing. READY alone is never enough. */
+export type ProductSurfaceGate = "profile" | "llm" | "conversation";
+
+/**
+ * Onboarding sólo termina cuando perfil y LLM están configurados.
+ * READY sin nombre → PROFILE; nombre sin LLM → LLM.
+ */
+export function resolveProductSurfaceGate(input: {
+  profileConfigured: boolean;
+  llmConfigured: boolean;
+}): ProductSurfaceGate {
+  if (!input.profileConfigured) return "profile";
+  if (!input.llmConfigured) return "llm";
+  return "conversation";
+}
+
 /** LLM setup is complete only when a real credential exists. */
 export function isLlmConfigured(s: Pick<SetupStatusDto, "llmConfigured">): boolean {
   return Boolean(s.llmConfigured);

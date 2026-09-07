@@ -1,4 +1,4 @@
-# PHASE 58 / 58.1 — First Run, Onboarding, LLM Credentials & Dark UX
+# PHASE 58 / 58.1 / 58.4 — First Run, Onboarding, LLM Credentials & Dark UX
 
 **Status:** PARTIAL (automatizado PASS; E2E Windows real pendiente)  
 **Fecha:** 2026-09-07
@@ -12,6 +12,7 @@ APPLICATION READY: profile_completed AND llmConfigured
 ```
 
 No se mezclan. `state === READY` en SQLite **sin** clave real no es onboarding completo.
+`READY` **sin** `profile_completed` tampoco salta el nombre (PHASE 58.4).
 
 ## Flujo
 
@@ -20,6 +21,8 @@ Launch → ProfileName (si !profile_completed)
       → OnboardingWizard LLM (si !llmConfigured)
       → ConversationScreen (Personal Agent)
 ```
+
+Ver también: `phase-58-4-onboarding-conversation-ux-titles.md` (composer + títulos semánticos).
 
 ## Almacenamiento LLM
 
@@ -37,9 +40,11 @@ Launch → ProfileName (si !profile_completed)
 2. Inno `PurgeProductSecrets` (LOCALAPPDATA + APPDATA) con reintento
 3. Opcional: borrar `data/` / logs / objects
 
-## UX 58.1
+
+## UX 58.1 / 58.4
 
 - Header: nombre + **Plan Personal** (no “Tu agente”)
 - Sin Home/`AgentSpaceScreen`
-- Blank: “¿En qué te ayudo?” + composer centrado abajo + autofocus
+- Blank: “¿En qué te ayudo?” + composer en inferior-media + autofocus
+- Títulos semánticos LLM tras primer intercambio (fallback determinista)
 - Tema oscuro por defecto (`tokens.css`)

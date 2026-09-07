@@ -94,13 +94,8 @@ export function updateUserDisplayName(input: {
 }
 
 export function isUserProfileComplete(user: User): boolean {
-  if (user.profileCompleted) return true;
-  const name = user.name.trim();
-  return (
-    name.length > 0 &&
-    name !== DEFAULT_USER_DISPLAY_NAME &&
-    name.toLowerCase() !== LOCAL_USER_ID
-  );
+  // PHASE 58.4: only an explicit completed profile counts (not a soft name heuristic).
+  return user.profileCompleted === true;
 }
 
 function mapAgent(row: AgentRow): PersonalAgent {

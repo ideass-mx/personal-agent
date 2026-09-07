@@ -10,6 +10,7 @@ import { SettingsScreen } from "./features/configuration/SettingsScreen";
 import { SetupScreen } from "./features/setup/SetupScreen";
 import { OnboardingWizard } from "./features/setup/OnboardingWizard";
 import { ProfileNameScreen } from "./features/setup/ProfileNameScreen";
+import { resolveProductSurfaceGate } from "./features/setup/setup-flow";
 import { TasksScreen } from "./features/tasks/TasksScreen";
 import { useApp } from "./state/AppContext";
 import { useEffect, useState } from "react";
@@ -40,18 +41,16 @@ function Routed() {
         }
       } catch {
         if (!cancelled) {
-          // Fail open for profile only if identity API unavailable (legacy).
-          setProfileDone(true);
+          // Fail closed: sin perfil confirmado no saltar el nombre.
+          setProfileDone(false);
         }
       }
       try {
         const st = await fetchSetupStatus(base, session.token);
         if (!cancelled) {
-          // PROFILE y LLM son independientes: chat solo si llmConfigured.
           setSetupDone(Boolean(st.llmConfigured));
         }
       } catch {
-        // Fail closed: sin estado de setup no asumir LLM listo.
         if (!cancelled) setSetupDone(false);
       }
     })();
@@ -75,8 +74,12 @@ function Routed() {
     );
   }
 
-  // Nombre primero (PHASE 58), luego setup LLM existente.
-  if (profileDone === false) {
+  // PROFILE → LLM → Conversation. READY sin nombre no salta el perfil.
+  const surface = resolveProductSurfaceGate({
+    profileConfigured: profileDone,
+    llmConfigured: setupDone,
+  });
+  if (surface === "profile") {
     return (
       <ProfileNameScreen
         onCompleted={() => {
@@ -86,7 +89,7 @@ function Routed() {
     );
   }
 
-  if (setupDone === false) {
+  if (surface === "llm") {
     return (
       <OnboardingWizard
         onCompleted={() => {

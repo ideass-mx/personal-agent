@@ -190,8 +190,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMessages((prev) =>
         prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
       );
-      // Reload titles/summaries generated server-side after the turn.
+      // Reload titles/summaries: immediate + delayed (LLM annotate is async).
       void refreshConversations();
+      window.setTimeout(() => void refreshConversations(), 1800);
+      window.setTimeout(() => void refreshConversations(), 4500);
     } else if (msg.type === "confirm_request") {
       setPending({
         confirmationId: msg.confirmationId,
