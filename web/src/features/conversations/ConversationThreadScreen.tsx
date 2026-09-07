@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   buildDiagnosticClipboardText,
   formatDiagnosticDetails,
 } from "../../lib/diagnostics";
+import {
+  applyComposerAutosize,
+  composerEnterShouldSend,
+} from "../../lib/composerKeyboard";
 import { useApp } from "../../state/AppContext";
 
 /** Hilo a pantalla completa — conversación real vía Gateway WS/HTTP. */
@@ -22,7 +26,7 @@ export function ConversationScreen() {
     wsStatus,
   } = useApp();
   const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
@@ -34,40 +38,66 @@ export function ConversationScreen() {
   const canSend =
     wsStatus === "authenticated" && draft.trim().length > 0 && !busy;
 
-  // Autofocus only on main blank agent surface (no modal/onboarding here).
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    applyComposerAutosize(el);
+  }, [draft, isBlank]);
+
+  // Autofocus on blank / conversation switch.
   useEffect(() => {
     if (wsStatus !== "authenticated") return;
     const id = window.setTimeout(() => {
-      inputRef.current?.focus({ preventScroll: true });
+      textareaRef.current?.focus({ preventScroll: true });
     }, 40);
     return () => window.clearTimeout(id);
   }, [wsStatus, isBlank, activeConversationId]);
 
   const composer = (
     <form
-      className={`composer ${isBlank ? "composer-hero" : ""}`}
+      className={`composer ${isBlank ? "composer-hero" : "composer-dock"}`}
       onSubmit={(e) => {
         e.preventDefault();
         if (canSend) send();
       }}
     >
-      <input
-        ref={inputRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder="Escribe lo que necesitas…"
-        aria-label="Mensaje"
-        disabled={wsStatus !== "authenticated"}
-        autoComplete="off"
-      />
-      <button
-        type="submit"
-        className="btn btn-primary composer-send"
-        disabled={!canSend}
-        aria-label="Enviar"
-      >
-        ➤
-      </button>
+      <div className="composer-shell">
+        <textarea
+          ref={textareaRef}
+          className="composer-input"
+          value={draft}
+          rows={1}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            const coarse =
+              typeof window !== "undefined" &&
+              window.matchMedia("(pointer: coarse)").matches;
+            if (
+              !composerEnterShouldSend({
+                shiftKey: e.shiftKey,
+                coarsePointer: coarse,
+              })
+            ) {
+              return;
+            }
+            e.preventDefault();
+            if (canSend) send();
+          }}
+          placeholder="Escribe lo que necesitas…"
+          aria-label="Mensaje"
+          disabled={wsStatus !== "authenticated"}
+          autoComplete="off"
+        />
+        <button
+          type="submit"
+          className="btn btn-primary composer-send"
+          disabled={!canSend}
+          aria-label="Enviar"
+        >
+          ↑
+        </button>
+      </div>
     </form>
   );
 
@@ -77,11 +107,8 @@ export function ConversationScreen() {
       data-agent="personal"
     >
       {!isBlank ? (
-        <header className="screen-header">
-          <div>
-            <h1>{meta?.title || "Conversación"}</h1>
-            {meta?.summary ? <p className="muted">{meta.summary}</p> : null}
-          </div>
+        <header className="screen-header conversation-header">
+          <h1>{meta?.title?.trim() || "Conversación"}</h1>
         </header>
       ) : null}
 
@@ -120,9 +147,11 @@ export function ConversationScreen() {
       ) : null}
 
       {isBlank ? (
-        <div className="blank-stage fade-in">
-          <p className="agent-voice hero-voice">¿En qué te ayudo?</p>
-          {composer}
+        <div className="blank-state fade-in">
+          <div className="blank-state-content">
+            <p className="blank-heading">¿En qué te ayudo?</p>
+            {composer}
+          </div>
         </div>
       ) : (
         <>
@@ -130,14 +159,14 @@ export function ConversationScreen() {
             {messages.map((m) =>
               m.role === "user" ? (
                 <div key={m.id} className="msg user">
-                  <p>{m.text}</p>
+                  <p style={{ whiteSpace: "pre-wrap" }}>{m.text}</p>
                 </div>
               ) : m.role === "assistant" ? (
                 <div key={m.id} className="msg agent" data-agent="personal">
                   <span className="cap-chip" data-agent="personal">
                     Personal
                   </span>
-                  <p>
+                  <p style={{ whiteSpace: "pre-wrap" }}>
                     {m.text}
                     {m.streaming ? "▍" : ""}
                   </p>

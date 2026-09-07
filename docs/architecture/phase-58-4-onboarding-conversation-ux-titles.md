@@ -12,8 +12,8 @@
 3. **Diagnóstico LLM:** `verifyProviderConnectivity` pasa `model: DEFAULT_AGENT_MODEL` y expone en `POST /v1/setup/verify`  
    `connectivity: { provider, model, credentialConfigured, request }` (sin apiKey ni sample).  
    Log: `[gateway] llm_connectivity provider=… model=… credentialConfigured=true request=success`.
-4. **Composer blank:** bloque «¿En qué te ayudo?» + composer en zona inferior-media vía flex chain (`work-area` → `conversation-screen` → `blank-stage`) con espaciadores `::before` (~1.8) / `::after` (~1.2), `min-height: 0`. No `bottom: 0` ni posicionamiento fixed/absolute del composer.
-5. **Scrollbar:** causa = `.work-area { overflow: auto }` + scroll en `.thread`. Fix: `.work-area:has(> .conversation-screen) { overflow: hidden }` (otras pantallas siguen con `overflow: auto`).
+4. **Composer blank (rediseño):** `.blank-state` centrado (`align-items` / `justify-content: center`) con `.blank-state-content` (ancho `min(760px, calc(100% - 48px))`), heading + composer. Sin `.blank-stage` ni `::before`/`::after`, sin `margin-top` en vh. Composer multilínea (`textarea` + `.composer-shell`); Enter envía, Shift+Enter nueva línea (coarse/touch: Enter = nueva línea). Autosize 54–240px (crece/reduce vía `scrollHeight`). Mensajes `.msg p` a 16.5px / line-height 1.6. Header del hilo: solo título (sin `meta.summary`). No `bottom: 0` ni fixed/absolute/sticky en hero/dock.
+5. **Scrollbar:** cadena `html/body/#root` + `work-area:has(> .conversation-screen)` + `.conversation-screen` → `overflow: hidden`; scroll solo en `.thread` (`overflow-y: auto`). Otras pantallas siguen con `overflow: auto` en work-area.
 6. **Títulos:** tras el primer intercambio significativo, Gateway anota `title`/`summary`. Sidebar vía `GET /conversations`.
 
 ## Causa raíz del bug de títulos
@@ -56,11 +56,14 @@ assistant_done
 
 ## UX invariantes
 
-- Header: nombre + Plan Personal  
+- Header shell: nombre + Plan Personal  
 - Sin Home / «Tu agente» / Listo permanente  
-- Composer autofocus en blank; `composer-hero` con `position: static`  
-- Blank-stage: flex spacers `::before` (≈1.8) + `::after` (≈1.2); conversation-screen `height: 100%` + `flex: 1` + `min-height: 0`  
-- Sin barra vertical doble: work-area hidden solo con hijo `.conversation-screen`  
+- Blank: `.blank-state` / `.blank-state-content` (centrado; sin `blank-stage`, sin vh)  
+- Composer: `textarea` + `.composer-shell`; autosize 54–240; Enter / Shift+Enter; autofocus vía `textareaRef`; `composer-hero` / `composer-dock` estáticos  
+- Legibilidad: `.msg p` 16.5px / 1.6; composer-input 16px; cap-chip ~11px  
+- Chat header: título de conversación; sin summary en UI del hilo  
+- conversation-screen `height: 100%` + `flex: 1` + `min-height: 0` + `overflow: hidden`  
+- Sin barra vertical doble: `html/body/#root` overflow hidden; work-area hidden solo con hijo `.conversation-screen`; scroll en `.thread`  
 - Sin exponer AuthSession, Device, tokens, scopes en UI
 
 ## Validación pendiente

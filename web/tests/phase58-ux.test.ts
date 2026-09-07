@@ -31,15 +31,15 @@ describe("PHASE 58.1 Personal Agent UX", () => {
     assert.equal(shell.includes("Tu agente"), false);
   });
 
-  it("ConversationScreen blank stage has hero + composer autofocus", () => {
+  it("ConversationScreen blank state has hero + composer autofocus", () => {
     const src = fs.readFileSync(
       path.join(root, "src/features/conversations/ConversationThreadScreen.tsx"),
       "utf8",
     );
     assert.match(src, /¿En qué te ayudo\?/);
-    assert.match(src, /blank-stage/);
+    assert.match(src, /blank-state/);
     assert.match(src, /composer-hero/);
-    assert.match(src, /inputRef\.current\?\.focus/);
+    assert.match(src, /textareaRef\.current\?\.focus/);
     assert.equal(/ID \$\{activeConversationId/.test(src), false);
   });
 
