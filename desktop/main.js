@@ -74,6 +74,8 @@ let browserOpenedForCurrentStartup = false;
 let browserLaunchState = "IDLE";
 let automaticBrowserLaunchPromise = null;
 let hostBootPromise = null;
+/** IDLE | BOOTING | READY | FAILED — avoids automatic re-boot after success. */
+let hostBootState = "IDLE";
 let hostStartupId = createHostStartupId();
 
 function createHostStartupId() {
@@ -646,9 +648,22 @@ function ensureTray() {
 
 /**
  * Fase 3/7.6: host mode — Gateway sin Tailscale gate; Web UI es el onboarding.
+ * PHASE 58.3: automatic boot is idempotent once READY (user_retry may re-enter).
  */
 async function bootHostMode(reason = "automatic_start") {
+  if (hostBootState === "READY" && reason !== "user_retry") {
+    logOnboarding("HOST", "gateway_start", {
+      port: lastConsolePort,
+      startupId: hostStartupId,
+      reason,
+      pid: process.pid,
+      already: true,
+      note: "host_already_ready",
+    });
+    return { ok: true, already: true };
+  }
   if (hostBootPromise) return hostBootPromise;
+  hostBootState = "BOOTING";
   hostBootPromise = (async () => {
     hostModeActive = true;
     hostStartupId = createHostStartupId();
@@ -660,20 +675,38 @@ async function bootHostMode(reason = "automatic_start") {
     const port = cfg.hubPort || 8787;
     lastConsolePort = port;
 
-    logOnboarding("HOST", "gateway_start", { port, startupId: hostStartupId, reason });
     const started = await supervisor.start();
+    logOnboarding("HOST", "gateway_start", {
+      port,
+      startupId: hostStartupId,
+      reason,
+      pid: process.pid,
+      already: Boolean(started.already),
+      gatewayPid: supervisor.snapshot?.()?.pid ?? null,
+    });
     if (!started.ok && !started.already) {
+      const err = started.error || "start_failed";
       logOnboarding("HOST", "gateway_start_failed", {
-        error: started.error || "start_failed",
+        error: err,
         startupId: hostStartupId,
         reason,
+        pid: process.pid,
+        already: false,
       });
+      if (err === "EADDRINUSE" || /EADDRINUSE|address already in use/i.test(String(err))) {
+        logOnboarding("HOST", "gateway_eaddrinuse", {
+          port,
+          startupId: hostStartupId,
+          reason,
+          pid: process.pid,
+        });
+      }
       await showHostSplashMessage({
         title: "Personal Agent",
         message: "No pudimos iniciar tu agente. Usa Reintentar o revisa el diagnóstico.",
         details: "El host no pudo iniciar el agente correctamente.",
       });
-      return { ok: false, error: started.error || "start_failed" };
+      return { ok: false, error: err };
     }
 
     try {
@@ -759,7 +792,12 @@ async function bootHostMode(reason = "automatic_start") {
     return { ok: true };
   })();
   try {
-    return await hostBootPromise;
+    const result = await hostBootPromise;
+    hostBootState = result?.ok ? "READY" : "FAILED";
+    return result;
+  } catch (err) {
+    hostBootState = "FAILED";
+    throw err;
   } finally {
     hostBootPromise = null;
   }
@@ -1354,6 +1392,7 @@ function wireIpc() {
       if (!snap.running && supervisor) {
         await supervisor.stop().catch(() => {});
       }
+      hostBootState = "FAILED";
       return await bootHostMode("user_retry");
     } catch (err) {
       return {

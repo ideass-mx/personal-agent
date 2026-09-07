@@ -1,6 +1,7 @@
 /**
  * HTTP AuthZ helpers: owner identity + optional host install transport.
  * PHASE 57.7: OWNER_LOCAL routes also require loopback peer.
+ * PHASE 58.3: local product setup accepts browser AuthSession on loopback.
  */
 import type { Context } from "hono";
 import {
@@ -37,7 +38,7 @@ export function requireAgentOwner(
 
 /**
  * Owner + host install transport (install_compat / HUB_TOKEN) + loopback peer.
- * OWNER_LOCAL: setup / pairing / browser mint.
+ * OWNER_LOCAL: pairing / browser mint (not product setup UI).
  */
 export function requireOwnerHost(
   c: Context,
@@ -66,4 +67,53 @@ export function requireOwnerHost(
     );
   }
   return gated;
+}
+
+function isBrowserAuthPrincipal(principal: HttpAuthPrincipal): boolean {
+  return (
+    principal.kind === "browser" &&
+    principal.userContext.authKind === "browser"
+  );
+}
+
+/**
+ * PHASE 58.3 — Local product setup (onboarding / LLM) for the host console.
+ *
+ * Allowed on loopback only:
+ *   A) install_compat + owner
+ *   B) browser AuthSession + owner (HttpOnly cookie; never HUB_TOKEN in browser)
+ *
+ * Does NOT grant remote setup privilege to browser or install_compat.
+ */
+export function requireLocalProductSetup(
+  c: Context,
+  hubToken: string,
+  opts?: { peerIsLoopback?: boolean },
+): OwnerGateOk | Response {
+  const loopback = opts?.peerIsLoopback ?? isLoopbackRequest(c);
+  if (!loopback) {
+    return c.json(
+      httpErrorBody(
+        "localhost_only",
+        "Configuración de producto solo disponible en este equipo (loopback).",
+      ),
+      403,
+    );
+  }
+  const gated = requireAgentOwner(c, hubToken);
+  if (gated instanceof Response) return gated;
+  const { principal } = gated;
+  if (
+    isInstallCompatTransport(principal.userContext) ||
+    isBrowserAuthPrincipal(principal)
+  ) {
+    return gated;
+  }
+  return c.json(
+    httpErrorBody(
+      "setup_auth_required",
+      "Se requiere sesión local del propietario para configurar el producto.",
+    ),
+    403,
+  );
 }

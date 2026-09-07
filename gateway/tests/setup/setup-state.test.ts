@@ -267,7 +267,7 @@ describe("GET /v1/setup/status", () => {
       onboardingCompleted: boolean;
       state: string;
     };
-    assert.equal(body.state, SetupStates.READY);
+    assert.equal(body.state, SetupStates.LLM_REQUIRED);
     assert.equal(body.llmConfigured, false);
     assert.equal(body.onboardingCompleted, false);
   });

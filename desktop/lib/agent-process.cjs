@@ -175,6 +175,13 @@ function createAgentSupervisor({
         lastError = "boot_failed";
         onState?.();
       }
+      if (
+        /EADDRINUSE/i.test(text) ||
+        /address already in use/i.test(text)
+      ) {
+        lastError = "EADDRINUSE";
+        onState?.();
+      }
     });
     child.on("exit", (code) => {
       appendLog(`\n[shell] gateway exit code=${code}\n`);

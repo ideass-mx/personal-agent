@@ -46,7 +46,7 @@ describe("setup-flow", () => {
     assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "agent_ready");
   });
 
-  it("READY with llmConfigured opens done", () => {
+  it("READY opens done only when llmConfigured", () => {
     assert.equal(
       stepFromStatus(
         dto({
@@ -57,6 +57,40 @@ describe("setup-flow", () => {
         }),
       ),
       "done",
+    );
+  });
+
+  it("F/G/H matrix: profile vs llm gates (application ready)", () => {
+    // F: profile incomplete + llm false → not chat-ready (profile gated in App)
+    assert.equal(
+      isApplicationReadyForChat(
+        dto({ llmConfigured: false, state: "AGENT_READY" }),
+      ),
+      false,
+    );
+    // G: profile complete + llm false → LLM config (not chat)
+    assert.equal(
+      isApplicationReadyForChat(
+        dto({ llmConfigured: false, state: "LLM_REQUIRED" }),
+      ),
+      false,
+    );
+    assert.equal(
+      stepFromStatus(
+        dto({
+          state: "READY",
+          onboardingCompleted: true,
+          llmConfigured: false,
+        }),
+      ),
+      "llm_intro",
+    );
+    // H: both complete → chat
+    assert.equal(
+      isApplicationReadyForChat(
+        dto({ llmConfigured: true, state: "READY", onboardingCompleted: true }),
+      ),
+      true,
     );
   });
 

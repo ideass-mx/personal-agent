@@ -136,6 +136,18 @@ test("automatic browser launch is idempotent and second-instance does not auto-o
   const secondSlice = src.slice(secondIdx, secondIdx + 700);
   assert.match(secondSlice, /browser_open_skipped/);
   assert.doesNotMatch(secondSlice, /openPersonalAgentInBrowser\(/);
+  assert.doesNotMatch(secondSlice, /bootHostMode\(/);
+  assert.doesNotMatch(secondSlice, /supervisor\.start\(/);
+});
+
+test("PHASE 58.3 bootHostMode is idempotent when READY", () => {
+  const src = fs.readFileSync(mainPath, "utf8");
+  assert.match(src, /hostBootState\s*=\s*"IDLE"/);
+  assert.match(src, /hostBootState\s*===\s*"READY"/);
+  assert.match(src, /reason\s*!==\s*"user_retry"/);
+  assert.match(src, /already:\s*Boolean\(started\.already\)/);
+  assert.match(src, /pid:\s*process\.pid/);
+  assert.match(src, /gateway_eaddrinuse|EADDRINUSE/);
 });
 
 test("explicit user opens still allowed and retry remains separate", () => {

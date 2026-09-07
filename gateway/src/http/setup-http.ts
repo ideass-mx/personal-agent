@@ -1,10 +1,11 @@
 /**
- * HTTP Setup — Bearer = install credential (HUB_TOKEN).
- * No secrets in responses. Source of truth: setup_state SQLite.
+ * HTTP Setup — product onboarding / LLM configuration.
+ * PHASE 58.3: local owner may use install_compat OR browser AuthSession (loopback).
+ * No secrets in responses. Source of truth: setup_state SQLite + credential files.
  */
 import type { Context, Hono } from "hono";
 import { httpErrorBody } from "./bearer-auth.ts";
-import { requireOwnerHost } from "./owner-auth.ts";
+import { requireLocalProductSetup } from "./owner-auth.ts";
 import {
   getSetupState,
   transitionSetupState,
@@ -25,6 +26,27 @@ import {
   verifyProviderConnectivity,
 } from "../providers/registry.ts";
 
+function setupStatusPayload() {
+  const record = getSetupState();
+  const dto = toSetupStatusDto(record);
+  const providerId = record.llmProvider || "anthropic";
+  // Reflect real credential files/env — uninstall may wipe keys while SQLite
+  // still says READY; UI must not treat onboarding as done without a key.
+  const keyOk = hasProviderApiKeyConfigured(providerId);
+  const staleReadyWithoutKey =
+    !keyOk &&
+    (record.state === SetupStates.READY ||
+      record.state === SetupStates.VERIFIED ||
+      record.state === SetupStates.LLM_CONNECTED);
+  return {
+    ...dto,
+    // Stale READY without credential → surface as LLM_REQUIRED for the console.
+    state: staleReadyWithoutKey ? SetupStates.LLM_REQUIRED : dto.state,
+    llmConfigured: keyOk,
+    onboardingCompleted: Boolean(dto.onboardingCompleted && keyOk),
+  };
+}
+
 export function mountSetupHttp(
   app: Hono,
   deps: {
@@ -36,37 +58,27 @@ export function mountSetupHttp(
   },
 ): void {
   const runVerify = deps.verifyLlm ?? verifyProviderConnectivity;
-  /** Owner + host install transport (install_compat). Not install≡owner. */
-  const requireHost = (c: Context) => {
-    const gated = requireOwnerHost(c, deps.hubToken);
+  /** Local product setup: install_compat OR browser AuthSession (loopback + owner). */
+  const requireSetup = (c: Context) => {
+    const gated = requireLocalProductSetup(c, deps.hubToken);
     if (gated instanceof Response) return gated;
     return null;
   };
 
   app.get("/v1/setup/status", (c) => {
-    const denied = requireHost(c);
+    const denied = requireSetup(c);
     if (denied) return denied;
-    const record = getSetupState();
-    const dto = toSetupStatusDto(record);
-    const providerId = record.llmProvider || "anthropic";
-    // Reflect real credential files/env — uninstall may wipe keys while SQLite
-    // still says READY; UI must not treat onboarding as done without a key.
-    const keyOk = hasProviderApiKeyConfigured(providerId);
-    return c.json({
-      ...dto,
-      llmConfigured: keyOk,
-      onboardingCompleted: Boolean(dto.onboardingCompleted && keyOk),
-    });
+    return c.json(setupStatusPayload());
   });
 
   app.get("/v1/setup/providers", (c) => {
-    const denied = requireHost(c);
+    const denied = requireSetup(c);
     if (denied) return denied;
     return c.json({ ok: true, providers: listProviders() });
   });
 
   app.post("/v1/setup/transition", async (c) => {
-    const denied = requireHost(c);
+    const denied = requireSetup(c);
     if (denied) return denied;
     const body = (await c.req.json().catch(() => ({}))) as {
       state?: string;
@@ -86,7 +98,12 @@ export function mountSetupHttp(
         lastErrorCode: body.errorCode ?? null,
         lastErrorMessage: body.errorMessage ?? null,
       });
-      return c.json(toSetupStatusDto(record));
+      return c.json({
+        ...toSetupStatusDto(record),
+        llmConfigured: hasProviderApiKeyConfigured(
+          record.llmProvider || "anthropic",
+        ),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "transition_failed";
       if (message.includes("transición ilegal")) {
@@ -101,7 +118,7 @@ export function mountSetupHttp(
    * Nunca devuelve la clave.
    */
   app.post("/v1/setup/llm", async (c) => {
-    const denied = requireHost(c);
+    const denied = requireSetup(c);
     if (denied) return denied;
     const body = (await c.req.json().catch(() => ({}))) as {
       provider?: string;
@@ -190,7 +207,7 @@ export function mountSetupHttp(
    * Prueba real vía LLMProvider (mismo contrato que AgentRuntime).
    */
   app.post("/v1/setup/verify", async (c) => {
-    const denied = requireHost(c);
+    const denied = requireSetup(c);
     if (denied) return denied;
     const record0 = getSetupState();
     const providerId = record0.llmProvider || "anthropic";
