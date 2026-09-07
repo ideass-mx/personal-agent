@@ -16,6 +16,29 @@ export function resolveHttpBase(cfg: ConnectionConfig): string {
   return "";
 }
 
+/** Normaliza meta de conversación; `pinned` ausente → false. */
+export function normalizeConversationMeta(
+  c: ConversationMeta,
+): ConversationMeta {
+  return { ...c, pinned: Boolean(c.pinned) };
+}
+
+/**
+ * Orden sidebar (PHASE 58.5): fijadas primero, luego actividad reciente.
+ * Alineado con `compareConversationsForSidebar` del Gateway.
+ */
+export function compareConversationsForSidebar(
+  a: Pick<ConversationMeta, "pinned" | "updatedAt" | "createdAt">,
+  b: Pick<ConversationMeta, "pinned" | "updatedAt" | "createdAt">,
+): number {
+  const ap = a.pinned ? 1 : 0;
+  const bp = b.pinned ? 1 : 0;
+  if (bp !== ap) return bp - ap;
+  return (b.updatedAt || b.createdAt).localeCompare(
+    a.updatedAt || a.createdAt,
+  );
+}
+
 export async function fetchHealth(base: string): Promise<HealthSnapshot> {
   const res = await fetch(`${base}/health`);
   if (!res.ok) throw new Error(`health_${res.status}`);
@@ -46,7 +69,9 @@ export async function listConversations(
   });
   if (res.ok) {
     const list = (await res.json()) as ConversationMeta[];
-    return Array.isArray(list) ? list : [];
+    return Array.isArray(list)
+      ? list.map(normalizeConversationMeta)
+      : [];
   }
   // Fallback legacy: listar por workspaces si el Gateway no expone GET /conversations.
   const wsRes = await fetch(`${base}/workspaces`, {
@@ -63,12 +88,10 @@ export async function listConversations(
     });
     if (!cRes.ok) continue;
     const list = (await cRes.json()) as ConversationMeta[];
-    all.push(...list);
+    all.push(...list.map(normalizeConversationMeta));
   }
   const map = new Map(all.map((c) => [c.id, c]));
-  return [...map.values()].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
-  );
+  return [...map.values()].sort(compareConversationsForSidebar);
 }
 
 export async function createConversation(
@@ -85,7 +108,39 @@ export async function createConversation(
     body: JSON.stringify({ title: title || null }),
   });
   if (!res.ok) throw new Error(`create_conversation_${res.status}`);
-  return (await res.json()) as ConversationMeta;
+  return normalizeConversationMeta((await res.json()) as ConversationMeta);
+}
+
+/** PHASE 58.5 — fijar / desfijar conversación. */
+export async function patchConversationPinned(
+  base: string,
+  token: string,
+  id: string,
+  pinned: boolean,
+): Promise<ConversationMeta> {
+  const res = await fetch(`${base}/conversations/${id}`, {
+    method: "PATCH",
+    headers: {
+      ...authHeaders(token),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ pinned }),
+  });
+  if (!res.ok) throw new Error(`patch_conversation_${res.status}`);
+  return normalizeConversationMeta((await res.json()) as ConversationMeta);
+}
+
+/** PHASE 58.5 — eliminar conversación (y mensajes en Gateway). */
+export async function deleteConversation(
+  base: string,
+  token: string,
+  id: string,
+): Promise<void> {
+  const res = await fetch(`${base}/conversations/${id}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`delete_conversation_${res.status}`);
 }
 
 export async function fetchMessages(

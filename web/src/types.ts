@@ -127,6 +127,8 @@ export type ConversationMeta = {
   createdAt: string;
   updatedAt?: string;
   workspaceId: string | null;
+  /** PHASE 58.5 — fijada en sidebar; default false si el JSON no la trae. */
+  pinned?: boolean;
 };
 
 export type ConnectionConfig = {

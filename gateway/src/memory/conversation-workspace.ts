@@ -13,6 +13,7 @@ export type ConversationRecord = {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly workspaceId: string | null;
+  readonly pinned: boolean;
 };
 
 type ConversationRow = {
@@ -22,6 +23,7 @@ type ConversationRow = {
   created_at: string;
   updated_at: string | null;
   workspace_id: string | null;
+  pinned?: number | null;
 };
 
 function isFkError(err: unknown): boolean {
@@ -38,6 +40,7 @@ function isFkError(err: unknown): boolean {
 function conversationColumns(sql: WorkspaceSqlDb): {
   hasSummary: boolean;
   hasUpdatedAt: boolean;
+  hasPinned: boolean;
 } {
   const cols = (
     sql.prepare(`PRAGMA table_info(conversations)`).all() as Array<{
@@ -47,6 +50,7 @@ function conversationColumns(sql: WorkspaceSqlDb): {
   return {
     hasSummary: cols.includes("summary"),
     hasUpdatedAt: cols.includes("updated_at"),
+    hasPinned: cols.includes("pinned"),
   };
 }
 
@@ -58,15 +62,26 @@ function mapRow(row: ConversationRow): ConversationRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at ?? row.created_at,
     workspaceId: row.workspace_id,
+    pinned: Boolean(row.pinned),
   };
 }
 
 function selectConversationSql(sql: WorkspaceSqlDb): string {
-  const { hasSummary, hasUpdatedAt } = conversationColumns(sql);
+  const { hasSummary, hasUpdatedAt, hasPinned } = conversationColumns(sql);
   const summary = hasSummary ? "summary" : "NULL AS summary";
   const updated = hasUpdatedAt ? "updated_at" : "created_at AS updated_at";
-  return `SELECT id, title, ${summary}, created_at, ${updated}, workspace_id
+  const pinned = hasPinned ? "pinned" : "0 AS pinned";
+  return `SELECT id, title, ${summary}, created_at, ${updated}, workspace_id, ${pinned}
           FROM conversations`;
+}
+
+function listOrderSql(sql: WorkspaceSqlDb): string {
+  const { hasUpdatedAt, hasPinned } = conversationColumns(sql);
+  const pinnedOrd = hasPinned ? "pinned DESC, " : "";
+  if (hasUpdatedAt) {
+    return `ORDER BY ${pinnedOrd}updated_at DESC, created_at DESC, id DESC`;
+  }
+  return `ORDER BY ${pinnedOrd}created_at DESC, id DESC`;
 }
 
 export function getConversation(
@@ -152,24 +167,76 @@ export function setConversationWorkspace(
   return updated;
 }
 
+/** PHASE 58.5 — pin / unpin. Conversation inexistente → error. */
+export function setConversationPinned(
+  conversationId: string,
+  pinned: boolean,
+  sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
+): ConversationRecord {
+  const current = getConversation(conversationId, sql);
+  if (!current) {
+    throw new Error(`Conversation inexistente: ${conversationId}.`);
+  }
+  const { hasPinned, hasUpdatedAt } = conversationColumns(sql);
+  if (!hasPinned) {
+    throw new Error("Conversation: columna pinned no disponible.");
+  }
+  if (hasUpdatedAt) {
+    sql
+      .prepare(
+        `UPDATE conversations
+         SET pinned = ?, updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .run(pinned ? 1 : 0, conversationId);
+  } else {
+    sql
+      .prepare(`UPDATE conversations SET pinned = ? WHERE id = ?`)
+      .run(pinned ? 1 : 0, conversationId);
+  }
+  const updated = getConversation(conversationId, sql);
+  if (!updated) throw new Error("Conversation: update pin no persistió.");
+  return updated;
+}
+
+/**
+ * PHASE 58.5 — elimina conversación y sus mensajes.
+ * Conversation inexistente → false.
+ */
+export function deleteConversation(
+  conversationId: string,
+  sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
+): boolean {
+  const current = getConversation(conversationId, sql);
+  if (!current) return false;
+  const run = (fn: () => void) => {
+    if (typeof (sql as { transaction?: (f: () => void) => () => void }).transaction === "function") {
+      (sql as { transaction: (f: () => void) => () => void }).transaction(fn)();
+    } else {
+      fn();
+    }
+  };
+  run(() => {
+    sql.prepare(`DELETE FROM messages WHERE conversation_id = ?`).run(conversationId);
+    sql.prepare(`DELETE FROM conversations WHERE id = ?`).run(conversationId);
+  });
+  return true;
+}
+
 /**
  * Hilos de un Workspace. No comprueba que el Workspace exista
  * (eso es responsabilidad del Gateway HTTP). NULL no entra: WHERE workspace_id = ?.
- * Orden: updated_at DESC, created_at DESC, id DESC (actividad reciente; created_at desempata).
+ * Orden: pinned DESC, updated_at DESC, created_at DESC, id DESC.
  */
 export function listConversationsByWorkspace(
   workspaceId: string,
   sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
 ): ConversationRecord[] {
-  const { hasUpdatedAt } = conversationColumns(sql);
-  const order = hasUpdatedAt
-    ? "ORDER BY updated_at DESC, created_at DESC, id DESC"
-    : "ORDER BY created_at DESC, id DESC";
   const rows = sql
     .prepare(
       `${selectConversationSql(sql)}
        WHERE workspace_id = ?
-       ${order}`,
+       ${listOrderSql(sql)}`,
     )
     .all(workspaceId) as ConversationRow[];
   return rows.map(mapRow);
@@ -177,22 +244,36 @@ export function listConversationsByWorkspace(
 
 /**
  * Conversaciones recientes (incl. sin Workspace). Para sidebar / lista humana.
+ * Orden: fijadas primero, luego actividad reciente.
  */
 export function listRecentConversations(
   limit = 50,
   sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
 ): ConversationRecord[] {
   const safeLimit = Math.min(Math.max(1, Math.floor(limit) || 50), 200);
-  const { hasUpdatedAt } = conversationColumns(sql);
-  const order = hasUpdatedAt
-    ? "ORDER BY updated_at DESC, created_at DESC, id DESC"
-    : "ORDER BY created_at DESC, id DESC";
   const rows = sql
     .prepare(
       `${selectConversationSql(sql)}
-       ${order}
+       ${listOrderSql(sql)}
        LIMIT ?`,
     )
     .all(safeLimit) as ConversationRow[];
   return rows.map(mapRow);
+}
+
+/** Client-side sort matching server list order (pinned first, then recent). */
+export function compareConversationsForSidebar(
+  a: Pick<ConversationRecord, "pinned" | "updatedAt" | "createdAt" | "id">,
+  b: Pick<ConversationRecord, "pinned" | "updatedAt" | "createdAt" | "id">,
+): number {
+  const ap = a.pinned ? 1 : 0;
+  const bp = b.pinned ? 1 : 0;
+  if (bp !== ap) return bp - ap;
+  const au = a.updatedAt || a.createdAt;
+  const bu = b.updatedAt || b.createdAt;
+  const byUpdated = bu.localeCompare(au);
+  if (byUpdated !== 0) return byUpdated;
+  const byCreated = b.createdAt.localeCompare(a.createdAt);
+  if (byCreated !== 0) return byCreated;
+  return b.id.localeCompare(a.id);
 }

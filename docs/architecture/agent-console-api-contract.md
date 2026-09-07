@@ -30,6 +30,8 @@ PHASE 49 no implementa APIs. PHASE 50 solo añade **REQUIRED** justificados.
 | GET | `/conversations/:id` | Bearer | Meta |
 | GET | `/conversations/:id/messages` | Bearer | History hydrate |
 | GET/PATCH | `/conversations/:id/workspace` | Bearer | Asociación Conversation↔Workspace |
+| PATCH | `/conversations/:id` | Bearer | Pin/unpin (`{ pinned: boolean }`) — PHASE 58.5 |
+| DELETE | `/conversations/:id` | Bearer | Eliminar conversación + mensajes — PHASE 58.5 |
 
 Fuente: `hub/src/http/server.ts`, `hub/src/http/workspace-http.ts`.
 

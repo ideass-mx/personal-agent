@@ -10,9 +10,12 @@ import {
 } from "react";
 import {
   createConversation,
+  compareConversationsForSidebar,
+  deleteConversation,
   fetchHealth,
   fetchMessages,
   listConversations,
+  patchConversationPinned,
   resolveHttpBase,
 } from "../api/http";
 import { HubSocket, type ServerMsg } from "../websocket/HubSocket";
@@ -62,6 +65,8 @@ type AppState = {
   selectConversation: (id: string) => Promise<void>;
   newConversation: () => Promise<void>;
   refreshConversations: () => Promise<ConversationMeta[] | null | undefined>;
+  setConversationPinned: (id: string, pinned: boolean) => Promise<void>;
+  removeConversation: (id: string) => Promise<void>;
   send: () => void;
   pendingConfirm: ConfirmPending | null;
   respondConfirm: (approved: boolean) => void;
@@ -138,9 +143,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setConversations((prev) => {
         const map = new Map(prev.map((c) => [c.id, c]));
         for (const c of list) map.set(c.id, c);
-        return [...map.values()].sort((a, b) =>
-          b.createdAt.localeCompare(a.createdAt),
-        );
+        return [...map.values()].sort(compareConversationsForSidebar);
       });
       return list;
     } catch {
@@ -202,9 +205,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
               title: null,
               createdAt: new Date().toISOString(),
               workspaceId: null,
+              pinned: false,
             },
             ...prev,
-          ];
+          ].sort(compareConversationsForSidebar);
         });
       }
     } else if (msg.type === "assistant_done") {
@@ -365,7 +369,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const base = resolveHttpBase(session);
       const created = await createConversation(base, session.token);
-      setConversations((prev) => [created, ...prev]);
+      setConversations((prev) =>
+        [created, ...prev].sort(compareConversationsForSidebar),
+      );
       setActive(created.id);
       setMessages([]);
       setNav("conversation");
@@ -375,6 +381,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setNav("conversation");
     }
   }, [session]);
+
+  const setConversationPinned = useCallback(
+    async (id: string, pinned: boolean) => {
+      if (!session) return;
+      setConversations((prev) =>
+        prev
+          .map((c) => (c.id === id ? { ...c, pinned } : c))
+          .sort(compareConversationsForSidebar),
+      );
+      try {
+        const base = resolveHttpBase(session);
+        const updated = await patchConversationPinned(
+          base,
+          session.token,
+          id,
+          pinned,
+        );
+        setConversations((prev) =>
+          prev
+            .map((c) => (c.id === id ? { ...c, ...updated } : c))
+            .sort(compareConversationsForSidebar),
+        );
+      } catch {
+        void refreshConversations();
+      }
+    },
+    [session, refreshConversations],
+  );
+
+  const removeConversation = useCallback(
+    async (id: string) => {
+      if (!session) return;
+      const wasActive = activeRef.current === id;
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (wasActive) {
+        setMessages([]);
+        setActive(null);
+        setNav("conversation");
+      }
+      try {
+        const base = resolveHttpBase(session);
+        await deleteConversation(base, session.token, id);
+      } catch {
+        void refreshConversations();
+      }
+    },
+    [session, refreshConversations],
+  );
 
   const send = useCallback(() => {
     const text = draft.trim();
@@ -450,6 +504,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectConversation,
       newConversation,
       refreshConversations,
+      setConversationPinned,
+      removeConversation,
       send,
       pendingConfirm,
       respondConfirm,
@@ -481,6 +537,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectConversation,
       newConversation,
       refreshConversations,
+      setConversationPinned,
+      removeConversation,
       send,
       pendingConfirm,
       respondConfirm,

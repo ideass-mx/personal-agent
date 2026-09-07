@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useApp } from "../state/AppContext";
 import type { NavId } from "../types";
-import { conversationListLabel } from "../lib/conversationLabel";
+import { ConversationSidebarList } from "../features/conversations/ConversationSidebarList";
 import {
   IconArchive,
   IconBook,
@@ -30,11 +30,8 @@ export function Shell({ children }: { children: ReactNode }) {
     accountMenuOpen,
     setAccountMenuOpen,
     openSettings,
-    conversations,
-    selectConversation,
     newConversation,
     session,
-    activeConversationId,
     userDisplayName,
   } = useApp();
 
@@ -173,30 +170,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 icon={<IconMessage />}
               />
             ) : (
-              <ul className="conv-list">
-                {conversations.length === 0 ? (
-                  <li className="muted" style={{ padding: "8px 10px", fontSize: 12.5 }}>
-                    Sin conversaciones aún
-                  </li>
-                ) : (
-                  conversations.slice(0, 12).map((c) => (
-                    <li key={c.id}>
-                      <button
-                        type="button"
-                        className={`nav-item listed ${
-                          nav === "conversation" && activeConversationId === c.id
-                            ? "active"
-                            : ""
-                        }`}
-                        onClick={() => void selectConversation(c.id)}
-                        title={c.summary || c.title || "Conversación"}
-                      >
-                        <span className="truncate">{conversationListLabel(c)}</span>
-                      </button>
-                    </li>
-                  ))
-                )}
-              </ul>
+              <ConversationSidebarList />
             )}
           </div>
         </div>

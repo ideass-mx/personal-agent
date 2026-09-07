@@ -164,7 +164,7 @@ export function ConversationScreen() {
               ) : m.role === "assistant" ? (
                 <div key={m.id} className="msg agent" data-agent="personal">
                   <span className="cap-chip" data-agent="personal">
-                    Personal
+                    Personal Agent
                   </span>
                   <p style={{ whiteSpace: "pre-wrap" }}>
                     {m.text}

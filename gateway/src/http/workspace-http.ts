@@ -6,9 +6,11 @@
 import type { Context, Hono } from "hono";
 import {
   createConversation,
+  deleteConversation,
   getConversation,
   listConversationsByWorkspace,
   listRecentConversations,
+  setConversationPinned,
   setConversationWorkspace,
 } from "../memory/conversation-workspace.ts";
 import { listConversationMessages } from "../memory/history.ts";
@@ -240,6 +242,47 @@ export function mountWorkspaceHttp(app: Hono, deps: WorkspaceHttpDeps): void {
       return c.json(errorBody("not_found", "Conversation inexistente."), 404);
     }
     return c.json(found);
+  });
+
+  /** PHASE 58.5 — pin/unpin (auth: owner via requireAuth). */
+  app.patch("/conversations/:id", async (c) => {
+    const denied = requireAuth(c, hubToken);
+    if (denied) return denied;
+    const conversationId = c.req.param("id");
+    let body: unknown;
+    try {
+      body = await readJson(c);
+    } catch {
+      return c.json(errorBody("bad_request", "JSON inválido."), 400);
+    }
+    if (!isRecord(body) || typeof body.pinned !== "boolean") {
+      return c.json(
+        errorBody("bad_request", "Se requiere pinned (boolean)."),
+        400,
+      );
+    }
+    try {
+      const updated = setConversationPinned(conversationId, body.pinned, sql);
+      return c.json(updated);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Error actualizando.";
+      if (message.startsWith("Conversation inexistente")) {
+        return c.json(errorBody("not_found", message), 404);
+      }
+      return c.json(errorBody("bad_request", message), 400);
+    }
+  });
+
+  /** PHASE 58.5 — delete conversation + messages. */
+  app.delete("/conversations/:id", (c) => {
+    const denied = requireAuth(c, hubToken);
+    if (denied) return denied;
+    const conversationId = c.req.param("id");
+    const ok = deleteConversation(conversationId, sql);
+    if (!ok) {
+      return c.json(errorBody("not_found", "Conversation inexistente."), 404);
+    }
+    return c.json({ ok: true });
   });
 
   app.get("/conversations/:id/messages", (c) => {

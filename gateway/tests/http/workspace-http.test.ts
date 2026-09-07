@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { createConversation } from "../../src/memory/conversation-workspace.ts";
 import { mountWorkspaceHttp } from "../../src/http/workspace-http.ts";
 import { createSqliteWorkspaceStore } from "../../src/workspace/sqlite-workspace-store.ts";
+import { listConversationMessages } from "../../src/memory/history.ts";
 
 const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -345,5 +346,124 @@ describe("HTTP Workspace (Gateway)", () => {
       headers: authHeaders(),
     });
     assert.equal(((await still.json()) as { workspaceId: null }).workspaceId, null);
+  });
+});
+
+function openDbWithPinned(file = ":memory:") {
+  const sql = new Database(file);
+  sql.pragma("foreign_keys = ON");
+  for (const name of [
+    "001_init.sql",
+    "002_workspaces.sql",
+    "003_conversation_workspace.sql",
+    "012_user_profile_conversation_meta.sql",
+    "014_conversation_pinned.sql",
+  ]) {
+    sql.exec(readFileSync(path.join(repoRoot, "db/migrations", name), "utf8"));
+  }
+  return sql;
+}
+
+describe("HTTP Workspace — PHASE 58.5 pin / delete", () => {
+  it("PATCH /conversations/:id {pinned} and DELETE cascade", async () => {
+    const sql = openDbWithPinned();
+    const { app } = appFor(sql);
+    const a = createConversation({ title: "A" }, sql);
+    const b = createConversation({ title: "B" }, sql);
+    sql
+      .prepare(`UPDATE conversations SET created_at = ?, updated_at = ? WHERE id = ?`)
+      .run("2026-01-01 00:00:00", "2026-01-01 00:00:00", a.id);
+    sql
+      .prepare(`UPDATE conversations SET created_at = ?, updated_at = ? WHERE id = ?`)
+      .run("2026-01-03 00:00:00", "2026-01-03 00:00:00", b.id);
+
+    const unauth = await app.request(`/conversations/${a.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pinned: true }),
+    });
+    assert.equal(unauth.status, 401);
+
+    const bad = await app.request(`/conversations/${a.id}`, {
+      method: "PATCH",
+      headers: authHeaders(true),
+      body: JSON.stringify({}),
+    });
+    assert.equal(bad.status, 400);
+
+    const missing = await app.request(`/conversations/c_nope`, {
+      method: "PATCH",
+      headers: authHeaders(true),
+      body: JSON.stringify({ pinned: true }),
+    });
+    assert.equal(missing.status, 404);
+
+    const pinnedRes = await app.request(`/conversations/${a.id}`, {
+      method: "PATCH",
+      headers: authHeaders(true),
+      body: JSON.stringify({ pinned: true }),
+    });
+    assert.equal(pinnedRes.status, 200);
+    const pinnedBody = (await pinnedRes.json()) as {
+      id: string;
+      pinned: boolean;
+    };
+    assert.equal(pinnedBody.id, a.id);
+    assert.equal(pinnedBody.pinned, true);
+
+    const listed = await app.request("/conversations?limit=50", {
+      headers: authHeaders(),
+    });
+    assert.equal(listed.status, 200);
+    const rows = (await listed.json()) as Array<{
+      id: string;
+      pinned: boolean;
+    }>;
+    assert.equal(rows[0]?.id, a.id);
+    assert.equal(rows[0]?.pinned, true);
+    assert.equal(rows[1]?.id, b.id);
+    assert.equal(rows[1]?.pinned, false);
+
+    const unpin = await app.request(`/conversations/${a.id}`, {
+      method: "PATCH",
+      headers: authHeaders(true),
+      body: JSON.stringify({ pinned: false }),
+    });
+    assert.equal(unpin.status, 200);
+    assert.equal(((await unpin.json()) as { pinned: boolean }).pinned, false);
+
+    sql
+      .prepare(
+        `INSERT INTO messages (id, conversation_id, role, content)
+         VALUES (?, ?, 'user', 'x')`,
+      )
+      .run("m_del", a.id);
+    assert.equal(listConversationMessages(a.id, sql).length, 1);
+
+    const del = await app.request(`/conversations/${a.id}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    assert.equal(del.status, 200);
+    assert.deepEqual(await del.json(), { ok: true });
+    assert.equal(listConversationMessages(a.id, sql).length, 0);
+
+    const gone = await app.request(`/conversations/${a.id}`, {
+      headers: authHeaders(),
+    });
+    assert.equal(gone.status, 404);
+
+    const delAgain = await app.request(`/conversations/${a.id}`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
+    assert.equal(delAgain.status, 404);
+
+    const after = await app.request("/conversations?limit=50", {
+      headers: authHeaders(),
+    });
+    const afterRows = (await after.json()) as Array<{ id: string }>;
+    assert.equal(afterRows.some((r) => r.id === a.id), false);
+    assert.equal(afterRows.some((r) => r.id === b.id), true);
   });
 });

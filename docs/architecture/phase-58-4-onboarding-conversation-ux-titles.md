@@ -64,7 +64,8 @@ assistant_done
 - Chat header: título de conversación; sin summary en UI del hilo  
 - conversation-screen `height: 100%` + `flex: 1` + `min-height: 0` + `overflow: hidden`  
 - Sin barra vertical doble: `html/body/#root` overflow hidden; work-area hidden solo con hijo `.conversation-screen`; scroll en `.thread`  
-- Sin exponer AuthSession, Device, tokens, scopes en UI
+- Sin exponer AuthSession, Device, tokens, scopes en UI  
+- Sidebar pin/delete: ver [`phase-58-5-conversation-ux-management.md`](./phase-58-5-conversation-ux-management.md)
 
 ## Validación pendiente
 
