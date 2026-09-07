@@ -21,6 +21,11 @@
   background: var(--shell-bg);
 }
 
+/* Conversation scrolla en .thread; evita barra vertical doble en work-area. */
+.work-area:has(> .conversation-screen) {
+  overflow: hidden;
+}
+
 /* Sidebar */
 .sidebar {
   display: flex;
@@ -884,7 +889,8 @@ tr:last-child td {
 .conversation-screen {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1;
+  height: 100%;
   min-height: 0;
   width: min(720px, 100%);
   max-width: 720px;
@@ -912,19 +918,19 @@ tr:last-child td {
   min-height: 0;
 }
 
-/* Zona central / inferior-media: más aire arriba que abajo; nunca bottom:0. */
+/* Zona inferior-media: ratios flex (~1.8 arriba / ~1.2 abajo); sin min-height grande. */
 .blank-stage::before {
   content: "";
-  flex: 1.55 1 0;
-  min-height: 64px;
+  flex: 1.8 1 0;
+  min-height: 0;
   width: 100%;
   pointer-events: none;
 }
 
 .blank-stage::after {
   content: "";
-  flex: 1 1 0;
-  min-height: 120px;
+  flex: 1.2 1 0;
+  min-height: 0;
   width: 100%;
   pointer-events: none;
 }

@@ -37,6 +37,10 @@ const {
   getProviderDescriptor,
 } = await import("../../src/providers/registry.ts");
 
+const { DEFAULT_AGENT_MODEL, DEFAULT_AGENT_NAME } = await import(
+  "../../src/agents/definition.ts"
+);
+
 const { mountSetupHttp } = await import("../../src/http/setup-http.ts");
 
 const HUB = process.env.HUB_TOKEN!;
@@ -57,6 +61,12 @@ describe("ProviderRegistry", () => {
     assert.equal(isProviderAvailable("openai"), false);
     assert.equal(isProviderAvailable("google"), false);
     assert.equal(getProviderDescriptor("openai")?.available, false);
+  });
+
+  it("DEFAULT_AGENT_MODEL is claude-sonnet-4-6; Anthropic is the available provider", () => {
+    assert.equal(DEFAULT_AGENT_MODEL, "claude-sonnet-4-6");
+    assert.equal(DEFAULT_AGENT_NAME, "Personal Agent");
+    assert.equal(isProviderAvailable("anthropic"), true);
   });
 });
 
@@ -186,7 +196,7 @@ describe("POST /v1/setup/llm", () => {
 });
 
 describe("POST /v1/setup/verify", () => {
-  it("success via real provider path (injected)", async () => {
+  it("success via real provider path (injected) includes connectivity", async () => {
     writePersistedProviderApiKey("anthropic", "sk-ant-verify-success-keyxx");
     replaceSetupStateForTests({
       state: SetupStates.LLM_CONNECTED,
@@ -202,7 +212,14 @@ describe("POST /v1/setup/verify", () => {
     const app = new Hono();
     mountSetupHttp(app, {
       hubToken: HUB,
-      verifyLlm: async () => ({ ok: true, sample: "OK" }),
+      verifyLlm: async () => ({
+        ok: true,
+        provider: "anthropic",
+        model: DEFAULT_AGENT_MODEL,
+        credentialConfigured: true,
+        request: "success",
+        sample: "OK",
+      }),
     });
     const res = await app.request("/v1/setup/verify", {
       method: "POST",
@@ -213,9 +230,27 @@ describe("POST /v1/setup/verify", () => {
       body: "{}",
     });
     assert.equal(res.status, 200);
-    const body = (await res.json()) as { state: string; verified: boolean };
+    const body = (await res.json()) as {
+      state: string;
+      verified: boolean;
+      connectivity?: {
+        provider?: string;
+        model?: string;
+        credentialConfigured?: boolean;
+        request?: string;
+        sample?: string;
+        apiKey?: string;
+      };
+    };
     assert.equal(body.state, SetupStates.VERIFIED);
     assert.equal(body.verified, true);
+    assert.equal(body.connectivity?.provider, "anthropic");
+    assert.equal(body.connectivity?.model, "claude-sonnet-4-6");
+    assert.equal(body.connectivity?.credentialConfigured, true);
+    assert.equal(body.connectivity?.request, "success");
+    assert.equal(body.connectivity?.sample, undefined);
+    assert.equal(body.connectivity?.apiKey, undefined);
+    assert.equal(JSON.stringify(body).toLowerCase().includes("api_key"), false);
   });
 
   it("failure returns human message without secret", async () => {

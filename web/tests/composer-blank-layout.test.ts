@@ -20,16 +20,20 @@ describe("PHASE 58.4 blank composer layout", () => {
     assert.match(css, /\.work-area\s*\{[^}]*flex-direction:\s*column/s);
     assert.match(
       css,
-      /\.conversation-screen\s*\{[^}]*flex:\s*1\s+1\s+auto/s,
+      /\.work-area:has\(\s*>\s*\.conversation-screen\s*\)\s*\{[^}]*overflow:\s*hidden/s,
     );
+    assert.match(css, /\.conversation-screen\s*\{[^}]*flex:\s*1/s);
+    assert.match(css, /\.conversation-screen\s*\{[^}]*height:\s*100%/s);
     assert.match(css, /\.conversation-screen\s*\{[^}]*min-height:\s*0/s);
   });
 
   it("blank-stage uses flex spacers for lower-middle (not bottom:0)", () => {
     assert.match(css, /\.blank-stage\s*\{[^}]*display:\s*flex/s);
     assert.match(css, /\.blank-stage\s*\{[^}]*flex-direction:\s*column/s);
-    assert.match(css, /\.blank-stage::before\s*\{[^}]*flex:/s);
-    assert.match(css, /\.blank-stage::after\s*\{[^}]*flex:/s);
+    assert.match(css, /\.blank-stage::before\s*\{[^}]*flex:\s*1\.8/s);
+    assert.match(css, /\.blank-stage::after\s*\{[^}]*flex:\s*1\.2/s);
+    assert.match(css, /\.blank-stage::before\s*\{[^}]*min-height:\s*0/s);
+    assert.match(css, /\.blank-stage::after\s*\{[^}]*min-height:\s*0/s);
     const blankBlock = (css.match(/\.blank-stage\s*\{[^}]+\}/s)?.[0] ?? "")
       .replace(/\/\*[\s\S]*?\*\//g, "");
     assert.doesNotMatch(blankBlock, /bottom:\s*0/);
@@ -40,6 +44,11 @@ describe("PHASE 58.4 blank composer layout", () => {
     ).replace(/\/\*[\s\S]*?\*\//g, "");
     assert.doesNotMatch(hero, /bottom:\s*0/);
     assert.doesNotMatch(hero, /position:\s*(fixed|absolute|sticky)/);
+    const composerHero = (
+      css.match(/(?:^|\n)\.composer\.composer-hero\s*\{[^}]+\}/s)?.[0] ?? ""
+    ).replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.match(composerHero, /position:\s*static/);
+    assert.doesNotMatch(composerHero, /bottom:\s*0/);
   });
 
   it("blank conversation mounts hero + composer inside blank-stage", () => {

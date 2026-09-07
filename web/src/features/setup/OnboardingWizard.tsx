@@ -118,7 +118,8 @@ export function OnboardingWizard({
       }
       setStatus(s);
       await loadProviders();
-      setStep("agent_ready");
+      // Tras el nombre / instalación: ir a LLM. «Listo» solo con llmConfigured.
+      setStep("llm_intro");
     } catch {
       setErr("Algo falló al preparar. Inténtalo de nuevo.");
       setStep("error");

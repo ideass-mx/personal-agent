@@ -43,8 +43,52 @@ function dto(partial: Partial<SetupStatusDto>): SetupStatusDto {
 }
 
 describe("setup-flow", () => {
-  it("AGENT_READY renders onboarding agent_ready step", () => {
-    assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "agent_ready");
+  it("AGENT_READY maps to llm_intro (no premature agent_ready)", () => {
+    assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "llm_intro");
+    assert.equal(
+      stepFromStatus(dto({ state: "INSTALLED", installationReady: true })),
+      "llm_intro",
+    );
+  });
+
+  it("PHASE 58.4 matrix: profile / llm / conversation gates", () => {
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: false,
+        llmConfigured: false,
+      }),
+      "profile",
+    );
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: true,
+        llmConfigured: false,
+      }),
+      "llm",
+    );
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: true,
+        llmConfigured: true,
+      }),
+      "conversation",
+    );
+    // READY + profile=false → profile (via resolveProductSurfaceGate)
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: false,
+        llmConfigured: true,
+      }),
+      "profile",
+    );
+    // READY + profile=true + llm=false → llm
+    assert.equal(
+      resolveProductSurfaceGate({
+        profileConfigured: true,
+        llmConfigured: false,
+      }),
+      "llm",
+    );
   });
 
   it("READY opens done only when llmConfigured", () => {

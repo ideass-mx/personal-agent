@@ -8,4 +8,5 @@ export {
   verifyProviderConnectivity,
   type LlmProviderId,
   type LlmProviderDescriptor,
+  type LlmConnectivityResult,
 } from "./registry.ts";

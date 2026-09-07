@@ -81,7 +81,8 @@ export function stepFromStatus(s: SetupStatusDto): OnboardingStep {
   ) {
     return "llm_intro";
   }
-  if (s.state === "AGENT_READY" || s.installationReady) return "agent_ready";
+  // Instalación lista ≠ producto listo: falta LLM. Nunca «Agente listo» aquí.
+  if (s.state === "AGENT_READY" || s.installationReady) return "llm_intro";
   return "preparing";
 }
 

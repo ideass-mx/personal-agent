@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { SYSTEM_PROMPT } from "../../src/agents/prompts.ts";
+import { AGENT_NAME, SYSTEM_PROMPT } from "../../src/agents/prompts.ts";
 import { createAgentRuntime } from "../../src/agents/runtime.ts";
 import type { LLMEvent, LLMProvider, LLMRequest } from "../../src/providers/types.ts";
 import { toLLMToolDescriptor } from "../../src/tools/descriptor.ts";
@@ -17,6 +17,18 @@ const sampleTool: AgentTool = {
     return { ok: true, content: {} };
   },
 };
+
+describe("SYSTEM_PROMPT (identidad Personal Agent)", () => {
+  it("AGENT_NAME y SYSTEM_PROMPT son Personal Agent, no Claude como identidad primaria", () => {
+    assert.equal(AGENT_NAME, "Personal Agent");
+    assert.match(SYSTEM_PROMPT, /Personal Agent/);
+    assert.match(SYSTEM_PROMPT, /no como Claude/i);
+    assert.doesNotMatch(
+      SYSTEM_PROMPT,
+      /^Eres Claude|^You are Claude|^Soy Claude/m,
+    );
+  });
+});
 
 describe("SYSTEM_PROMPT (capacidades)", () => {
   it("no niega la existencia de herramientas", () => {

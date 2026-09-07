@@ -45,6 +45,9 @@ Ver también: `phase-58-4-onboarding-conversation-ux-titles.md` (composer + tít
 
 - Header: nombre + **Plan Personal** (no “Tu agente”)
 - Sin Home/`AgentSpaceScreen`
-- Blank: “¿En qué te ayudo?” + composer en inferior-media (flex spacers `blank-stage::before/::after`, no `bottom: 0`) + autofocus
+- Identidad de producto: **Personal Agent** (no Claude); modelo default `claude-sonnet-4-6`
+- Onboarding: `AGENT_READY` → `llm_intro` (sin «Agente listo» prematuro)
+- Blank: “¿En qué te ayudo?” + composer en inferior-media (flex spacers `blank-stage::before/::after` ≈1.8/1.2, no `bottom: 0`) + autofocus
+- Scroll: `.work-area:has(> .conversation-screen) { overflow: hidden }` (scroll en `.thread`)
 - Títulos: seed determinista inmediato + upgrade LLM acotado; web hace poll (`refreshConversationsUntilTitled`) tras `assistant_done`
 - Tema oscuro por defecto (`tokens.css`)

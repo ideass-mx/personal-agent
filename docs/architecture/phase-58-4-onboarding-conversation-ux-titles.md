@@ -6,9 +6,15 @@
 ## Problemas corregidos
 
 1. **Onboarding:** PROFILE (nombre) → LLM (token) → Conversation.  
-   `profileConfigured && llmConfigured` obligatorios. READY sin nombre no salta el perfil.
-2. **Composer blank:** bloque «¿En qué te ayudo?» + composer en zona inferior-media vía flex chain (`work-area` → `conversation-screen` → `blank-stage`) con espaciadores `::before` / `::after` (más espacio arriba que abajo). No `bottom: 0` ni posicionamiento fixed/absolute del composer.
-3. **Títulos:** tras el primer intercambio significativo, Gateway anota `title`/`summary`. Sidebar vía `GET /conversations`.
+   `profileConfigured && llmConfigured` obligatorios. READY sin nombre no salta el perfil.  
+   `AGENT_READY` / `installationReady` → paso wizard `llm_intro` (nunca «Agente listo» prematuro).
+2. **Identidad:** `AGENT_NAME` / `DEFAULT_AGENT_NAME` / `SYSTEM_PROMPT` = **Personal Agent** (no Claude como identidad primaria). Modelo por defecto: `claude-sonnet-4-6` (infra LLM; no se cambia salvo rotura).
+3. **Diagnóstico LLM:** `verifyProviderConnectivity` pasa `model: DEFAULT_AGENT_MODEL` y expone en `POST /v1/setup/verify`  
+   `connectivity: { provider, model, credentialConfigured, request }` (sin apiKey ni sample).  
+   Log: `[gateway] llm_connectivity provider=… model=… credentialConfigured=true request=success`.
+4. **Composer blank:** bloque «¿En qué te ayudo?» + composer en zona inferior-media vía flex chain (`work-area` → `conversation-screen` → `blank-stage`) con espaciadores `::before` (~1.8) / `::after` (~1.2), `min-height: 0`. No `bottom: 0` ni posicionamiento fixed/absolute del composer.
+5. **Scrollbar:** causa = `.work-area { overflow: auto }` + scroll en `.thread`. Fix: `.work-area:has(> .conversation-screen) { overflow: hidden }` (otras pantallas siguen con `overflow: auto`).
+6. **Títulos:** tras el primer intercambio significativo, Gateway anota `title`/`summary`. Sidebar vía `GET /conversations`.
 
 ## Causa raíz del bug de títulos
 
@@ -25,7 +31,7 @@
 
 ```text
 Launch → ProfileName (¿Cómo quieres que te llame?)
-      → OnboardingWizard LLM
+      → OnboardingWizard LLM (llm_intro; sin «Agente listo» prematuro)
       → ConversationScreen
 ```
 
@@ -52,8 +58,9 @@ assistant_done
 
 - Header: nombre + Plan Personal  
 - Sin Home / «Tu agente» / Listo permanente  
-- Composer autofocus en blank  
-- Blank-stage: flex spacers `::before` (flex mayor) + `::after` para lower-middle  
+- Composer autofocus en blank; `composer-hero` con `position: static`  
+- Blank-stage: flex spacers `::before` (≈1.8) + `::after` (≈1.2); conversation-screen `height: 100%` + `flex: 1` + `min-height: 0`  
+- Sin barra vertical doble: work-area hidden solo con hijo `.conversation-screen`  
 - Sin exponer AuthSession, Device, tokens, scopes en UI
 
 ## Validación pendiente

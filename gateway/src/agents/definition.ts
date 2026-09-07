@@ -22,8 +22,8 @@ export const DEFAULT_AGENT_MODEL = "claude-sonnet-4-6";
 /** ID lógico del Agent por defecto. No es `agentId` de instalación. */
 export const DEFAULT_AGENT_DEFINITION_ID = "personal-assistant";
 
-/** Nombre UI del Agent por defecto. */
-export const DEFAULT_AGENT_NAME = "Asistente personal";
+/** Nombre UI del Agent por defecto (identidad de producto). */
+export const DEFAULT_AGENT_NAME = "Personal Agent";
 
 /**
  * Política de memoria a nivel Agent (preparación).

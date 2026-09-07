@@ -5,6 +5,7 @@
 import type { LLMProvider, LLMRequest } from "./types.ts";
 import { createAnthropicProvider } from "./anthropic.ts";
 import { hasProviderApiKeyConfigured } from "../setup/llm-key.ts";
+import { DEFAULT_AGENT_MODEL } from "../agents/definition.ts";
 
 export type LlmProviderId = "anthropic" | "openai" | "google";
 
@@ -13,6 +14,17 @@ export type LlmProviderDescriptor = {
   name: string;
   /** true solo con implementación real usable. */
   available: boolean;
+};
+
+/** Forma pública del diagnóstico de conectividad (sin apiKey ni muestra larga). */
+export type LlmConnectivityResult = {
+  ok: true;
+  provider: string;
+  model: string;
+  credentialConfigured: true;
+  request: "success";
+  /** Truncado interno; no exponer en HTTP de producto. */
+  sample?: string;
 };
 
 const CATALOG: readonly LlmProviderDescriptor[] = [
@@ -50,15 +62,17 @@ export function createLlmProvider(id: string): LLMProvider {
 /** Verificación mínima real vía el contrato LLMProvider (mismo que usa Runtime). */
 export async function verifyProviderConnectivity(
   providerId: string,
-): Promise<{ ok: true; sample: string }> {
+): Promise<LlmConnectivityResult> {
   if (!isProviderAvailable(providerId)) {
     throw new Error("provider_unavailable");
   }
   if (!hasProviderApiKeyConfigured(providerId)) {
     throw new Error("llm_not_configured");
   }
+  const model = DEFAULT_AGENT_MODEL;
   const provider = createLlmProvider(providerId);
   const request: LLMRequest = {
+    model,
     messages: [
       { role: "user", content: "Responde únicamente con la palabra OK." },
     ],
@@ -69,5 +83,15 @@ export async function verifyProviderConnectivity(
   }
   const sample = text.trim();
   if (!sample) throw new Error("empty_llm_response");
-  return { ok: true, sample: sample.slice(0, 32) };
+  console.log(
+    `[gateway] llm_connectivity provider=${providerId} model=${model} credentialConfigured=true request=success`,
+  );
+  return {
+    ok: true,
+    provider: providerId,
+    model,
+    credentialConfigured: true,
+    request: "success",
+    sample: sample.slice(0, 32),
+  };
 }

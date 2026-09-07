@@ -24,7 +24,9 @@ import {
   isProviderAvailable,
   listProviders,
   verifyProviderConnectivity,
+  type LlmConnectivityResult,
 } from "../providers/registry.ts";
+import { DEFAULT_AGENT_MODEL } from "../agents/definition.ts";
 
 function setupStatusPayload() {
   const record = getSetupState();
@@ -47,14 +49,24 @@ function setupStatusPayload() {
   };
 }
 
+function connectivityPublicShape(
+  result: LlmConnectivityResult,
+  fallbackProvider: string,
+) {
+  return {
+    provider: result.provider || fallbackProvider,
+    model: result.model || DEFAULT_AGENT_MODEL,
+    credentialConfigured: true as const,
+    request: "success" as const,
+  };
+}
+
 export function mountSetupHttp(
   app: Hono,
   deps: {
     hubToken: string;
     /** Override para tests; por defecto llama al proveedor real. */
-    verifyLlm?: (
-      providerId: string,
-    ) => Promise<{ ok: true; sample: string }>;
+    verifyLlm?: (providerId: string) => Promise<LlmConnectivityResult>;
   },
 ): void {
   const runVerify = deps.verifyLlm ?? verifyProviderConnectivity;
@@ -227,7 +239,7 @@ export function mountSetupHttp(
       } else if (record.state === SetupStates.VERIFICATION_ERROR) {
         record = transitionSetupState(SetupStates.VERIFYING);
       }
-      await runVerify(providerId);
+      const connectivity = await runVerify(providerId);
       record = transitionSetupState(SetupStates.VERIFIED);
       return c.json({
         ...toSetupStatusDto(record),
@@ -236,6 +248,7 @@ export function mountSetupHttp(
           agent: true,
           intelligence: true,
         },
+        connectivity: connectivityPublicShape(connectivity, providerId),
       });
     } catch {
       try {
