@@ -45,6 +45,6 @@ Ver también: `phase-58-4-onboarding-conversation-ux-titles.md` (composer + tít
 
 - Header: nombre + **Plan Personal** (no “Tu agente”)
 - Sin Home/`AgentSpaceScreen`
-- Blank: “¿En qué te ayudo?” + composer en inferior-media + autofocus
-- Títulos semánticos LLM tras primer intercambio (fallback determinista)
+- Blank: “¿En qué te ayudo?” + composer en inferior-media (flex spacers `blank-stage::before/::after`, no `bottom: 0`) + autofocus
+- Títulos: seed determinista inmediato + upgrade LLM acotado; web hace poll (`refreshConversationsUntilTitled`) tras `assistant_done`
 - Tema oscuro por defecto (`tokens.css`)

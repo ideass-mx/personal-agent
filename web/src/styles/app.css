@@ -14,7 +14,10 @@
 .work-area {
   min-width: 0;
   height: 100%;
+  min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
   background: var(--shell-bg);
 }
 
@@ -312,7 +315,6 @@
 
 /* Screens */
 .screen,
-.conversation-screen,
 .settings-layout,
 .workspace-split {
   min-height: 100%;
@@ -882,7 +884,8 @@ tr:last-child td {
 .conversation-screen {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   width: min(720px, 100%);
   max-width: 720px;
   margin: 0 auto;
@@ -890,7 +893,8 @@ tr:last-child td {
 }
 
 .conversation-screen.is-blank {
-  padding-bottom: 48px;
+  /* El blank-stage reparte el espacio; no empujar el composer al borde. */
+  padding-bottom: 0;
 }
 
 .blank-stage {
@@ -898,20 +902,38 @@ tr:last-child td {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   text-align: center;
   gap: 28px;
-  /* Zona inferior-media: más aire abajo que arriba; no bottom:0. */
-  padding: 10vh 12px 24vh;
-  width: min(720px, 90%);
+  width: min(560px, 92%);
   margin: 0 auto;
+  padding: 0 12px;
   box-sizing: border-box;
+  min-height: 0;
+}
+
+/* Zona central / inferior-media: más aire arriba que abajo; nunca bottom:0. */
+.blank-stage::before {
+  content: "";
+  flex: 1.55 1 0;
+  min-height: 64px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.blank-stage::after {
+  content: "";
+  flex: 1 1 0;
+  min-height: 120px;
+  width: 100%;
+  pointer-events: none;
 }
 
 .blank-stage .composer.composer-hero {
   width: 100%;
   max-width: 560px;
-  margin-bottom: 0;
+  margin: 0;
+  flex: 0 0 auto;
 }
 
 .hero-voice {
@@ -919,6 +941,7 @@ tr:last-child td {
   font-size: clamp(1.55rem, 3.2vw, 2.05rem);
   color: var(--ink);
   letter-spacing: -0.02em;
+  flex: 0 0 auto;
 }
 
 .thread {

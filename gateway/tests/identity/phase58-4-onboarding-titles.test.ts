@@ -187,4 +187,72 @@ describe("PHASE 58.4 conversation semantic title/summary", () => {
     );
     assert.match(summary, /doctorados/i);
   });
+
+  it("full path: annotate persists useful title + summary and GET /conversations returns it", async () => {
+    const workspaces = createSqliteWorkspaceStore(db as never);
+    const app = new Hono();
+    mountWorkspaceHttp(app, {
+      workspaces,
+      hubToken: HUB,
+      sql: db as never,
+    });
+
+    const conv = createConversation({});
+    const userMsg =
+      "Quiero comparar NVIDIA, Microsoft y Google como inversión para los próximos 12 meses.";
+    await maybeAnnotateConversationAsync(conv.id, userMsg);
+
+    const loaded = getConversation(conv.id);
+    assert.ok(loaded?.title);
+    assert.notEqual(loaded!.title!.trim().toLowerCase(), "nueva conversación");
+    assert.match(loaded!.title!, /NVIDIA|Microsoft|Google|compar|invers/i);
+    assert.ok(loaded!.summary?.trim());
+
+    const res = await app.request("/conversations?limit=50", {
+      headers: { Authorization: `Bearer ${HUB}` },
+    });
+    assert.equal(res.status, 200);
+    const list = (await res.json()) as Array<{
+      id: string;
+      title: string | null;
+      summary?: string | null;
+    }>;
+    const row = list.find((c) => c.id === conv.id);
+    assert.ok(row);
+    assert.equal(row!.title, loaded!.title);
+    assert.notEqual(row!.title!.trim().toLowerCase(), "nueva conversación");
+    assert.match(row!.title!, /NVIDIA|Microsoft|Google|compar|invers/i);
+    if (row!.summary !== undefined) {
+      assert.ok(row!.summary?.trim());
+    }
+  });
+
+  it("fallback useful title for Docker/Windows message", async () => {
+    const conv = createConversation({});
+    await maybeAnnotateConversationAsync(
+      conv.id,
+      "Quiero configurar Docker en Windows 11",
+    );
+    const loaded = getConversation(conv.id);
+    assert.ok(loaded?.title);
+    assert.match(loaded!.title!, /Docker/i);
+    assert.notEqual(loaded!.title!.trim().toLowerCase(), "nueva conversación");
+  });
+
+  it("immediate seed persists non-placeholder title when LLM unavailable", async () => {
+    const conv = createConversation({});
+    const pending = maybeAnnotateConversationAsync(
+      conv.id,
+      "Quiero montar un laboratorio de redes con Wireshark",
+    );
+    // Seed writes sync before the first await (LLM); title must already exist.
+    const early = getConversation(conv.id);
+    assert.ok(early?.title?.trim());
+    assert.notEqual(early!.title!.trim().toLowerCase(), "nueva conversación");
+    assert.ok(early!.summary?.trim());
+    await pending;
+    const final = getConversation(conv.id);
+    assert.ok(final?.title?.trim());
+    assert.notEqual(final!.title!.trim().toLowerCase(), "nueva conversación");
+  });
 });

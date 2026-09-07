@@ -61,7 +61,7 @@ type AppState = {
   setDraft: (v: string) => void;
   selectConversation: (id: string) => Promise<void>;
   newConversation: () => Promise<void>;
-  refreshConversations: () => Promise<void>;
+  refreshConversations: () => Promise<ConversationMeta[] | null | undefined>;
   send: () => void;
   pendingConfirm: ConfirmPending | null;
   respondConfirm: (approved: boolean) => void;
@@ -142,10 +142,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
           b.createdAt.localeCompare(a.createdAt),
         );
       });
+      return list;
     } catch {
       /* keep local */
+      return null;
     }
   }, [session]);
+
+  /** Poll until the conversation has a semantic title (or give up). */
+  const refreshConversationsUntilTitled = useCallback(
+    async (conversationId: string) => {
+      const delaysMs = [0, 350, 900, 1800, 3500, 7000];
+      let elapsed = 0;
+      for (const target of delaysMs) {
+        const wait = target - elapsed;
+        if (wait > 0) {
+          await new Promise<void>((r) => {
+            window.setTimeout(r, wait);
+          });
+        }
+        elapsed = target;
+        const list = await refreshConversations();
+        if (!list) continue;
+        const found = list.find((c) => c.id === conversationId);
+        const title = found?.title?.trim() ?? "";
+        if (title && title.toLowerCase() !== "nueva conversación") return;
+      }
+    },
+    [refreshConversations],
+  );
 
   const handleServer = useCallback((msg: ServerMsg) => {
     if (msg.type === "assistant_chunk") {
@@ -190,10 +215,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMessages((prev) =>
         prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
       );
-      // Reload titles/summaries: immediate + delayed (LLM annotate is async).
-      void refreshConversations();
-      window.setTimeout(() => void refreshConversations(), 1800);
-      window.setTimeout(() => void refreshConversations(), 4500);
+      // Seed is sync on gateway; poll until title lands (and catch LLM upgrade).
+      void refreshConversationsUntilTitled(msg.conversationId);
     } else if (msg.type === "confirm_request") {
       setPending({
         confirmationId: msg.confirmationId,
@@ -221,7 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ]);
       }
     }
-  }, [refreshConversations]);
+  }, [refreshConversationsUntilTitled]);
 
   const disconnect = useCallback(() => {
     socketRef.current?.close();

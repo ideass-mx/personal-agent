@@ -35,6 +35,25 @@ Reglas para summary:
 - Sin IDs técnicos ni secretos.`;
 
 const annotating = new Set<string>();
+const LLM_META_TIMEOUT_MS = 3500;
+
+/** Diagnostic only — never logs prompts, keys, tokens, or message bodies. */
+function logConversationMeta(
+  event:
+    | "annotation_started"
+    | "annotation_completed"
+    | "title_generated"
+    | "summary_generated"
+    | "annotation_failed",
+  conversationId: string,
+  extra?: Record<string, string | boolean | number | undefined>,
+): void {
+  const payload: Record<string, string | boolean | number | undefined> = {
+    conversation_id: conversationId,
+    ...extra,
+  };
+  console.log(`[gateway] conversation_meta event=${event}`, payload);
+}
 
 /** Short human title from the first user message. Never returns an id/hash. */
 export function deriveConversationTitle(userText: string): string {
@@ -241,9 +260,22 @@ async function generateMetaViaLlm(
   }
 }
 
+async function generateMetaViaLlmBounded(
+  userMessage: string,
+  timeoutMs: number,
+): Promise<{ title: string | null; summary: string | null } | null> {
+  return await Promise.race([
+    generateMetaViaLlm(userMessage),
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), timeoutMs);
+    }),
+  ]);
+}
+
 /**
  * Prefer LLM title/summary once; fall back to deterministic heuristics.
- * Never throws to the caller — failures leave the turn intact.
+ * Writes deterministic metadata BEFORE awaiting the LLM so GET/sidebar
+ * never wait on a slow or hung provider. Never throws to the caller.
  */
 export async function maybeAnnotateConversationAsync(
   conversationId: string,
@@ -251,42 +283,92 @@ export async function maybeAnnotateConversationAsync(
   sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
 ): Promise<ConversationRecord | null> {
   const current = getConversation(conversationId, sql);
-  if (!current) return null;
+  if (!current) {
+    logConversationMeta("annotation_failed", conversationId, {
+      reason: "not_found",
+    });
+    return null;
+  }
   if (!conversationNeedsAnnotation(current)) return current;
   if (annotating.has(conversationId)) return current;
   annotating.add(conversationId);
   try {
+    logConversationMeta("annotation_started", conversationId);
+
     // Re-read after lock to avoid double-write races.
     const latest = getConversation(conversationId, sql);
     if (!latest || !conversationNeedsAnnotation(latest)) {
       return latest ?? null;
     }
 
-    let title = latest.title;
-    let summary = latest.summary;
-
-    const llm = await generateMetaViaLlm(userMessage);
-    if (llm) {
-      if (isPlaceholderTitle(title) && llm.title) title = llm.title;
-      if (!summary?.trim() && llm.summary) summary = llm.summary;
+    // 1) Persist deterministic title/summary immediately (sync until first await).
+    let record = maybeAnnotateConversation(conversationId, userMessage, sql);
+    if (!record) {
+      logConversationMeta("annotation_failed", conversationId, {
+        reason: "seed_failed",
+      });
+      return null;
+    }
+    if (record.title) {
+      logConversationMeta("title_generated", conversationId, {
+        source: "fallback",
+      });
+    }
+    if (record.summary) {
+      logConversationMeta("summary_generated", conversationId, {
+        source: "fallback",
+      });
     }
 
-    if (isPlaceholderTitle(title)) {
-      title = deriveConversationTitle(userMessage);
-    }
-    if (!summary?.trim()) {
-      summary = deriveConversationSummary(userMessage);
-    }
-
-    return updateConversationMeta(
-      conversationId,
-      { title, summary },
-      sql,
+    // 2) Optional LLM upgrade (bounded). Failure keeps the fallback.
+    const llm = await generateMetaViaLlmBounded(
+      userMessage,
+      LLM_META_TIMEOUT_MS,
     );
+    if (llm && (llm.title || llm.summary)) {
+      const upgraded = updateConversationMeta(
+        conversationId,
+        {
+          title: llm.title ?? record.title,
+          summary: llm.summary ?? record.summary,
+        },
+        sql,
+      );
+      if (upgraded) {
+        record = upgraded;
+        if (llm.title) {
+          logConversationMeta("title_generated", conversationId, {
+            source: "llm",
+          });
+        }
+        if (llm.summary) {
+          logConversationMeta("summary_generated", conversationId, {
+            source: "llm",
+          });
+        }
+      }
+    }
+
+    logConversationMeta("annotation_completed", conversationId, {
+      has_title: Boolean(record.title),
+      has_summary: Boolean(record.summary),
+    });
+    return record;
   } catch {
     try {
-      return maybeAnnotateConversation(conversationId, userMessage, sql);
+      const fallback = maybeAnnotateConversation(
+        conversationId,
+        userMessage,
+        sql,
+      );
+      logConversationMeta("annotation_failed", conversationId, {
+        reason: "exception_fallback",
+      });
+      return fallback;
     } catch {
+      logConversationMeta("annotation_failed", conversationId, {
+        reason: "exception",
+      });
       return getConversation(conversationId, sql) ?? null;
     }
   } finally {

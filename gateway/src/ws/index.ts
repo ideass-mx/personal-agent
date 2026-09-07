@@ -11,6 +11,9 @@ import { createConfirmationWaiter } from "../sessions/confirmation-waiter.ts";
 import { config } from "../config.ts";
 import type { SqliteDiagnosticsStore } from "../diagnostics/store.ts";
 import { touchDevice, ensureConversation } from "../memory/history.ts";
+import {
+  maybeAnnotateConversationAsync,
+} from "../memory/conversation-meta.ts";
 import { createSession, dropSession, type Session } from "../sessions/index.ts";
 import {
   acceptPairingRequest,
@@ -146,20 +149,9 @@ export function attachGateway(
               messageId: event.messageId,
               conversationId: event.conversationId,
             });
-            // Semantic title/summary after the turn (LLM + fallback). Never blocks UX.
-            void (async () => {
-              try {
-                const { maybeAnnotateConversationAsync } = await import(
-                  "../memory/conversation-meta.ts"
-                );
-                await maybeAnnotateConversationAsync(
-                  conversationId,
-                  msg.text,
-                );
-              } catch {
-                /* best-effort metadata — never fail the turn */
-              }
-            })();
+            // Semantic title/summary: seeds deterministic meta synchronously
+            // before any LLM await, then optional upgrade. Never blocks UX.
+            void maybeAnnotateConversationAsync(conversationId, msg.text);
             break;
           case "error":
             diagnostics?.record({

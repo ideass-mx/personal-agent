@@ -48,4 +48,18 @@ describe("PHASE 58.1 Personal Agent UX", () => {
     assert.match(tokens, /color-scheme:\s*dark/);
     assert.match(tokens, /--shell-bg:\s*#0d0f12/);
   });
+
+  it("AppContext polls refreshConversationsUntilTitled after assistant_done", () => {
+    const src = fs.readFileSync(
+      path.join(root, "src/state/AppContext.tsx"),
+      "utf8",
+    );
+    assert.match(src, /refreshConversationsUntilTitled/);
+    assert.match(src, /assistant_done/);
+    assert.match(
+      src,
+      /assistant_done[\s\S]*refreshConversationsUntilTitled\(msg\.conversationId\)/,
+    );
+    assert.match(src, /nueva conversación/i);
+  });
 });
