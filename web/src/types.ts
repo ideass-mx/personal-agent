@@ -124,7 +124,9 @@ export type DiagnosticEventRow = {
 export type ConversationMeta = {
   id: string;
   title: string | null;
+  summary?: string | null;
   createdAt: string;
+  updatedAt?: string;
   workspaceId: string | null;
 };
 

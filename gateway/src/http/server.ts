@@ -16,6 +16,7 @@ import { mountDiagnosticsHttp } from "./diagnostics-http.ts";
 import { mountSetupHttp } from "./setup-http.ts";
 import { mountDevicesHttp } from "./devices-http.ts";
 import { mountDeviceAuthHttp } from "./device-auth-http.ts";
+import { mountIdentityHttp } from "./identity-http.ts";
 import {
   isLoopbackRequest,
   isRemoteAccessEnabled,
@@ -184,6 +185,10 @@ export function startServer(
   });
 
   mountDeviceAuthHttp(app, { hubToken: config.hubToken });
+
+  mountIdentityHttp(app, {
+    hubToken: config.hubToken,
+  });
 
   mountBrowserBootstrapHttp(app, {
     hubToken: config.hubToken,

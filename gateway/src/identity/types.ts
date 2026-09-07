@@ -22,6 +22,8 @@ export type User = {
   readonly id: string;
   readonly name: string;
   readonly createdAt: string;
+  /** True after the human completed first-run profile (display name). */
+  readonly profileCompleted?: boolean;
 };
 
 export type PersonalAgent = {

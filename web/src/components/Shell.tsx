@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useApp } from "../state/AppContext";
 import type { NavId } from "../types";
+import { conversationListLabel } from "../lib/conversationLabel";
 import {
   IconArchive,
   IconBook,
@@ -16,26 +17,6 @@ import {
   IconSettings,
   IconZap,
 } from "./icons";
-
-function statusBadge(
-  wsStatus: string,
-  healthOk: boolean | null,
-  agentReady: boolean,
-): { text: string; cls: string } {
-  if (wsStatus === "authenticated" && healthOk && agentReady) {
-    return { text: "Listo", cls: "badge" };
-  }
-  if (wsStatus === "authenticated" && healthOk) {
-    return { text: "Conectado", cls: "badge warn" };
-  }
-  if (wsStatus === "connecting") {
-    return { text: "Conectando…", cls: "badge muted" };
-  }
-  if (wsStatus === "error" || healthOk === false) {
-    return { text: "Sin conexión", cls: "badge err" };
-  }
-  return { text: "Desconectado", cls: "badge muted" };
-}
 
 export function Shell({ children }: { children: ReactNode }) {
   const {
@@ -54,16 +35,20 @@ export function Shell({ children }: { children: ReactNode }) {
     newConversation,
     session,
     activeConversationId,
+    userDisplayName,
   } = useApp();
 
-  const badge = statusBadge(
-    wsStatus,
-    health ? health.ok : null,
-    Boolean(health?.agentReady),
-  );
+  const displayName =
+    userDisplayName?.trim() ||
+    (session?.deviceName &&
+    session.deviceName !== "Navegador" &&
+    session.deviceName !== "Consola" &&
+    session.deviceName !== "Agent Console"
+      ? session.deviceName
+      : null) ||
+    "Tú";
 
-  const deviceLabel = session?.deviceName || "Consola";
-  const initials = deviceLabel
+  const initials = displayName
     .split(/\s+/)
     .map((p) => p[0])
     .join("")
@@ -71,6 +56,11 @@ export function Shell({ children }: { children: ReactNode }) {
     .toUpperCase();
 
   const isActive = (id: NavId) => nav === id;
+  const showConnWarning =
+    wsStatus === "error" ||
+    health === null ||
+    health?.ok === false ||
+    wsStatus === "connecting";
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? "is-collapsed" : ""}`}>
@@ -199,11 +189,9 @@ export function Shell({ children }: { children: ReactNode }) {
                             : ""
                         }`}
                         onClick={() => void selectConversation(c.id)}
-                        title={c.title || c.id}
+                        title={c.summary || c.title || "Conversación"}
                       >
-                        <span className="truncate">
-                          {c.title || `Conversación ${c.id.slice(0, 8)}`}
-                        </span>
+                        <span className="truncate">{conversationListLabel(c)}</span>
                       </button>
                     </li>
                   ))
@@ -214,20 +202,24 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
 
         <div className="sidebar-foot">
-          <div className="conn-badge-row">
-            {!sidebarCollapsed ? <span className={badge.cls}>● {badge.text}</span> : null}
-          </div>
+          {showConnWarning && !sidebarCollapsed ? (
+            <div className="conn-badge-row">
+              <span className={wsStatus === "connecting" ? "badge muted" : "badge err"}>
+                {wsStatus === "connecting" ? "Conectando…" : "Sin conexión"}
+              </span>
+            </div>
+          ) : null}
           <button
             type="button"
             className={`account-btn ${accountMenuOpen ? "open" : ""}`}
             onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-            title={deviceLabel}
+            title={displayName}
           >
             <span className="avatar">{initials || "PA"}</span>
             {!sidebarCollapsed ? (
               <span className="account-meta">
-                <strong className="truncate">{deviceLabel}</strong>
-                <span className="muted">Personal Agent</span>
+                <strong className="truncate">{displayName}</strong>
+                <span className="muted">Tu agente</span>
               </span>
             ) : null}
           </button>
@@ -241,9 +233,7 @@ export function Shell({ children }: { children: ReactNode }) {
                 onClick={() => setAccountMenuOpen(false)}
               />
               <div className="account-menu" role="menu">
-                <div className="account-menu-head">
-                  {session?.deviceId ? `Dispositivo · ${session.deviceId.slice(0, 8)}…` : "Cuenta"}
-                </div>
+                <div className="account-menu-head">{displayName}</div>
                 <button type="button" role="menuitem" onClick={() => openSettings("profile")}>
                   <IconSettings size={16} /> Configuración
                 </button>
@@ -275,13 +265,7 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function NavBtn({
-  active,
-  title,
-  collapsed,
-  onClick,
-  icon,
-}: {
+function NavBtn(props: {
   active: boolean;
   title: string;
   collapsed: boolean;
@@ -291,12 +275,12 @@ function NavBtn({
   return (
     <button
       type="button"
-      className={`nav-item ${active ? "active" : ""}`}
-      onClick={onClick}
-      title={title}
+      className={`nav-item ${props.active ? "active" : ""}`}
+      onClick={props.onClick}
+      title={props.title}
     >
-      {icon}
-      {!collapsed ? <span>{title}</span> : null}
+      {props.icon}
+      {!props.collapsed ? <span>{props.title}</span> : null}
     </button>
   );
 }

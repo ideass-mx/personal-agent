@@ -133,6 +133,14 @@ export function attachGateway(
             });
             break;
           case "done":
+            try {
+              const { maybeAnnotateConversation } = await import(
+                "../memory/conversation-meta.ts"
+              );
+              maybeAnnotateConversation(conversationId, msg.text);
+            } catch {
+              /* best-effort metadata */
+            }
             diagnostics?.record({
               diagnosticId,
               component: "GATEWAY",

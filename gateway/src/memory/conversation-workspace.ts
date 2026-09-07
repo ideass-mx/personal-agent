@@ -9,14 +9,18 @@ import type { WorkspaceSqlDb } from "../workspace/sqlite-workspace-store.ts";
 export type ConversationRecord = {
   readonly id: string;
   readonly title: string | null;
+  readonly summary: string | null;
   readonly createdAt: string;
+  readonly updatedAt: string;
   readonly workspaceId: string | null;
 };
 
 type ConversationRow = {
   id: string;
   title: string | null;
+  summary: string | null;
   created_at: string;
+  updated_at: string | null;
   workspace_id: string | null;
 };
 
@@ -31,13 +35,38 @@ function isFkError(err: unknown): boolean {
   );
 }
 
+function conversationColumns(sql: WorkspaceSqlDb): {
+  hasSummary: boolean;
+  hasUpdatedAt: boolean;
+} {
+  const cols = (
+    sql.prepare(`PRAGMA table_info(conversations)`).all() as Array<{
+      name: string;
+    }>
+  ).map((c) => c.name);
+  return {
+    hasSummary: cols.includes("summary"),
+    hasUpdatedAt: cols.includes("updated_at"),
+  };
+}
+
 function mapRow(row: ConversationRow): ConversationRecord {
   return {
     id: row.id,
     title: row.title,
+    summary: row.summary ?? null,
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
     workspaceId: row.workspace_id,
   };
+}
+
+function selectConversationSql(sql: WorkspaceSqlDb): string {
+  const { hasSummary, hasUpdatedAt } = conversationColumns(sql);
+  const summary = hasSummary ? "summary" : "NULL AS summary";
+  const updated = hasUpdatedAt ? "updated_at" : "created_at AS updated_at";
+  return `SELECT id, title, ${summary}, created_at, ${updated}, workspace_id
+          FROM conversations`;
 }
 
 export function getConversation(
@@ -45,10 +74,7 @@ export function getConversation(
   sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
 ): ConversationRecord | undefined {
   const row = sql
-    .prepare(
-      `SELECT id, title, created_at, workspace_id
-       FROM conversations WHERE id = ?`,
-    )
+    .prepare(`${selectConversationSql(sql)} WHERE id = ?`)
     .get(conversationId) as ConversationRow | undefined;
   return row ? mapRow(row) : undefined;
 }
@@ -68,11 +94,21 @@ export function createConversation(
       ? null
       : options.title.trim() || null;
   try {
-    sql
-      .prepare(
-        `INSERT INTO conversations (id, title, workspace_id) VALUES (?, ?, ?)`,
-      )
-      .run(id, title, workspaceId);
+    const { hasUpdatedAt } = conversationColumns(sql);
+    if (hasUpdatedAt) {
+      sql
+        .prepare(
+          `INSERT INTO conversations (id, title, workspace_id, updated_at)
+           VALUES (?, ?, ?, datetime('now'))`,
+        )
+        .run(id, title, workspaceId);
+    } else {
+      sql
+        .prepare(
+          `INSERT INTO conversations (id, title, workspace_id) VALUES (?, ?, ?)`,
+        )
+        .run(id, title, workspaceId);
+    }
   } catch (err) {
     if (workspaceId && isFkError(err)) {
       throw new Error(
@@ -119,18 +155,21 @@ export function setConversationWorkspace(
 /**
  * Hilos de un Workspace. No comprueba que el Workspace exista
  * (eso es responsabilidad del Gateway HTTP). NULL no entra: WHERE workspace_id = ?.
- * Orden: created_at DESC, id DESC (mismo desempate que el historial de mensajes).
+ * Orden: updated_at DESC, created_at DESC, id DESC (actividad reciente; created_at desempata).
  */
 export function listConversationsByWorkspace(
   workspaceId: string,
   sql: WorkspaceSqlDb = db as unknown as WorkspaceSqlDb,
 ): ConversationRecord[] {
+  const { hasUpdatedAt } = conversationColumns(sql);
+  const order = hasUpdatedAt
+    ? "ORDER BY updated_at DESC, created_at DESC, id DESC"
+    : "ORDER BY created_at DESC, id DESC";
   const rows = sql
     .prepare(
-      `SELECT id, title, created_at, workspace_id
-       FROM conversations
+      `${selectConversationSql(sql)}
        WHERE workspace_id = ?
-       ORDER BY created_at DESC, id DESC`,
+       ${order}`,
     )
     .all(workspaceId) as ConversationRow[];
   return rows.map(mapRow);

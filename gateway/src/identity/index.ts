@@ -21,6 +21,8 @@ export {
   getPersonalAgentByUserId,
   annotateTrustedDevicesOwnership,
   setTrustedDeviceOwnership,
+  updateUserDisplayName,
+  isUserProfileComplete,
 } from "./store.ts";
 export { ensureLocalIdentity } from "./ensure-local.ts";
 export {

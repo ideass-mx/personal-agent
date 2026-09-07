@@ -10,25 +10,42 @@ import { ProjectsScreen } from "./features/projects/ProjectsScreen";
 import { SettingsScreen } from "./features/configuration/SettingsScreen";
 import { SetupScreen } from "./features/setup/SetupScreen";
 import { OnboardingWizard } from "./features/setup/OnboardingWizard";
+import { ProfileNameScreen } from "./features/setup/ProfileNameScreen";
 import { TasksScreen } from "./features/tasks/TasksScreen";
 import { useApp } from "./state/AppContext";
 import { useEffect, useState } from "react";
 import { resolveHttpBase } from "./api/http";
 import { fetchSetupStatus } from "./api/setup";
+import { fetchIdentityMe } from "./api/identity";
 
 function Routed() {
-  const { nav, session, health, healthError, wsStatus, setNav } = useApp();
+  const { nav, session, health, healthError, wsStatus, setNav, setUserDisplayName } =
+    useApp();
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
+  const [profileDone, setProfileDone] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!session) {
       setSetupDone(null);
+      setProfileDone(null);
       return;
     }
     let cancelled = false;
     void (async () => {
+      const base = resolveHttpBase(session);
       try {
-        const base = resolveHttpBase(session);
+        const me = await fetchIdentityMe(base, session.token);
+        if (!cancelled) {
+          setUserDisplayName(me.user.name);
+          setProfileDone(Boolean(me.user.profileCompleted));
+        }
+      } catch {
+        if (!cancelled) {
+          // Fail open for profile only if identity API unavailable (legacy).
+          setProfileDone(true);
+        }
+      }
+      try {
         const st = await fetchSetupStatus(base, session.token);
         if (!cancelled) {
           setSetupDone(Boolean(st.onboardingCompleted || st.state === "READY"));
@@ -40,13 +57,13 @@ function Routed() {
     return () => {
       cancelled = true;
     };
-  }, [session]);
+  }, [session, setUserDisplayName]);
 
   if (!session) {
     return <SetupScreen mode="welcome" />;
   }
 
-  if (setupDone === null) {
+  if (setupDone === null || profileDone === null) {
     return (
       <div className="setup-center">
         <div className="panel">
@@ -54,6 +71,17 @@ function Routed() {
           <p className="lead">Preparando tu espacio.</p>
         </div>
       </div>
+    );
+  }
+
+  // Nombre primero (PHASE 58), luego setup LLM existente.
+  if (profileDone === false) {
+    return (
+      <ProfileNameScreen
+        onCompleted={() => {
+          setProfileDone(true);
+        }}
+      />
     );
   }
 

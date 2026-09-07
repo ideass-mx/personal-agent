@@ -69,6 +69,9 @@ type AppState = {
   busy: boolean;
   bannerError: string | null;
   bannerDiagnostic: DiagnosticInfo | null;
+  /** Display name from users.name (never local-user / technical ids). */
+  userDisplayName: string | null;
+  setUserDisplayName: (name: string | null) => void;
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -105,6 +108,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [bannerError, setBannerError] = useState<string | null>(null);
   const [bannerDiagnostic, setBannerDiagnostic] =
     useState<DiagnosticInfo | null>(null);
+  const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
   const socketRef = useRef<HubSocket | null>(null);
   const streamIdRef = useRef<string | null>(null);
   const activeRef = useRef<string | null>(null);
@@ -181,24 +185,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else if (msg.type === "assistant_done") {
       streamIdRef.current = null;
       setBusy(false);
-      setToolBanner("Acción completada");
+      setToolBanner(null);
       setActive(msg.conversationId);
       setMessages((prev) =>
         prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
       );
-      setConversations((prev) => {
-        if (prev.some((c) => c.id === msg.conversationId)) return prev;
-        return [
-          {
-            id: msg.conversationId,
-            title: null,
-            createdAt: new Date().toISOString(),
-            workspaceId: null,
-          },
-          ...prev,
-        ];
-      });
-      setTimeout(() => setToolBanner(null), 2500);
+      // Reload titles/summaries generated server-side after the turn.
+      void refreshConversations();
     } else if (msg.type === "confirm_request") {
       setPending({
         confirmationId: msg.confirmationId,
@@ -226,7 +219,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ]);
       }
     }
-  }, []);
+  }, [refreshConversations]);
 
   const disconnect = useCallback(() => {
     socketRef.current?.close();
@@ -421,6 +414,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         disconnect();
         clearSession();
         setSession(null);
+        setUserDisplayName(null);
         setAccountMenuOpen(false);
       },
       conversations,
@@ -438,6 +432,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       busy,
       bannerError,
       bannerDiagnostic,
+      userDisplayName,
+      setUserDisplayName,
     }),
     [
       session,
@@ -467,6 +463,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       busy,
       bannerError,
       bannerDiagnostic,
+      userDisplayName,
     ],
   );
 

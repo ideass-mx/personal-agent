@@ -146,12 +146,16 @@ function InitializeUninstall(): Boolean;
 begin
   Result := True;
   RequestHostShutdownForUninstall();
-  if MsgBox('¿Eliminar también configuración y base de datos locales del agente?' + #13#10 +
+  if MsgBox('¿Eliminar también datos locales del agente (configuración, base de datos, credenciales e identidad del dispositivo)?' + #13#10 +
             '(La carpeta de trabajo / workspace NUNCA se borra.)',
             mbConfirmation, MB_YESNO) = IDYES then
   begin
     DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\config'), True, True, True);
     DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\data'), True, True, True);
     DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\logs'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\credentials'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\device-identity'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\objects'), True, True, True);
+    DelTree(ExpandConstant('{localappdata}\Ideass\PersonalAgent\runtime'), True, True, True);
   end;
 end;

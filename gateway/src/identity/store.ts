@@ -3,8 +3,17 @@
  */
 import { db } from "../db/database.ts";
 import type { PersonalAgent, PersonalAgentStatus, User } from "./types.ts";
+import {
+  DEFAULT_USER_DISPLAY_NAME,
+  LOCAL_USER_ID,
+} from "./types.ts";
 
-type UserRow = { id: string; name: string; created_at: string };
+type UserRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  profile_completed?: number;
+};
 type AgentRow = {
   id: string;
   user_id: string;
@@ -13,12 +22,85 @@ type AgentRow = {
   created_at: string;
 };
 
-function mapUser(row: UserRow): User {
+function mapUser(row: UserRow, profileCompleted: boolean): User {
   return {
     id: row.id,
     name: row.name,
     createdAt: row.created_at,
+    profileCompleted,
   };
+}
+
+function readProfileCompleted(id: string): boolean {
+  try {
+    const flag = db
+      .prepare(`SELECT profile_completed AS pc FROM users WHERE id = ?`)
+      .get(id) as { pc: number } | undefined;
+    return Number(flag?.pc ?? 0) === 1;
+  } catch {
+    return false;
+  }
+}
+
+export function getUserById(id: string): User | null {
+  const row = db
+    .prepare(`SELECT id, name, created_at FROM users WHERE id = ?`)
+    .get(id) as UserRow | undefined;
+  if (!row) return null;
+  return mapUser(row, readProfileCompleted(id));
+}
+
+/** Display name for the local user; marks profile as completed. */
+export function updateUserDisplayName(input: {
+  id: string;
+  name: string;
+}): User {
+  const trimmed = input.name.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    throw new Error("user_name_blank");
+  }
+  if (trimmed.length > 80) {
+    throw new Error("user_name_too_long");
+  }
+  if (
+    trimmed.toLowerCase() === LOCAL_USER_ID ||
+    trimmed.toLowerCase() === "personal-agent"
+  ) {
+    throw new Error("user_name_reserved");
+  }
+  try {
+    const result = db
+      .prepare(
+        `UPDATE users
+         SET name = ?, profile_completed = 1
+         WHERE id = ?`,
+      )
+      .run(trimmed, input.id);
+    if (result.changes !== 1) {
+      throw new Error("user_not_found");
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message === "user_not_found") throw err;
+    const result = db
+      .prepare(`UPDATE users SET name = ? WHERE id = ?`)
+      .run(trimmed, input.id);
+    if (result.changes !== 1) {
+      throw new Error("user_not_found");
+    }
+  }
+  const row = getUserById(input.id);
+  if (!row) throw new Error("user_not_found");
+  return row;
+}
+
+export function isUserProfileComplete(user: User): boolean {
+  if (user.profileCompleted) return true;
+  const name = user.name.trim();
+  return (
+    name.length > 0 &&
+    name !== DEFAULT_USER_DISPLAY_NAME &&
+    name.toLowerCase() !== LOCAL_USER_ID
+  );
 }
 
 function mapAgent(row: AgentRow): PersonalAgent {
@@ -29,13 +111,6 @@ function mapAgent(row: AgentRow): PersonalAgent {
     status: row.status as PersonalAgentStatus,
     createdAt: row.created_at,
   };
-}
-
-export function getUserById(id: string): User | null {
-  const row = db
-    .prepare(`SELECT id, name, created_at FROM users WHERE id = ?`)
-    .get(id) as UserRow | undefined;
-  return row ? mapUser(row) : null;
 }
 
 export function insertUser(input: { id: string; name: string }): User {

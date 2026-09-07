@@ -24,6 +24,7 @@ function openDb() {
     "001_init.sql",
     "002_workspaces.sql",
     "003_conversation_workspace.sql",
+    "012_user_profile_conversation_meta.sql",
   ]) {
     sql.exec(
       readFileSync(path.join(repoRoot, "db/migrations", name), "utf8"),

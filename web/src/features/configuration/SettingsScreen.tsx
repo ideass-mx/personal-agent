@@ -65,6 +65,7 @@ export function SettingsScreen() {
     health,
     wsStatus,
     setNav,
+    userDisplayName,
   } = useApp();
   const [prefs, setPrefs] = useState<UiPrefs>(DEFAULT_PREFS);
   const section = settingsSection;
@@ -95,16 +96,11 @@ export function SettingsScreen() {
         {section === "profile" ? (
           <Section title="Perfil">
             <p className="muted lead">
-              Identidad de usuario multi-cuenta llegará en una fase posterior. Hoy se muestra el
-              dispositivo de esta sesión.
+              Tu nombre se usa en la interfaz. Los identificadores técnicos no se muestran aquí.
             </p>
             <div className="settings-row">
-              <strong>Dispositivo</strong>
-              <span className="muted">{session?.deviceName || "—"}</span>
-            </div>
-            <div className="settings-row">
-              <strong>Device ID</strong>
-              <span className="muted mono">{session?.deviceId || "—"}</span>
+              <strong>Nombre</strong>
+              <span>{userDisplayName || "—"}</span>
             </div>
           </Section>
         ) : null}
