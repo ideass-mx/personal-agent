@@ -8,6 +8,7 @@ import {
   COMPOSER_TEXTAREA_MIN_PX,
   composerEnterShouldSend,
 } from "../../lib/composerKeyboard";
+import { IconSend } from "../../components/icons";
 import { useApp } from "../../state/AppContext";
 
 /** Hilo a pantalla completa — conversación real vía Gateway WS/HTTP. */
@@ -99,7 +100,7 @@ export function ConversationScreen() {
           disabled={!canSend}
           aria-label="Enviar"
         >
-          ↑
+          <IconSend size={18} className="composer-send-icon" />
         </button>
       </div>
     </form>

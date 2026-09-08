@@ -162,6 +162,22 @@ export function IconChevronRight(p: IconProps) {
   );
 }
 
+/** Flecha de envío del composer: relleno sólido (no trazo fino). */
+export function IconSend({ size = 18, ...props }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      {...props}
+    >
+      <path d="M12 3.25c.45 0 .88.18 1.2.5l6.05 6.05a1.7 1.7 0 0 1-2.4 2.4L13.7 9.05V19.1a1.7 1.7 0 1 1-3.4 0V9.05L6.95 12.2a1.7 1.7 0 1 1-2.4-2.4L10.8 3.75c.32-.32.75-.5 1.2-.5Z" />
+    </svg>
+  );
+}
+
 export function IconSpark(p: IconProps) {
   return (
     <svg {...base(p)}>

@@ -1263,10 +1263,17 @@ tr:last-child td {
   border-radius: 999px;
   padding: 0;
   flex-shrink: 0;
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
   align-self: flex-end;
   margin-bottom: 0;
+}
+
+.composer-send-icon {
+  display: block;
+  flex-shrink: 0;
 }
 
 .composer-shell.is-compact .composer-send {
