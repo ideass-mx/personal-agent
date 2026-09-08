@@ -1,5 +1,5 @@
 /**
- * PHASE 58.4 — blank composer layout + readability (sin vh, autosize 54–240).
+ * PHASE 58.6 — blank composer layout + readability (grid blank, autosize 28–240).
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -26,7 +26,7 @@ function parsePx(declaration: string, prop: string): number {
   return Number(m![1]);
 }
 
-describe("PHASE 58.4 blank composer layout", () => {
+describe("PHASE 58.6 blank composer layout", () => {
   it("blank-state + blank-state-content (not blank-stage)", () => {
     assert.match(css, /\.blank-state\s*\{/);
     assert.match(css, /\.blank-state-content\s*\{/);
@@ -38,51 +38,49 @@ describe("PHASE 58.4 blank composer layout", () => {
     assert.match(thread, /blank-state-content/);
   });
 
-  it("blank-state is centered flex; content capped at 720px; translateY, no vh", () => {
+  it("blank-state grid upper-middle; content capped; no translateY / vh", () => {
     const blank = block("\\.blank-state");
-    assert.match(blank, /align-items:\s*center/);
-    assert.match(blank, /justify-content:\s*center/);
+    assert.match(blank, /grid-template-rows/);
+    assert.match(blank, /display:\s*grid/);
     const content = block("\\.blank-state-content");
-    assert.match(content, /width:\s*min\(\s*720px,\s*calc\(100%\s*-\s*48px\)/);
-    assert.match(content, /translateY/);
+    assert.match(content, /width:\s*min\(\s*720px,/);
+    assert.doesNotMatch(content, /translateY/);
     assert.doesNotMatch(content, /\d+vh/);
-    assert.doesNotMatch(content, /margin-top/);
+    assert.doesNotMatch(blank, /translateY/);
+    assert.doesNotMatch(blank, /\d+vh/);
   });
 
-  it("thread / header / dock widths use min(760px, calc(100% - 48px))", () => {
-    for (const sel of [
-      "\\.thread",
-      "\\.conversation-header",
-      "\\.composer\\.composer-dock",
-    ]) {
-      assert.match(
-        block(sel),
-        /width:\s*min\(\s*760px,\s*calc\(100%\s*-\s*48px\)/,
-      );
-    }
+  it("thread full width; thread-inner / dock shell use min(760", () => {
+    const threadBlock = block("\\.thread");
+    assert.doesNotMatch(threadBlock, /width:\s*min\(\s*760/);
+    assert.match(block("\\.thread-inner"), /width:\s*min\(\s*760/);
+    assert.match(
+      block("\\.composer-dock \\.composer-shell"),
+      /width:\s*min\(\s*760/,
+    );
   });
 
-  it("msg p readability font-size 16px", () => {
+  it("msg p readability font-size 16px + font-chat", () => {
     const msgP = block("\\.msg p");
     const fontSize = parsePx(msgP, "font-size");
     assert.equal(fontSize, 16);
     assert.match(msgP, /line-height:\s*1\.6/);
+    assert.match(msgP, /font-family:\s*var\(--font-chat\)/);
   });
 
-  it("composer-input min 36 / max 240 / font 16px; dock min 54", () => {
+  it("composer-input min 28 / max 240 / font 16px", () => {
     const input = block("\\.composer-input");
-    assert.equal(parsePx(input, "min-height"), 36);
+    assert.equal(parsePx(input, "min-height"), 28);
     assert.equal(parsePx(input, "max-height"), 240);
     assert.equal(parsePx(input, "font-size"), 16);
-    assert.match(input, /line-height:\s*1\.55/);
-    assert.match(input, /padding:\s*6px 0/);
-    const dockInput = block("\\.composer-dock \\.composer-input");
-    assert.equal(parsePx(dockInput, "min-height"), 54);
-    assert.match(dockInput, /padding:\s*10px 0/);
+    assert.match(input, /line-height:\s*1\.5/);
+    assert.match(input, /font-family:\s*var\(--font-chat\)/);
   });
 
-  it("composer-shell flex-end; hero shell border 0 / radius >= 28", () => {
-    assert.match(block("\\.composer-shell"), /align-items:\s*flex-end/);
+  it("composer-shell border 0 / radius >= 28; hero/dock tall", () => {
+    const shell = block("\\.composer-shell");
+    assert.match(shell, /border:\s*0/);
+    assert.ok(parsePx(shell, "border-radius") >= 28);
     const heroShell = block("\\.composer-hero \\.composer-shell");
     assert.match(heroShell, /border:\s*0/);
     assert.ok(parsePx(heroShell, "border-radius") >= 28);

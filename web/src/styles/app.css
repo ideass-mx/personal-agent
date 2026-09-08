@@ -3,7 +3,7 @@
   display: grid;
   grid-template-columns: var(--sidebar-w) 1fr;
   height: 100%;
-  min-height: 100vh;
+  min-height: 0; /* evita scroll context extra (no 100vh) */
   transition: grid-template-columns 0.28s var(--ease);
 }
 
@@ -1041,7 +1041,7 @@ tr:last-child td {
   font-weight: 550;
 }
 
-/* Conversation */
+/* Conversation — PHASE 58.6: scroll full-bleed en .thread; ancho en .thread-inner */
 .conversation-screen {
   display: flex;
   flex-direction: column;
@@ -1049,9 +1049,8 @@ tr:last-child td {
   height: 100%;
   min-height: 0;
   width: 100%;
-  max-width: none;
   margin: 0;
-  padding: 20px 24px 0;
+  padding: 0;
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -1060,40 +1059,28 @@ tr:last-child td {
   padding-bottom: 0;
 }
 
-.conversation-header {
-  flex: 0 0 auto;
-  margin-bottom: 12px;
-  width: min(760px, calc(100% - 48px));
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.conversation-header h1 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-/* Blank: centrado ligeramente hacia arriba (sin vh / bottom:0). */
+/* Blank: grid coloca el bloque en upper-middle (sin vh / translateY). */
 .blank-state {
   flex: 1;
   min-height: 0;
-  display: flex;
+  display: grid;
+  grid-template-rows: 1fr auto 1.35fr;
+  justify-items: center;
   align-items: center;
-  justify-content: center;
   overflow: hidden;
   width: 100%;
+  padding: 0 24px;
+  box-sizing: border-box;
 }
 
 .blank-state-content {
-  width: min(720px, calc(100% - 48px));
+  grid-row: 2;
+  width: min(720px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 24px;
   text-align: center;
-  transform: translateY(-8%);
 }
 
 .blank-heading {
@@ -1107,15 +1094,33 @@ tr:last-child td {
 .thread {
   flex: 1;
   min-height: 0;
+  width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+.thread::-webkit-scrollbar {
+  width: 8px;
+}
+
+.thread::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thread::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  border-radius: 999px;
+}
+
+.thread-inner {
+  width: min(760px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 20px 0 16px;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding-bottom: 16px;
-  width: min(760px, calc(100% - 48px));
-  margin: 0 auto;
   box-sizing: border-box;
 }
 
@@ -1126,14 +1131,15 @@ tr:last-child td {
 
 .msg.user {
   align-self: flex-end;
-  background: var(--sunken);
-  border-radius: 22px;
+  background: var(--user-bubble);
+  color: var(--user-bubble-ink);
+  border-radius: 24px;
   padding: 12px 16px;
 }
 
 .msg.agent {
   align-self: flex-start;
-  max-width: min(720px, 100%);
+  max-width: 100%;
   display: block;
   background: transparent;
   padding: 0;
@@ -1141,8 +1147,11 @@ tr:last-child td {
 
 .msg p {
   margin: 0;
-  line-height: 1.6;
+  font-family: var(--font-chat);
   font-size: 16px;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0;
   white-space: pre-wrap;
 }
 
@@ -1169,9 +1178,10 @@ tr:last-child td {
 }
 
 .composer.composer-dock {
-  width: min(760px, calc(100% - 48px));
-  margin: 0 auto;
-  padding: 12px 0 20px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 24px 20px;
+  box-sizing: border-box;
 }
 
 .composer-shell {
@@ -1180,53 +1190,61 @@ tr:last-child td {
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px 10px 16px;
-  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-  border-radius: 18px;
-  background: var(--surface);
+  padding: 10px 12px 10px 18px;
+  border: 0;
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--sunken));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  min-height: 56px;
+}
+
+.composer-dock .composer-shell {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  border: 0;
+  border-radius: 30px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--sunken));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  min-height: 56px;
+  padding: 10px 12px 10px 18px;
 }
 
 .composer-hero .composer-shell {
   border: 0;
-  border-radius: 28px;
-  background: color-mix(in srgb, var(--surface) 92%, var(--sunken));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
-  min-height: 54px;
-  padding: 8px 10px 8px 18px;
+  border-radius: 30px;
+  min-height: 56px;
+  padding: 10px 12px 10px 18px;
 }
 
 .composer-hero .composer-shell.is-compact {
   align-items: center;
 }
 
-.composer-hero .composer-shell.is-tall {
+.composer-hero .composer-shell.is-tall,
+.composer-dock .composer-shell.is-tall {
   align-items: flex-end;
-  border-radius: 22px;
+  border-radius: 24px;
 }
 
 .composer-input {
   flex: 1;
   min-width: 0;
   width: 100%;
-  min-height: 36px;
+  min-height: 28px;
   max-height: 240px;
   border: 0;
   background: transparent;
   border-radius: 0;
-  padding: 6px 0;
+  padding: 0;
   margin: 0;
   outline: none;
   resize: none;
   overflow-y: hidden;
-  line-height: 1.55;
+  font-family: var(--font-chat);
   font-size: 16px;
+  line-height: 1.5;
   color: var(--ink);
   box-shadow: none;
-}
-
-.composer-dock .composer-input {
-  min-height: 54px;
-  padding: 10px 0;
 }
 
 .composer-input:focus {
@@ -1251,7 +1269,7 @@ tr:last-child td {
   margin-bottom: 0;
 }
 
-.composer-hero .composer-shell.is-compact .composer-send {
+.composer-shell.is-compact .composer-send {
   align-self: center;
 }
 

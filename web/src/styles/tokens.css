@@ -11,9 +11,11 @@
   --ok: #3dd68c;
   --warning: #e6b84d;
 
-  /* Tipografía */
-  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  /* Tipografía — chat: equivalente a Gemini (Google Sans Text → Roboto / system) */
+  --font-ui: Roboto, "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-chat: Roboto, "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
+    Arial, sans-serif;
   --font-agent: "Newsreader", Georgia, "Times New Roman", serif;
 
   /* Forma */
@@ -32,6 +34,10 @@
   --accent: #7c8cff;
   --accent-soft: color-mix(in srgb, var(--accent) 18%, var(--surface));
   --accent-ink: #e8ebff;
+
+  /* Bubble usuario (ChatGPT-like, azul sobrio dark) */
+  --user-bubble: #1e4a7a;
+  --user-bubble-ink: #eef5fc;
 }
 
 [data-agent="personal"] {

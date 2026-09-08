@@ -76,14 +76,16 @@ describe("PHASE 58.5 message + overflow UX", () => {
     assert.match(block("\\.msg p"), /white-space:\s*pre-wrap/);
   });
 
-  it("hero composer-shell: border 0, radius >= 28; blank translateY", () => {
+  it("hero composer-shell: border 0, radius >= 28; blank grid (no vh)", () => {
     const heroShell = block("\\.composer-hero \\.composer-shell");
     assert.match(heroShell, /border:\s*0/);
     const radius = parsePx(heroShell, "border-radius");
     assert.ok(radius >= 28, `border-radius ${radius} >= 28`);
 
+    const blank = block("\\.blank-state");
+    assert.match(blank, /grid-template-rows/);
     const blankContent = block("\\.blank-state-content");
-    assert.match(blankContent, /translateY/);
+    assert.doesNotMatch(blankContent, /translateY/);
     assert.doesNotMatch(blankContent, /\d+vh/);
   });
 });

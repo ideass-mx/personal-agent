@@ -1,5 +1,5 @@
 /**
- * PHASE 58.4 — composer Enter/Shift+Enter + autosize helpers (54–240).
+ * PHASE 58.6 — composer Enter/Shift+Enter + autosize helpers (28–240).
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -40,9 +40,9 @@ function fakeTextarea(initialScrollHeight: number): HTMLTextAreaElement & {
   } as unknown as HTMLTextAreaElement & { setScrollHeight: (n: number) => void };
 }
 
-describe("PHASE 58.4 composer multiline helpers", () => {
-  it("constants are 54 / 240", () => {
-    assert.equal(COMPOSER_TEXTAREA_MIN_PX, 54);
+describe("PHASE 58.6 composer multiline helpers", () => {
+  it("constants are 28 / 240", () => {
+    assert.equal(COMPOSER_TEXTAREA_MIN_PX, 28);
     assert.equal(COMPOSER_TEXTAREA_MAX_PX, 240);
   });
 
@@ -61,14 +61,14 @@ describe("PHASE 58.4 composer multiline helpers", () => {
     );
   });
 
-  it("autosize respects min height 54", () => {
+  it("autosize respects min height 28", () => {
     const el = fakeTextarea(20);
     const result = applyComposerAutosize(el);
     assert.equal(result.contentPx, 20);
-    assert.equal(result.heightPx, 54);
+    assert.equal(result.heightPx, 28);
     assert.equal(result.heightPx, COMPOSER_TEXTAREA_MIN_PX);
     assert.equal(result.overflowY, "hidden");
-    assert.equal(el.style.height, "54px");
+    assert.equal(el.style.height, "28px");
     // height=auto debe poder asignarse (medición previa al clamp).
     el.style.height = "auto";
     assert.equal(el.style.height, "auto");
@@ -99,7 +99,7 @@ describe("PHASE 58.4 composer multiline helpers", () => {
 
     let r = applyComposerAutosize(el);
     assert.equal(r.contentPx, 20);
-    assert.equal(r.heightPx, 54);
+    assert.equal(r.heightPx, 28);
     assert.equal(r.overflowY, "hidden");
 
     el.setScrollHeight(120);

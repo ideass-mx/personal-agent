@@ -23,7 +23,6 @@ export function ConversationScreen() {
     bannerDiagnostic,
     health,
     activeConversationId,
-    conversations,
     wsStatus,
   } = useApp();
   const endRef = useRef<HTMLDivElement>(null);
@@ -35,7 +34,6 @@ export function ConversationScreen() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, toolBanner]);
 
-  const meta = conversations.find((c) => c.id === activeConversationId);
   const isBlank = messages.length === 0;
   const canSend =
     wsStatus === "authenticated" && draft.trim().length > 0 && !busy;
@@ -44,7 +42,7 @@ export function ConversationScreen() {
     const el = textareaRef.current;
     if (!el) return;
     const result = applyComposerAutosize(el);
-    setComposerTall(result.heightPx > COMPOSER_TEXTAREA_MIN_PX + 2);
+    setComposerTall(result.heightPx > COMPOSER_TEXTAREA_MIN_PX + 4);
   }, [draft, isBlank]);
 
   useEffect(() => {
@@ -112,12 +110,6 @@ export function ConversationScreen() {
       className={`conversation-screen ${isBlank ? "is-blank" : ""}`}
       data-agent="personal"
     >
-      {!isBlank ? (
-        <header className="screen-header conversation-header">
-          <h1>{meta?.title?.trim() || "Conversación"}</h1>
-        </header>
-      ) : null}
-
       {toolBanner ? <div className="tool-banner">{toolBanner}</div> : null}
       {bannerError ? (
         <div className="block-panel" style={{ marginBottom: 12 }}>
@@ -162,25 +154,27 @@ export function ConversationScreen() {
       ) : (
         <>
           <div className="thread">
-            {messages.map((m) =>
-              m.role === "user" ? (
-                <div key={m.id} className="msg user">
-                  <p>{m.text}</p>
-                </div>
-              ) : m.role === "assistant" ? (
-                <div key={m.id} className="msg agent" data-agent="personal">
-                  <p>
-                    {m.text}
-                    {m.streaming ? "▍" : ""}
-                  </p>
-                </div>
-              ) : (
-                <div key={m.id} className="msg system muted">
-                  <p>{m.text}</p>
-                </div>
-              ),
-            )}
-            <div ref={endRef} />
+            <div className="thread-inner">
+              {messages.map((m) =>
+                m.role === "user" ? (
+                  <div key={m.id} className="msg user">
+                    <p>{m.text}</p>
+                  </div>
+                ) : m.role === "assistant" ? (
+                  <div key={m.id} className="msg agent" data-agent="personal">
+                    <p>
+                      {m.text}
+                      {m.streaming ? "▍" : ""}
+                    </p>
+                  </div>
+                ) : (
+                  <div key={m.id} className="msg system muted">
+                    <p>{m.text}</p>
+                  </div>
+                ),
+              )}
+              <div ref={endRef} />
+            </div>
           </div>
           {composer}
         </>
