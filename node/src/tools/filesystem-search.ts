@@ -4,7 +4,7 @@
  * Hub: automatic / ALLOWED. Sin indexador global: recorrido bajo demanda.
  * Contención de escritura no aplica; exclusiones técnicas evitan ruido de SO.
  */
-import { open, readdir, stat } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import path from "node:path";
 import { detectSearchRoots } from "./fs-drives.ts";
 import {
@@ -19,13 +19,18 @@ import {
   normalizeFileTypes,
   sampleLooksBinary,
 } from "./fs-file-kinds.ts";
-import { resolveReadablePath } from "./fs-readable-path.ts";
+import {
+  listWindowsDriveRootFallback,
+  readdirRobust,
+  resolveReadablePath,
+} from "./fs-readable-path.ts";
+import { isWindowsDriveRoot, normalizeWindowsFsPath } from "./fs-windows-path.ts";
 import type { AgentTool, ToolResult } from "./types.ts";
 
 export const FILESYSTEM_SEARCH_NAME = "filesystem.search";
 
 export const FILESYSTEM_SEARCH_DESCRIPTION =
-  "Busca archivos en la computadora del usuario por nombre, ruta, tipo, fecha, tamaño o contenido (cuando el formato lo permite). No requiere carpeta previa.";
+  "Busca archivos en la computadora del usuario por nombre, ruta, tipo, fecha, tamaño o contenido (cuando el formato lo permite). No requiere carpeta previa. Preferible a listar C:\\\\ entero.";
 
 export const FILESYSTEM_SEARCH_INPUT_SCHEMA = {
   type: "object",
@@ -296,9 +301,15 @@ export function createFilesystemSearchTool(
         // Path explícito: se permite incluso bajo exclusiones habituales.
         honorExclusions = false;
       } else if (options.defaultRoots && options.defaultRoots.length > 0) {
-        roots = options.defaultRoots.map((r) => path.resolve(r));
+        roots = options.defaultRoots.map((r) =>
+          process.platform === "win32"
+            ? normalizeWindowsFsPath(r)
+            : path.resolve(r),
+        );
       } else {
-        roots = await detectSearchRoots();
+        roots = (await detectSearchRoots()).map((r) =>
+          process.platform === "win32" ? normalizeWindowsFsPath(r) : r,
+        );
       }
 
       if (roots.length === 0) {
@@ -341,12 +352,25 @@ export function createFilesystemSearchTool(
         dirsVisited += 1;
         let dirents;
         try {
-          dirents = await readdir(dir, { withFileTypes: true });
+          dirents = await readdirRobust(dir);
         } catch (err) {
           const code = nodeErrorCode(err);
           if (code === "EACCES" || code === "EPERM") {
             accessDenied += 1;
-            continue;
+          }
+          // Raíz de unidad ilegible: seguir por Users / carpetas típicas.
+          if (isWindowsDriveRoot(dir) && depth === 0) {
+            const fallback = await listWindowsDriveRootFallback(dir);
+            for (const entry of fallback) {
+              const full = path.join(dir, entry.name);
+              if (honorExclusions && isExcludedPath(full, exclusionPrefixes)) {
+                continue;
+              }
+              if (shouldSkipDirName(entry.name, skipDirNames)) continue;
+              if (depth < maxDepth) {
+                queue.push({ dir: full, depth: depth + 1 });
+              }
+            }
           }
           continue;
         }

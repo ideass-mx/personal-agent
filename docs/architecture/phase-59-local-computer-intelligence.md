@@ -1,7 +1,22 @@
 # PHASE 59 — Local Computer Intelligence
 
-**Estado:** PARTIAL (implementación + tests unitarios; falta validación E2E Windows real)  
+**Estado:** PARTIAL (fix Windows drive-root + timeout MCP search; falta E2E Windows real)  
 **Fecha:** 2026-09-07  
+
+## Hotfix (2026-09-07)
+
+Problema reportado: listar/buscar `C:` fallaba.
+
+Causas:
+1. `C:` en Windows no es la raíz (`C:\`); es el cwd del volumen.
+2. Timeout MCP por defecto (15s) mataba `filesystem.search` antes de terminar.
+3. `readdir` de raíces de unidad puede fallar en algunos Node/Windows.
+
+Mitigación:
+- Normalizar `C:` / `C:/` → `C:\`
+- `readdir` con reintento `C:\.` + fallback a carpetas típicas (`Users`, …)
+- Timeout MCP de search ≥ 50s (alineado al timeout interno)
+- Prompt: preferir search por nombre; no listar toda la unidad como primer paso
 
 > Nota de numeración: existe documentación previa de **Credential & Secret Management**
 > también bajo PHASE 59 (`PHASE_59_DESIGN.md`). Esta fase de producto reutiliza el

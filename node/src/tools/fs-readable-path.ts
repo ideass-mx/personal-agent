@@ -3,10 +3,19 @@
  * Lectura amplia: no aplica filesystem.root como cerca.
  * Escritura sigue en resolveSafePath + root.
  */
-import { lstat, realpath, stat } from "node:fs/promises";
+import { access, lstat, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type { SafePathExpect, SafePathResult } from "./safe-path.ts";
 import type { ToolResult } from "./types.ts";
+import {
+  isWindowsDriveRoot,
+  looksWindowsPath,
+  normalizeWindowsFsPath,
+  WINDOWS_DRIVE_ROOT_FALLBACK_NAMES,
+  windowsDriveRootReadCandidates,
+} from "./fs-windows-path.ts";
+import { readdir } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 
 function fail(code: string, message: string): ToolResult {
   return { ok: false, error: { code, message } };
@@ -18,6 +27,55 @@ function nodeErrorCode(err: unknown): string | undefined {
   }
   const code = (err as { code: unknown }).code;
   return typeof code === "string" ? code : undefined;
+}
+
+function preparePathInput(rawPath: string): string {
+  if (process.platform === "win32" || looksWindowsPath(rawPath)) {
+    return normalizeWindowsFsPath(rawPath);
+  }
+  return rawPath;
+}
+
+/**
+ * readdir robusto: en raíces de unidad Windows prueba `X:\` y `X:\.`.
+ */
+export async function readdirRobust(dir: string): Promise<Dirent[]> {
+  const candidates =
+    process.platform === "win32" || isWindowsDriveRoot(dir)
+      ? windowsDriveRootReadCandidates(dir)
+      : [dir];
+  let lastErr: unknown;
+  for (const candidate of candidates) {
+    try {
+      return await readdir(candidate, { withFileTypes: true });
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("readdir failed");
+}
+
+/**
+ * Si la raíz de unidad no se puede listar, enumera carpetas típicas accesibles.
+ */
+export async function listWindowsDriveRootFallback(
+  driveRoot: string,
+): Promise<Array<{ name: string; type: "directory" }>> {
+  const root = normalizeWindowsFsPath(driveRoot);
+  const out: Array<{ name: string; type: "directory" }> = [];
+  for (const name of WINDOWS_DRIVE_ROOT_FALLBACK_NAMES) {
+    const full = path.win32.join(root, name);
+    try {
+      await access(full);
+      const info = await stat(full);
+      if (info.isDirectory()) {
+        out.push({ name, type: "directory" });
+      }
+    } catch {
+      // omitir
+    }
+  }
+  return out;
 }
 
 /**
@@ -43,16 +101,38 @@ export async function resolveReadablePath(
     };
   }
 
+  const prepared = preparePathInput(rawPath);
+
   let candidate: string;
   try {
-    candidate = path.isAbsolute(rawPath)
-      ? path.resolve(rawPath)
-      : path.resolve(base ?? process.cwd(), rawPath);
+    if (process.platform === "win32" || looksWindowsPath(prepared)) {
+      if (path.win32.isAbsolute(prepared) || isWindowsDriveRoot(prepared)) {
+        candidate = path.win32.resolve(prepared);
+        // path.win32.resolve("C:\\") → "C:\\"; ensure drive root form.
+        if (isWindowsDriveRoot(prepared)) {
+          candidate = normalizeWindowsFsPath(prepared);
+        }
+      } else {
+        const baseNorm = base
+          ? preparePathInput(base)
+          : process.cwd();
+        candidate = path.win32.resolve(baseNorm, prepared);
+      }
+    } else {
+      candidate = path.isAbsolute(prepared)
+        ? path.resolve(prepared)
+        : path.resolve(base ?? process.cwd(), prepared);
+    }
   } catch {
     return {
       ok: false,
       result: fail("invalid_input", "path no se puede resolver."),
     };
+  }
+
+  // Raíz de unidad: no exige lstat perfecto (algunos Node fallan ahí).
+  if (isWindowsDriveRoot(candidate) && expect === "directory") {
+    return { ok: true, resolved: normalizeWindowsFsPath(candidate) };
   }
 
   try {
@@ -128,12 +208,14 @@ export async function resolveReadablePath(
   } catch (err) {
     const code = nodeErrorCode(err);
     if (code === "ENOENT") {
-      // Destino aún inexistente: solo útil si expect file y caller crea;
-      // para lectura fallamos not found.
+      // Reintento: raíz de unidad con variante X:\.
+      if (expect === "directory" && isWindowsDriveRoot(candidate)) {
+        return { ok: true, resolved: normalizeWindowsFsPath(candidate) };
+      }
       return {
         ok: false,
         result: fail(
-          expect === "directory" ? "file_not_found" : "file_not_found",
+          "file_not_found",
           expect === "directory"
             ? "El directorio no existe."
             : "El archivo no existe.",

@@ -5,19 +5,27 @@
  * PHASE 59: lectura amplia (resolveReadablePath). Sin recursión,
  * sin leer contenido de archivos. Sin autorización por carpeta.
  */
-import { readdir } from "node:fs/promises";
-import { resolveReadablePath } from "./fs-readable-path.ts";
+import {
+  listWindowsDriveRootFallback,
+  readdirRobust,
+  resolveReadablePath,
+} from "./fs-readable-path.ts";
+import { isWindowsDriveRoot } from "./fs-windows-path.ts";
 import type { AgentTool, ToolResult } from "./types.ts";
 
 export const FILESYSTEM_LIST_NAME = "filesystem.list";
 
 export const FILESYSTEM_LIST_DESCRIPTION =
-  "Lista las entradas de un directorio en la máquina local (un nivel, sin contenido). No requiere autorización por carpeta.";
+  "Lista las entradas de un directorio en la máquina local (un nivel, sin contenido). Acepta raíces de unidad como C:\\\\. No requiere autorización por carpeta.";
 
 export const FILESYSTEM_LIST_INPUT_SCHEMA = {
   type: "object",
   properties: {
-    path: { type: "string" },
+    path: {
+      type: "string",
+      description:
+        'Ruta absoluta o relativa. En Windows usa C:\\\\ o C:/ (no solo "C:").',
+    },
   },
   required: ["path"],
   additionalProperties: false,
@@ -89,9 +97,7 @@ export function createFilesystemListTool(
       if (!resolved.ok) return resolved.result;
 
       try {
-        const dirents = await readdir(resolved.resolved, {
-          withFileTypes: true,
-        });
+        const dirents = await readdirRobust(resolved.resolved);
         const entries: FilesystemListEntry[] = dirents
           .map((d) => ({ name: d.name, type: entryType(d) }))
           .sort((a, b) => a.name.localeCompare(b.name, "en"));
@@ -101,6 +107,28 @@ export function createFilesystemListTool(
         };
       } catch (err) {
         const code = nodeErrorCode(err);
+        if (
+          (code === "ENOENT" ||
+            code === "EACCES" ||
+            code === "EPERM" ||
+            code === "UNKNOWN") &&
+          isWindowsDriveRoot(resolved.resolved)
+        ) {
+          const fallback = await listWindowsDriveRootFallback(
+            resolved.resolved,
+          );
+          if (fallback.length > 0) {
+            return {
+              ok: true,
+              content: {
+                path: resolved.resolved,
+                entries: fallback,
+                partial: true,
+                note: "Listado parcial de la unidad: no se pudo leer la raíz completa.",
+              },
+            };
+          }
+        }
         if (code === "ENOENT") {
           return fail("file_not_found", "El directorio no existe.");
         }

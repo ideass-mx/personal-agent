@@ -38,6 +38,12 @@ const PROCESS_EXECUTE_MCP_SLACK_MS = 5_000;
 /** Debe superar EXCEL_COM_TIMEOUT_MS (15s en Agent). No cambia filesystem/echo. */
 export const OFFICE_EXCEL_MCP_TIMEOUT_MS = 20_000;
 
+/** Alineado con DEFAULT_SEARCH_TIMEOUT_MS del Node (+ holgura MCP). */
+export const FILESYSTEM_SEARCH_DEFAULT_MCP_TIMEOUT_MS = 50_000;
+const FILESYSTEM_SEARCH_MIN_TIMEOUT_MS = 5_000;
+const FILESYSTEM_SEARCH_MAX_TIMEOUT_MS = 300_000;
+const FILESYSTEM_SEARCH_MCP_SLACK_MS = 5_000;
+
 export function mcpTimeoutMsForOfficeExcel(): number {
   return OFFICE_EXCEL_MCP_TIMEOUT_MS;
 }
@@ -55,6 +61,21 @@ export function mcpTimeoutMsForProcessExecute(input: unknown): number {
     }
   }
   return PROCESS_EXECUTE_DEFAULT_TIMEOUT_MS + PROCESS_EXECUTE_MCP_SLACK_MS;
+}
+
+export function mcpTimeoutMsForFilesystemSearch(input: unknown): number {
+  if (typeof input === "object" && input !== null) {
+    const raw = (input as { timeoutMs?: unknown }).timeoutMs;
+    if (
+      typeof raw === "number" &&
+      Number.isInteger(raw) &&
+      raw >= FILESYSTEM_SEARCH_MIN_TIMEOUT_MS &&
+      raw <= FILESYSTEM_SEARCH_MAX_TIMEOUT_MS
+    ) {
+      return raw + FILESYSTEM_SEARCH_MCP_SLACK_MS;
+    }
+  }
+  return FILESYSTEM_SEARCH_DEFAULT_MCP_TIMEOUT_MS;
 }
 
 const REQUIRED_AGENT_TOOLS = [
@@ -96,6 +117,7 @@ function timeoutMsForDiscoveredTool(
   name: string,
 ): ((input: unknown) => number) | undefined {
   if (name === "process.execute") return mcpTimeoutMsForProcessExecute;
+  if (name === "filesystem.search") return mcpTimeoutMsForFilesystemSearch;
   if (name === "office.excel.read" || name === "office.excel.write") {
     return () => mcpTimeoutMsForOfficeExcel();
   }
