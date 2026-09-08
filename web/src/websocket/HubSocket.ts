@@ -1,9 +1,15 @@
 import type { DiagnosticInfo } from "../types";
+import type { AgentSource } from "../sources/types";
 
 export type ServerMsg =
   | { type: "auth_ok"; deviceId: string }
   | { type: "assistant_chunk"; text: string; conversationId?: string }
-  | { type: "assistant_done"; messageId: string; conversationId: string }
+  | {
+      type: "assistant_done";
+      messageId: string;
+      conversationId: string;
+      sources?: AgentSource[];
+    }
   | {
       type: "confirm_request";
       confirmationId: string;

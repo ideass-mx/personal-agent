@@ -34,7 +34,7 @@ Seguridad / aislamiento producto PHASE 33: [`phase33-security-product-isolation-
 Completitud operacional producto PHASE 34: [`phase34-product-operational-completeness-audit.md`](./phase34-product-operational-completeness-audit.md) (audit; READY WITH DEBT; usable Single Node; sin instalador/health live).  
 Salida de arquitectura / MVP PHASE 35: [`phase35-mvp-readiness-and-architecture-exit.md`](./phase35-mvp-readiness-and-architecture-exit.md) (audit; MVP-READY WITH DEBT; fin de auditorías arquitectónicas; siguiente trabajo = producto).  
 Definición de producto Hub-first PHASE 36: [`phase36-product-definition-and-hub-first-mvp.md`](./phase36-product-definition-and-hub-first-mvp.md) (definición; READY FOR PHASE 37; sin código productivo).  
-Hub-first UX plan + P0 PHASE 37: [`phase37-hub-first-ux.md`](./phase37-hub-first-ux.md) / [`phase37-hub-first-ux-implementation.md`](./phase37-hub-first-ux-implementation.md) (PASS; default HUB; OpenClaw legacy).  
+Hub-first UX plan + P0 PHASE 37: [`phase37-hub-first-ux.md`](./phase37-hub-first-ux.md) / [`phase37-hub-first-ux-implementation.md`](./phase37-hub-first-ux-implementation.md) (PASS; default HUB; Gateway legacy legacy).  
 HITL global Android PHASE 38: [`phase38-hitl-global-product-ux.md`](./phase38-hitl-global-product-ux.md) (PASS; HubConfirmHost sobre AppNav; Gateway autoridad).  
 First-run / ops UX PHASE 39: [`phase39-first-run-operational-ux.md`](./phase39-first-run-operational-ux.md) (PASS; runbook + empty/history copy; FS root recomendado).  
 Capacidades / Tool UX PHASE 40: [`phase40-agent-capabilities-tool-ux.md`](./phase40-agent-capabilities-tool-ux.md) (audit; READY FOR IMPLEMENTATION; Conversation-first + Capacidades ligeras; sin CapabilityRegistry).
@@ -106,7 +106,7 @@ Skills PHASE 56: [`phase56-skills-capabilities.md`](./phase56-skills-capabilitie
 | Nombre | Qué es |
 |--------|--------|
 | **Platform Gateway** | Componente de Agent Platform. Hoy: proceso/`gateway/`. |
-| **OpenClaw Gateway** | Backend **externo y opcional**. Cliente Android en `mobile/android/.../gateway/`. No fusionar. |
+| **Gateway legacy Gateway** | Backend **externo y opcional**. Cliente Android en `mobile/android/.../gateway/`. No fusionar. |
 | **`attachGateway`** | Función en `gateway/src/ws/index.ts`: transporte WebSocket. Deuda de nomenclatura. |
 
 ## Agent vs Agent Runtime

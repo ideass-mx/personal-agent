@@ -110,7 +110,7 @@ class ConnectionPrefsPolicyTest {
     }
 
     @Test
-    fun explicitGatewayStored_keepsOpenClaw() {
+    fun explicitGatewayStored_keepsGateway legacy() {
         val backend = ConnectionPrefsPolicy.backendFromStored(
             storedBackend = "gateway",
             gatewayUrl = "wss://host:18789",

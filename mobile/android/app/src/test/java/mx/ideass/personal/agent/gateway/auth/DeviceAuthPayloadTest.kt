@@ -24,7 +24,7 @@ class DeviceAuthPayloadTest {
         )
 
         assertEquals(
-            "v3|dev-1|openclaw-macos|ui|operator|operator.admin,operator.read|" +
+            "v3|dev-1|gateway-legacy-macos|ui|operator|operator.admin,operator.read|" +
                 "1700000000000|tok-123|nonce-abc|ios|iphone",
             payload,
         )
@@ -45,7 +45,7 @@ class DeviceAuthPayloadTest {
             deviceFamily = "  ",
         )
         assertEquals(
-            "v3|d|openclaw-android|ui|operator|operator.read,operator.write|1||n||",
+            "v3|d|gateway-legacy-android|ui|operator|operator.read,operator.write|1||n||",
             payload,
         )
     }

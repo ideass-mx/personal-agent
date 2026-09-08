@@ -5,7 +5,7 @@
 
 **Decision (plan):** **READY FOR IMPLEMENTATION** → **PASS** (P0).
 
-Android era **Chat-first** y **Gateway-default**. P0 implementado: Hub default, first-run Connection, OpenClaw Avanzado/Legacy.
+Android era **Chat-first** y **Gateway-default**. P0 implementado: Hub default, first-run Connection, Gateway legacy Avanzado/Legacy.
 
 **PHASE 38 CLOSED** (ver [`phase38-hitl-global-product-ux.md`](./phase38-hitl-global-product-ux.md)).  
 **PHASE 39 NOT STARTED.**
@@ -19,7 +19,7 @@ Android era **Chat-first** y **Gateway-default**. P0 implementado: Hub default, 
 | ¿Hub es el camino feliz hoy? | **No** |
 | ¿Bloqueo arquitectónico? | **No** |
 | ¿Se puede implementar sin rediseñar plataforma? | **Sí** |
-| ¿Borrar OpenClaw? | **No** — legacy/debug |
+| ¿Borrar Gateway legacy? | **No** — legacy/debug |
 | ¿HITL global en esta fase? | **No implementar** — planificado PHASE 38; auditado aquí |
 | Siguiente paso tras autorización | Implementar **P0 Hub-first** listados abajo |
 
@@ -43,7 +43,7 @@ Android era **Chat-first** y **Gateway-default**. P0 implementado: Hub default, 
 | Componente | Dominio |
 |------------|---------|
 | `HubChatConnection`, `HubClient`, `HubConversationHistorySync`, Workspace HTTP UI | **Hub** |
-| `GatewayChatConnection`, `GatewayClient`, `ChatHistorySync`, pairing OpenClaw, `PersistedSessionProvider` (modelo OpenClaw) | **OpenClaw legacy** |
+| `GatewayChatConnection`, `GatewayClient`, `ChatHistorySync`, pairing Gateway legacy, `PersistedSessionProvider` (modelo Gateway legacy) | **Gateway legacy legacy** |
 | `RoutingChatConnection`, `ChatStore`, `ChatScreen`, `SessionsScreen`, `AgentService`, `AppPreferences` | **Infra compartida** |
 
 ---
@@ -67,25 +67,25 @@ Android era **Chat-first** y **Gateway-default**. P0 implementado: Hub default, 
 | 16 | Reconnect | **EXISTE** |
 | 17 | History rehidrata | **EXISTE** (fallos silenciosos → P1) |
 
-OpenClaw en pasos 2–4: **LEGACY** compitiendo con Hub.
+Gateway legacy en pasos 2–4: **LEGACY** compitiendo con Hub.
 
 ---
 
-## 4. OpenClaw Legacy Audit
+## 4. Gateway legacy Legacy Audit
 
 | Superficie | Dónde | Acción producto |
 |------------|-------|-----------------|
 | Default backend | `ConnectionPrefsPolicy`, `ConnectionUiState` | P0: default **HUB** |
 | Formulario Connection | campos setup-code, agentId, sessionKey si GATEWAY | P0: ocultar en happy path |
 | Selector debug | long-press título | P0: Hub visible; Gateway = “Avanzado”/debug |
-| Copy pairing | `openclaw devices approve` | P0: solo si legacy path |
+| Copy pairing | `gateway-legacy devices approve` | P0: solo si legacy path |
 | Settings subtitle | “Gateway, token…” | P0: copy Hub/agente PC |
 | `RoutingChatConnection` initial `active = gateway` | hasta primer collect prefs | P0: no asumir gateway |
 | `ChatHistorySync` + `HubConversationHistorySync` ambos start | `AgentService` | OK técnico (self-gate); P1: no arrancar legacy si Hub-only |
-| Voice / session OpenClaw model | Voice + `PersistedSessionProvider` | P2 / fuera MVP chat |
+| Voice / session Gateway legacy model | Voice + `PersistedSessionProvider` | P2 / fuera MVP chat |
 | Código Gateway* | permanece | **No borrar**; marcar legacy en docs/comments P0 mínimos |
 
-**Objetivo:** OpenClaw puede compilar y usarse en avanzado; **no** aparece en first-run ni en copy principal.
+**Objetivo:** Gateway legacy puede compilar y usarse en avanzado; **no** aparece en first-run ni en copy principal.
 
 ---
 
@@ -190,7 +190,7 @@ No inventar Active Workspace ni multi-device.
 1. Default `ConnectionBackend.HUB` (prefs vacías + `ConnectionUiState`).  
 2. First-run: si `!configured` → navegar a **Connection** (Hub), no Chat vacío como home conceptual.  
 3. Connection UI Hub-first: dirección + token + device name; copy “Tu agente vive en tu PC…”.  
-4. OpenClaw/Gateway solo sección **Avanzado** (o debugBuild).  
+4. Gateway legacy/Gateway solo sección **Avanzado** (o debugBuild).  
 5. Settings / strings: Hub, no “Gateway” en camino feliz.  
 6. `RoutingChatConnection`: no fijar `active = gateway` de forma que gane el first paint si prefs dicen Hub (o default Hub).  
 7. Tests unitarios prefs/nav/policy actualizados (GATEWAY→HUB first-run).
@@ -206,7 +206,7 @@ No inventar Active Workspace ni multi-device.
 
 ### P2 — post-MVP
 
-- Borrar/extraer módulo OpenClaw  
+- Borrar/extraer módulo Gateway legacy  
 - Voice Hub-native  
 - Installer/OTA  
 - User/ACL / multi-device  
@@ -235,7 +235,7 @@ No inventar Active Workspace ni multi-device.
 
 ### Hub-first
 - [ ] Abrir app first-run → Connection Hub (o flujo inequívoco Hub), no formulario Gateway  
-- [ ] OpenClaw no en camino feliz (solo avanzado/debug)  
+- [ ] Gateway legacy no en camino feliz (solo avanzado/debug)  
 - [ ] Tras auth Hub → Chat como home  
 
 ### Conversation
@@ -264,7 +264,7 @@ No inventar Active Workspace ni multi-device.
 | Nav | !configured → Connection; configured → Chat |
 | Connection UI | Hub fields visibles; Gateway oculto sin avanzado |
 | Routing | backend HUB → HubChatConnection |
-| OpenClaw isolation | GATEWAY path aún funciona si avanzado |
+| Gateway legacy isolation | GATEWAY path aún funciona si avanzado |
 | HITL | existentes `HubConfirm*` sin rotura |
 | History | Hub sync sin regresión |
 | Hub routing (servidor) | sin cambios esperados |
@@ -285,7 +285,7 @@ UI instrumentation: opcional P1.
 | E-37-01 | Sin UX Node unavailable | E | P1/41 |
 | E-37-02 | History hydrate silencioso | E | P1 |
 | F-37-01 | README agent placeholder; FS root débil | F | P0 docs |
-| G-37-01 | Voice/OpenClaw extract | G | P2 |
+| G-37-01 | Voice/Gateway legacy extract | G | P2 |
 
 **B:** ninguno. **C:** ninguno.
 
@@ -293,7 +293,7 @@ UI instrumentation: opcional P1.
 
 ## 15. Critical Risks
 
-1. Regresión usuarios OpenClaw existentes (mitigar: sección Avanzado + migración prefs `gateway` intacta).  
+1. Regresión usuarios Gateway legacy existentes (mitigar: sección Avanzado + migración prefs `gateway` intacta).  
 2. Nav first-run Connection vs Chat-empty (mitigar: tests + back stack claro).  
 3. Confundir implementación 37 con HITL 38 (scope creep).
 

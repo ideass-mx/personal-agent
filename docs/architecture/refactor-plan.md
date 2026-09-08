@@ -18,19 +18,19 @@
 |------|---------------------|---------------------------|
 | `hub/` (`@mxideass/hub`) | Proceso único: WS, auth, Agent Runtime, policy, MCP Client, SQLite, spawn del proceso local | **Gateway** (mismo proceso; fronteras internas) + **Agent Runtime** alojado |
 | `agent/` (`@mxideass/agent`) | Proceso MCP stdio: extensions, filesystem, process, Excel COM | Precursor de **Local Node** + **MCP Server** in-process (no es un Agent) |
-| `mobile/android/` | Cliente Compose; backend Hub **o** OpenClaw | UI móvil; no es Gateway |
+| `mobile/android/` | Cliente Compose; backend Hub **o** Gateway legacy | UI móvil; no es Gateway |
 | `web/` (`@mxideass/agent-console`) | Agent Console SPA (Vite/React); cliente USE+MANAGE | UI Web principal (PHASE 50); no Runtime/MCP |
 | `desktop/` | Electron tray / first-run / Control Center (PHASE 48–51) | Launcher mínimo; Agent Console = UI principal; sin Chat |
 | `packages/protocol/` | Contrato WS clientes ↔ Hub | Contrato clientes ↔ **Gateway** (rename de protocolo: más tarde) |
 | `db/migrations/` | Schema SQLite conversaciones/dispositivos | Precursor de persistencia de **Conversation**; **Workspace** no existe aún |
 | `scripts/build.mjs`, `package.mjs`, `smoke-package.mjs` | `dist/hub/hub.cjs` + `dist/agent/agent.cjs` | Empaquetado **Single Node** |
-| `docs/` | Arquitectura, roadmap, research, notas OpenClaw | Actualizar en fases; no reescribir producto |
+| `docs/` | Arquitectura, roadmap, research, notas Gateway legacy | Actualizar en fases; no reescribir producto |
 
 ### 1.2 Árboles residuales (no borrar en PHASE 1)
 
 En **este** workspace **no** aparecen `api/`, `guardian/` ni una app `android/` distinta de `mobile/android/`. Una auditoría anterior los indexó; **antes de borrar cualquier cosa** hay que repetir `git ls-files` / `git status` en la máquina de implementación.
 
-OpenClaw **no** es un servidor de este repo: el cliente vive en `mobile/android/.../gateway/` y las notas en `docs/gateway/VERSION-NOTES.md`. **No fusionar** con el Gateway de Agent Platform.
+Gateway legacy **no** es un servidor de este repo: el cliente vive en `mobile/android/.../gateway/` y las notas en notas históricas de protocolo (eliminadas). **No fusionar** con el Gateway de Agent Platform.
 
 ### 1.3 Entrypoints
 
@@ -40,7 +40,7 @@ OpenClaw **no** es un servidor de este repo: el cliente vive en `mobile/android/
 | `HUB_HANDSHAKE_ONLY=1` | Spawn Agent + MCP; sin LLM/HTTP |
 | `npm run agent` / `agent/src/index.ts` | MCP Server stdio aislado |
 | `npm run build` / `package` / `smoke:package` | Artefactos producción |
-| Android `AgentApp` + FGS | Cliente; `RoutingChatConnection` elige Hub vs OpenClaw |
+| Android `AgentApp` + FGS | Cliente; `RoutingChatConnection` elige Hub vs Gateway legacy |
 
 ### 1.4 Tests y CI
 
@@ -66,7 +66,7 @@ OpenClaw **no** es un servidor de este repo: el cliente vive en `mobile/android/
 **Matices / correcciones:**
 
 - El Hub ya llama `attachGateway` al WebSocket (`hub/src/http/server.ts`): el nombre **Gateway** está parcialmente en código, pero denota el socket, no el componente de plataforma.
-- En Android, `gateway` significa **OpenClaw**, no Agent Platform. Colisión de vocabulario **crítica**.
+- En Android, `gateway` significa **Gateway legacy**, no Agent Platform. Colisión de vocabulario **crítica**.
 - No hay archivo `ARCHITECTURE_AUDIT.md` que mantener en sync.
 - El proceso `agent/` **no** es un Agent: es Local Node + MCP Server.
 
@@ -76,7 +76,7 @@ OpenClaw **no** es un servidor de este repo: el cliente vive en `mobile/android/
 
 ```text
 Clientes
-  Android (Hub protocol ──o── OpenClaw externo)
+  Android (Hub protocol ──o── Gateway legacy externo)
   wscat / PROTOCOL.md
         │  WS v1  (packages/protocol)
         ▼
@@ -345,7 +345,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 - `docs/architecture.md`, `AGENTS.md`, este plan
 - `hub/tests/architecture/phase1-boundaries.test.ts`
 - Extraído `hub/src/memory/types.ts` para que el Agent Runtime no importe el módulo SQLite ni siquiera como `import type`
-- **No tocado:** protocolo, Android, OpenClaw, transporte MCP, carpeta `hub/`
+- **No tocado:** protocolo, Android, Gateway legacy, transporte MCP, carpeta `hub/`
 
 **PHASE 2.1 (hecho):**
 
@@ -413,7 +413,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 - `NodeConfig` / `loadNodeConfig` (alias `AgentConfig`)
 - Tests: `hub/tests/architecture/phase8-agent-node-configuration.test.ts`
 
-**Fases posteriores (lista de impacto, no trabajo):** `hub/src/index.ts`, `hub/src/http/*`, `hub/src/agents/*`, `hub/src/runtime/*`, `hub/src/tools/*`, `agent/src/lifecycle.ts`, `scripts/*`, cliente Hub Android (`network/`), no el paquete OpenClaw `gateway/` salvo docs que desambigüen.
+**Fases posteriores (lista de impacto, no trabajo):** `hub/src/index.ts`, `hub/src/http/*`, `hub/src/agents/*`, `hub/src/runtime/*`, `hub/src/tools/*`, `agent/src/lifecycle.ts`, `scripts/*`, cliente Hub Android (`network/`), no el paquete Gateway legacy `gateway/` salvo docs que desambigüen.
 
 ---
 
@@ -427,7 +427,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 - Excel COM lock, timeouts, `office.excel.write` confirm.
 - SQLite de historial.
 - Spawn dev vs `agent.cjs`.
-- OpenClaw como backend **opcional y externo**.
+- Gateway legacy como backend **opcional y externo**.
 - Calculator unificado en `math.*` vía MCP (PHASE 2.4).
 - `AgentTool`, `ToolRegistry`, `RemoteAgentTool` hasta MCP normalization.
 
@@ -437,7 +437,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 
 | Nivel | Riesgo |
 |-------|--------|
-| Crítico | **«Gateway»** = Hub WS + componente de plataforma + **paquete Android OpenClaw**. Un rename descuidado rompe el cliente o el protocolo. |
+| Crítico | **«Gateway»** = Hub WS + componente de plataforma + **paquete Android Gateway legacy**. Un rename descuidado rompe el cliente o el protocolo. |
 | Alto | Confundir proceso `agent/` (MCP Server) con Agent (actor que razona). |
 | Alto | Tratar MCP como A2A. |
 | Alto | God-process Hub: extraer Runtime sin romper `index.ts` / tests e2e. |
@@ -451,7 +451,7 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 ## 16. PHASE 1 — alcance (histórico; hecho)
 
 1. Documentar: **Hub actual = Gateway in-process**; **`hub/src/agent` = Agent Runtime**; **`agent/` = Local Node + MCP Server**.
-2. Glosario anti-colisión: **OpenClaw** (cliente Android `.../gateway/`) ≠ **Gateway** de Agent Platform.
+2. Glosario anti-colisión: **Gateway legacy** (cliente Android `.../gateway/`) ≠ **Gateway** de Agent Platform.
 3. Tests de arquitectura que fijen imports del Runtime.
 4. No rename `hub/` ni `agent/`. No tocar protocolo. No código de Workspace.
 
@@ -459,8 +459,8 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 
 ## 17. Preguntas abiertas
 
-1. ¿Cómo nombrar en Android el cliente OpenClaw para no chocar con Gateway de plataforma (paquete Kotlin, copy de UI, `ConnectionBackend`)?
-2. ¿El default de la app sigue siendo OpenClaw o el Hub/Gateway propio?
+1. ¿Cómo nombrar en Android el cliente Gateway legacy para no chocar con Gateway de plataforma (paquete Kotlin, copy de UI, `ConnectionBackend`)?
+2. ¿El default de la app sigue siendo Gateway legacy o el Hub/Gateway propio?
 3. ¿Cuándo cablear `confirm_request` en el path Hub Android?
 4. ¿Conversation y Workspace son independientes desde el día 1 de Workspace?
 5. ¿El rename de carpeta `hub/` → `gateway/` se aplaza hasta clientes actualizados?
@@ -487,6 +487,6 @@ Cada fase que toque código: typecheck, tests Hub+Agent, build, smoke si toca pa
 | **Workspace** | Contexto persistente de trabajo. Store PHASE 12; FK PHASE 13; resolver PHASE 14; HTTP Gateway PHASE 16 (incl. `POST /conversations` PHASE 21, `GET /workspaces/:id/conversations` PHASE 22); cliente `@mxideass/workspace-http` PHASE 18. Sin ConversationContext. Sin Active Workspace. |
 | **Conversation** | Interacción humana. SQLite Gateway: user/assistant; `conversationId` en WS. `GET /conversations/:id/messages` (PHASE 32). Cliente Android: rehidratación Hub + DataStore cache + `GET /conversations/:id/workspace`. Aislamiento = instalación `HUB_TOKEN` (PHASE 33); sin User/ownership. |
 | **Context** | Información dinámica de un turno. No persistente. |
-| **Single Node** | Gateway + Runtime + Local Node + MCP + SQLite. Producto: Hub-first (37), HITL global (38), onboarding (39). Tools → capacidades UX (40 audit; impl pendiente). OpenClaw legacy. Sin User/ACL / CapabilityRegistry. |
+| **Single Node** | Gateway + Runtime + Local Node + MCP + SQLite. Producto: Hub-first (37), HITL global (38), onboarding (39). Tools → capacidades UX (40 audit; impl pendiente). Gateway legacy legacy. Sin User/ACL / CapabilityRegistry. |
 | **AgentTool** | Representación interna actual de una Tool. Conservar. |
 | **ToolRegistry** | Registry interno actual. No es el registry de plataforma. Conservar. |

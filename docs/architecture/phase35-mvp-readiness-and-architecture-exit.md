@@ -164,9 +164,9 @@ User, ACL, AgentRegistry, NodeRegistry, multi-agent, multi-node, A2A, distribute
 | A2A | solo docs “no” | G |
 | PermissionManager / Capability | ausentes (tests lo afirman) | G |
 | Plugin marketplace | no | G |
-| Dual Hub+OpenClaw en Android | sí (legado producto) | **D-35-01** / E producto — no nueva plataforma |
+| Dual Hub+Gateway legacy en Android | sí (legado producto) | **D-35-01** / E producto — no nueva plataforma |
 
-No hay código productivo “futurista” que deba eliminarse para exit. OpenClaw path es deuda de producto, no plataforma nueva.
+No hay código productivo “futurista” que deba eliminarse para exit. Gateway legacy path es deuda de producto, no plataforma nueva.
 
 ---
 
@@ -312,7 +312,7 @@ Validado en cierre (ver §26–30 respuesta). Fallos ambientales Node 18 + bette
 | Workspace/Conversation leakage a Runtime | no | |
 | Auth bypass | no | `/health` público = E conocido |
 | State duplication DataStore vs SQLite | no | cache; History authority |
-| Dual OpenClaw+Hub | producto D | no smell plataforma |
+| Dual Gateway legacy+Hub | producto D | no smell plataforma |
 | Circular deps críticas | no evidenciadas | |
 
 ---

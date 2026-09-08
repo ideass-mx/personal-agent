@@ -55,7 +55,7 @@ SessionsViewModel.createHubConversation
 
 ### `sessionKey = conversationId`
 
-**No es equivalencia conceptual:** Session WS = `ws_${uuid}` (transporte efímero). En Android Hub, `sessionKey` **representa** el `conversationId` del Gateway por convención de producto (`SessionsViewModel`, `ChatViewModel`). OpenClaw usa `agent:main:…` — otro modelo (D-31-05).
+**No es equivalencia conceptual:** Session WS = `ws_${uuid}` (transporte efímero). En Android Hub, `sessionKey` **representa** el `conversationId` del Gateway por convención de producto (`SessionsViewModel`, `ChatViewModel`). Gateway legacy usa `agent:main:…` — otro modelo (D-31-05).
 
 | Escenario | Comportamiento |
 |-----------|----------------|
@@ -154,7 +154,7 @@ Rutas HTTP actuales: metadata Conversation + Workspace resolve; listado por Work
 
 **D-31-01:** DataStore actúa como **autoridad accidental** para UX Hub porque no hay alternativa.
 
-**ChatHistorySync** solo OpenClaw (`GatewayClient.loadHistory`) — no Hub.
+**ChatHistorySync** solo Gateway legacy (`GatewayClient.loadHistory`) — no Hub.
 
 ---
 
@@ -185,7 +185,7 @@ Rutas HTTP actuales: metadata Conversation + Workspace resolve; listado por Work
 | ¿B en Gateway? | **No** — persistencia correcta en A |
 | ¿Falso positivo? | **No** — trazado en código |
 
-**No corregido.** Candidato: `conversationId` en protocolo o enrutar Hub como OpenClaw/Voice.
+**No corregido.** Candidato: `conversationId` en protocolo o enrutar Hub como Gateway legacy/Voice.
 
 ---
 
@@ -303,7 +303,7 @@ Gateway: `ORDER BY created_at DESC, id DESC LIMIT N` → reverse → cronológic
 | `confirm_request` | RAM global `_pendingHubConfirm`; filtrado por conversationId en clear |
 | Queued messages | Por sessionKey al send |
 
-OpenClaw/Gateway path: eventos con `sessionKey` → routing correcto (tests `ChatStoreInboundTest`).
+Gateway legacy/Gateway path: eventos con `sessionKey` → routing correcto (tests `ChatStoreInboundTest`).
 
 ---
 
@@ -313,9 +313,9 @@ OpenClaw/Gateway path: eventos con `sessionKey` → routing correcto (tests `Cha
 
 ---
 
-## Hub/OpenClaw
+## Hub/Gateway legacy
 
-Misma `SessionsScreen`; keys `c_…` vs `agent:…`. Listado Workspace solo Hub. Historial remoto solo OpenClaw.
+Misma `SessionsScreen`; keys `c_…` vs `agent:…`. Listado Workspace solo Hub. Historial remoto solo Gateway legacy.
 
 **D-31-04:** confusión real para usuario que alterna backends.
 
@@ -371,7 +371,7 @@ SQLite: WAL, `foreign_keys=ON`, migraciones 001–003.
 | Área | Tests |
 |------|-------|
 | Creation HTTP | `workspace-http/client.test.ts` |
-| Cross-thread (OpenClaw keys) | `ChatStoreInboundTest.kt` |
+| Cross-thread (Gateway legacy keys) | `ChatStoreInboundTest.kt` |
 | Hub cross-talk | **Ausente** (gap) |
 | PHASE 30/31 invariants | arch tests |
 | Reconnect | implícito HubClient; sin e2e SQLite |
@@ -396,7 +396,7 @@ SQLite: WAL, `foreign_keys=ON`, migraciones 001–003.
 | D-31-01 | DataStore = autoridad UX accidental Hub | D | Medium | ChatStore, no History API | Sí (History API o sync) |
 | D-31-02 | Cross-talk A→chunk→B reproducible Hub chat | D | Medium | HubChatConnection, ChatStore | Sí (protocolo o routing) |
 | D-31-03 | Desync post-disconnect sin recuperación | D | Medium | reconnect + no GET messages | Sí (History API) |
-| D-31-04 | Hub/OpenClaw misma UI, distinto modelo | D | Low | SessionsViewModel | Doc/UX |
+| D-31-04 | Hub/Gateway legacy misma UI, distinto modelo | D | Low | SessionsViewModel | Doc/UX |
 | E-31-01 | WS sin id crea Conversation nueva | E | Low | `ensureConversation` | Opcional |
 | E-31-02 | IDs arbitrarios en ensureConversation | E | Low | `history.ts` | Opcional |
 | E-31-03 | Android no adopta conversationId de assistant_done | E | Low | PROTOCOL vs ChatViewModel | Sí si flujo casual |

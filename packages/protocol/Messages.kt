@@ -12,6 +12,17 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
+/** Fuente estructurada (PHASE 60.15.1). */
+@Serializable
+data class AgentSource(
+    val id: String,
+    val title: String,
+    val url: String,
+    val domain: String,
+    val snippet: String? = null,
+    val sourceType: String? = null,
+)
+
 // ── Cliente → Servidor ────────────────────────────────────────────────
 
 @Serializable
@@ -124,6 +135,7 @@ sealed interface ServerMessage {
     data class AssistantDone(
         val messageId: String,
         val conversationId: String,
+        val sources: List<AgentSource>? = null,
     ) : ServerMessage
 
     @Serializable

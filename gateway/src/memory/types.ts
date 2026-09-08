@@ -1,5 +1,7 @@
 /** Tipos de historial y puerto de memoria del Agent Runtime. Sin SQLite ni I/O. */
 
+import type { AgentSource } from "../../../packages/protocol/messages.ts";
+
 export type Role = "user" | "assistant";
 
 export interface HistoryEntry {
@@ -18,6 +20,7 @@ export interface TurnMemory {
     role: Role,
     content: string,
     deviceId?: string,
+    sources?: readonly AgentSource[],
   ): string;
   getHistory(conversationId: string): HistoryEntry[];
 }

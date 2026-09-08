@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   buildDiagnosticClipboardText,
   formatDiagnosticDetails,
@@ -10,6 +10,12 @@ import {
 } from "../../lib/composerKeyboard";
 import { IconSend } from "../../components/icons";
 import { useApp } from "../../state/AppContext";
+import {
+  isSafeHttpUrl,
+  SourcesChip,
+  SourcesPanel,
+  type AgentSource,
+} from "../../sources";
 
 /** Hilo a pantalla completa — conversación real vía Gateway WS/HTTP. */
 export function ConversationScreen() {
@@ -25,15 +31,33 @@ export function ConversationScreen() {
     health,
     activeConversationId,
     wsStatus,
+    sourcesPanelMessageId,
+    openSourcesPanel,
+    closeSourcesPanel,
+    sourcesPanelSources,
   } = useApp();
   const endRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [composerTall, setComposerTall] = useState(false);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const sync = () => setIsNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, toolBanner, busy]);
+
+  useEffect(() => {
+    setSelectedSourceId(null);
+  }, [sourcesPanelMessageId]);
 
   const isBlank = messages.length === 0;
   const canSend =
@@ -46,6 +70,10 @@ export function ConversationScreen() {
         m.streaming === true &&
         m.text.trim().length > 0,
     );
+
+  const panelOpen = Boolean(
+    sourcesPanelMessageId && sourcesPanelSources.length > 0,
+  );
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
@@ -61,6 +89,15 @@ export function ConversationScreen() {
     }, 40);
     return () => window.clearTimeout(id);
   }, [wsStatus, isBlank, activeConversationId]);
+
+  const openSource = useMemo(
+    () => (source: AgentSource) => {
+      if (!isSafeHttpUrl(source.url)) return;
+      setSelectedSourceId(source.id);
+      window.open(source.url, "_blank", "noopener,noreferrer");
+    },
+    [],
+  );
 
   const composer = (
     <form
@@ -114,9 +151,59 @@ export function ConversationScreen() {
     </form>
   );
 
+  const thread = (
+    <>
+      <div className="thread">
+        <div className="thread-inner">
+          {messages.map((m) =>
+            m.role === "user" ? (
+              <div key={m.id} className="msg user">
+                <p>{m.text}</p>
+              </div>
+            ) : m.role === "assistant" ? (
+              <div key={m.id} className="msg agent" data-agent="personal">
+                <p>
+                  {m.text}
+                  {m.streaming && m.text.trim().length > 0 ? (
+                    <span className="stream-caret" aria-hidden />
+                  ) : null}
+                </p>
+                {!m.streaming && m.sources && m.sources.length > 0 ? (
+                  <SourcesChip
+                    count={m.sources.length}
+                    active={sourcesPanelMessageId === m.id}
+                    onClick={() => openSourcesPanel(m.id)}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <div key={m.id} className="msg system muted">
+                <p>{m.text}</p>
+              </div>
+            ),
+          )}
+          {showThinkingPulse ? (
+            <div
+              className="msg agent thinking"
+              data-agent="personal"
+              aria-live="polite"
+              aria-label="Pensando"
+            >
+              <span className="thinking-pulse" aria-hidden />
+            </div>
+          ) : null}
+          <div ref={endRef} />
+        </div>
+      </div>
+      {composer}
+    </>
+  );
+
   return (
     <div
-      className={`conversation-screen ${isBlank ? "is-blank" : ""}`}
+      className={`conversation-screen ${isBlank ? "is-blank" : ""} ${
+        panelOpen ? "has-sources-panel" : ""
+      }`}
       data-agent="personal"
     >
       {toolBanner ? <div className="tool-banner">{toolBanner}</div> : null}
@@ -161,44 +248,28 @@ export function ConversationScreen() {
           </div>
         </div>
       ) : (
-        <>
-          <div className="thread">
-            <div className="thread-inner">
-              {messages.map((m) =>
-                m.role === "user" ? (
-                  <div key={m.id} className="msg user">
-                    <p>{m.text}</p>
-                  </div>
-                ) : m.role === "assistant" ? (
-                  <div key={m.id} className="msg agent" data-agent="personal">
-                    <p>
-                      {m.text}
-                      {m.streaming && m.text.trim().length > 0 ? (
-                        <span className="stream-caret" aria-hidden />
-                      ) : null}
-                    </p>
-                  </div>
-                ) : (
-                  <div key={m.id} className="msg system muted">
-                    <p>{m.text}</p>
-                  </div>
-                ),
-              )}
-              {showThinkingPulse ? (
-                <div
-                  className="msg agent thinking"
-                  data-agent="personal"
-                  aria-live="polite"
-                  aria-label="Pensando"
-                >
-                  <span className="thinking-pulse" aria-hidden />
-                </div>
+        <div className={`conversation-split ${panelOpen ? "is-open" : ""}`}>
+          <div className="conversation-main">{thread}</div>
+          {panelOpen ? (
+            <>
+              {isNarrow ? (
+                <button
+                  type="button"
+                  className="sources-backdrop"
+                  aria-label="Cerrar fuentes"
+                  onClick={closeSourcesPanel}
+                />
               ) : null}
-              <div ref={endRef} />
-            </div>
-          </div>
-          {composer}
-        </>
+              <SourcesPanel
+                sources={sourcesPanelSources}
+                onClose={closeSourcesPanel}
+                onOpenSource={openSource}
+                selectedSourceId={selectedSourceId}
+                mobile={isNarrow}
+              />
+            </>
+          ) : null}
+        </div>
       )}
     </div>
   );

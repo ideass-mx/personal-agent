@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { AgentSource } from "../../../packages/protocol/messages.ts";
 import { config } from "../config.ts";
 import { db } from "../db/database.ts";
 import type { WorkspaceSqlDb } from "../workspace/sqlite-workspace-store.ts";
@@ -13,6 +14,7 @@ export type StoredMessage = {
   content: string;
   deviceId: string | null;
   createdAt: string;
+  sources?: AgentSource[];
 };
 
 type MessageRow = {
@@ -22,6 +24,7 @@ type MessageRow = {
   content: string;
   device_id: string | null;
   created_at: string;
+  sources_json?: string | null;
 };
 
 export function touchDevice(deviceId: string, name?: string): void {
@@ -48,17 +51,45 @@ export function ensureConversation(conversationId?: string): string {
   return id;
 }
 
+function serializeSources(
+  sources: readonly AgentSource[] | undefined,
+): string | null {
+  if (!sources || sources.length === 0) return null;
+  return JSON.stringify(sources);
+}
+
+function parseSourcesJson(
+  raw: string | null | undefined,
+): AgentSource[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) return undefined;
+    return parsed as AgentSource[];
+  } catch {
+    return undefined;
+  }
+}
+
 export function addMessage(
   conversationId: string,
   role: Role,
   content: string,
   deviceId?: string,
+  sources?: readonly AgentSource[],
 ): string {
   const id = `m_${randomUUID()}`;
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, device_id)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, conversationId, role, content, deviceId ?? null);
+    `INSERT INTO messages (id, conversation_id, role, content, device_id, sources_json)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    conversationId,
+    role,
+    content,
+    deviceId ?? null,
+    serializeSources(sources),
+  );
   return id;
 }
 
@@ -82,18 +113,22 @@ export function listConversationMessages(
 ): StoredMessage[] {
   const rows = sql
     .prepare(
-      `SELECT id, conversation_id, role, content, device_id, created_at
+      `SELECT id, conversation_id, role, content, device_id, created_at, sources_json
        FROM messages
        WHERE conversation_id = ?
        ORDER BY created_at ASC, id ASC`,
     )
     .all(conversationId) as MessageRow[];
-  return rows.map((row) => ({
-    id: row.id,
-    conversationId: row.conversation_id,
-    role: row.role,
-    content: row.content,
-    deviceId: row.device_id,
-    createdAt: row.created_at,
-  }));
+  return rows.map((row) => {
+    const sources = parseSourcesJson(row.sources_json);
+    return {
+      id: row.id,
+      conversationId: row.conversation_id,
+      role: row.role,
+      content: row.content,
+      deviceId: row.device_id,
+      createdAt: row.created_at,
+      ...(sources ? { sources } : {}),
+    };
+  });
 }

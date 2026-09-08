@@ -19,11 +19,11 @@ PHASE 19 ya cubre el consumidor real: asociar/desasociar el hilo visible. No hay
 | `sessionKey` (Android) | Hilo de UI / catálogo (`PersistedSessionProvider`). En Hub = `conversationId` de `user_message`. | No. |
 | `conversationId` | Hilo SQLite. `ensureConversation` reutiliza el id enviado. | No. |
 | Workspace `w_*` | Trabajo persistente. Relación: `Conversation.workspace_id`. | No. |
-| OpenClaw `gateway_agent_id` | Backend externo. No es `agentId` de plataforma. | No. |
+| Gateway legacy `gateway_agent_id` | Backend externo. No es `agentId` de plataforma. | No. |
 
 **No hay User. No hay autenticación por persona.** Varios dispositivos pueden compartir el mismo token. Un dispositivo no distingue quién lo usa.
 
-OpenClaw: catálogo de sesiones y `agentId` OpenClaw; **sin** API Workspace equivalente.
+Gateway legacy: catálogo de sesiones y `agentId` Gateway legacy; **sin** API Workspace equivalente.
 
 ---
 
@@ -112,4 +112,4 @@ Active Workspace en Session, `user_message`, Runtime, ToolContext, MCP, Node.
 
 ## PHASE 21 (recomendación)
 
-No implementar Active Workspace. Siguiente trabajo útil, si hay producto: pulir Hub vs OpenClaw (selector solo Hub) o «crear conversación en Workspace» como **acción explícita** (PATCH al crear), no preferencia fantasma.
+No implementar Active Workspace. Siguiente trabajo útil, si hay producto: pulir Hub vs Gateway legacy (selector solo Hub) o «crear conversación en Workspace» como **acción explícita** (PATCH al crear), no preferencia fantasma.

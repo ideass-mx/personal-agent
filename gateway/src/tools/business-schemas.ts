@@ -90,6 +90,42 @@ export const BUSINESS_TOOL_INPUT_SCHEMAS: Readonly<
     },
     additionalProperties: false,
   },
+  "research.search": {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "Consulta de búsqueda en Internet.",
+      },
+      limit: {
+        type: "integer",
+        minimum: 1,
+        maximum: 20,
+        description: "Máximo de resultados (recomendado 5–10).",
+      },
+      language: {
+        type: "string",
+        description: "Idioma preferido (p. ej. es, en).",
+      },
+      region: {
+        type: "string",
+        description: "Región opcional (informativa).",
+      },
+    },
+    required: ["query"],
+    additionalProperties: false,
+  },
+  "research.fetch": {
+    type: "object",
+    properties: {
+      url: {
+        type: "string",
+        description: "URL http(s) pública a leer (de un resultado de búsqueda).",
+      },
+    },
+    required: ["url"],
+    additionalProperties: false,
+  },
 });
 
 /** Detecta el envelope MCP { requestId, context, input } anunciado por Node. */

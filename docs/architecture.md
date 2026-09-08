@@ -533,10 +533,10 @@ Recomendado: **`process.execute`**.
 | Nombre | Pros | Contras |
 |--------|------|---------|
 | `process.execute` | No implica shell; alineado a `AgentTool.execute`; argv | “process” puede confundirse con el proceso Agent |
-| `process.run` | Coloquial | Menos preciso; OpenClaw usa `process` para jobs en background |
+| `process.run` | Coloquial | Menos preciso; Gateway legacy usa `process` para jobs en background |
 | `shell.execute` | Familiar | Empuja a `sh -c` / `cmd /c`; lo que queremos evitar |
 
-No copiar el par OpenClaw `exec` (string de shell) + `process` (sesión
+No copiar el par Gateway legacy `exec` (string de shell) + `process` (sesión
 background). Aquí hay **una** tool sincrónica.
 
 ### Input (mínimo)
@@ -624,7 +624,7 @@ directorio), igual que `filesystem.list`. No es política global del Hub.
 
 Riesgos si se añadiera overlay después: `PATH` (hijack de binarios),
 `LD_PRELOAD` / `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `HOME`/`USER`
-engañosos, `SystemRoot` en Windows. OpenClaw **rechaza** `env.PATH` y
+engañosos, `SystemRoot` en Windows. Gateway legacy **rechaza** `env.PATH` y
 loaders en host; si un día hay overlay, bloquear esas claves. No es
 PermissionManager: es invariante de spawn.
 
@@ -702,7 +702,7 @@ comprobación de `requestId`. Sin auth MCP nueva.
 
 El runtime ya ejecuta tool_calls **en serie**. `process.execute` **bloquea
 el turno** hasta exit/timeout/error. v1 **sin** background (no copiar
-`yieldMs` / tool `process` de OpenClaw).
+`yieldMs` / tool `process` de Gateway legacy).
 
 ### Desconexión (fail-closed)
 
@@ -735,9 +735,9 @@ stdout/stderr vuelven al LLM **sin redactar**. Pueden llevar tokens,
 `printenv`, o texto adversario (CLI, logs). Igual que `filesystem.read`.
 No filtros v1. El operador ve `command`+`args` en `confirm_request`.
 
-### Comparación OpenClaw (docs `tools/exec`, sandbox, background)
+### Comparación Gateway legacy (docs `tools/exec`, sandbox, background)
 
-| | OpenClaw | Nosotros (diseño 8A) |
+| | Gateway legacy | Nosotros (diseño 8A) |
 |--|----------|----------------------|
 | Forma | `command` **string** (shell) | `command` + `args[]` (`spawn`) |
 | Shell | `sh -lc` / `pwsh` | `shell: false` |

@@ -148,6 +148,9 @@ export function attachGateway(
               type: "assistant_done",
               messageId: event.messageId,
               conversationId: event.conversationId,
+              ...(event.sources && event.sources.length > 0
+                ? { sources: event.sources }
+                : {}),
             });
             // Semantic title/summary: seeds deterministic meta synchronously
             // before any LLM await, then optional upgrade. Never blocks UX.

@@ -1,0 +1,238 @@
+{
+  "phase": "60.9.6-electron-serp-background",
+  "generatedAt": "2026-09-08T14:01:36.859Z",
+  "query": "PostgreSQL 17",
+  "productionUntouched": true,
+  "stealthUsed": false,
+  "webdriverModified": false,
+  "classification": {
+    "caseId": "A",
+    "label": "Cursor ✓ / Electron BG ✓ / Playwright ✗",
+    "answer": "Evidencia: el runtime Electron programático en background obtuvo SERP orgánico como Cursor; Playwright headless no. Candidato a explorar como base experimental de SERP — aún sin integración a producción."
+  },
+  "reference": {
+    "cursorManual": {
+      "queryEntered": "3/3",
+      "querySubmitted": "3/3",
+      "navigation": "3/3",
+      "challenge": "0/3",
+      "organic": "3/3",
+      "postgresqlOrg": "3/3",
+      "source": "phase-60.9.4 / 60.9.5"
+    },
+    "playwrightHeadless": {
+      "queryEntered": "3/3",
+      "querySubmitted": "3/3",
+      "navigation": "3/3",
+      "challenge": "3/3",
+      "organic": "0/3",
+      "postgresqlOrg": "0/3",
+      "source": "phase-60.9.4 / 60.9.5"
+    }
+  },
+  "rates": {
+    "queryEntered": 3,
+    "querySubmitted": 3,
+    "navigation": 3,
+    "challenge": 0,
+    "organic": 3,
+    "postgresqlOrg": 3,
+    "n": 3
+  },
+  "envSample": {
+    "webdriver": false,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+    "platform": "Linux x86_64",
+    "language": "en-US",
+    "languages": [
+      "en-US",
+      "en",
+      "en"
+    ],
+    "deviceMemory": 8,
+    "hardwareConcurrency": 32,
+    "innerWidth": 1920,
+    "innerHeight": 1080,
+    "devicePixelRatio": 2,
+    "screenWidth": 1704,
+    "screenHeight": 1065,
+    "webglVendor": "Google Inc. (Intel)",
+    "webglRenderer": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL 4.6)"
+  },
+  "runs": [
+    {
+      "method": "electron-background",
+      "run": 1,
+      "query": "PostgreSQL 17",
+      "queryEntered": true,
+      "querySubmitted": true,
+      "navigation": true,
+      "challenge": false,
+      "organicResults": 12,
+      "containsPostgresqlOrg": true,
+      "organicDomains": [
+        "postgresql.org",
+        "postgresql.org",
+        "versionlog.com",
+        "pgpedia.info",
+        "dev.to",
+        "linuxcapable.com",
+        "rapydo.io",
+        "pgedge.com",
+        "cloud.google.com",
+        "access.crunchydata.com",
+        "youtube.com",
+        "youtube.com"
+      ],
+      "finalUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+      "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+      "env": {
+        "webdriver": false,
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+        "platform": "Linux x86_64",
+        "language": "en-US",
+        "languages": [
+          "en-US",
+          "en",
+          "en"
+        ],
+        "deviceMemory": 8,
+        "hardwareConcurrency": 32,
+        "innerWidth": 1920,
+        "innerHeight": 1080,
+        "devicePixelRatio": 2,
+        "screenWidth": 1704,
+        "screenHeight": 1065,
+        "webglVendor": "Google Inc. (Intel)",
+        "webglRenderer": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL 4.6)"
+      },
+      "browserMeta": {
+        "channel": "electron-background",
+        "electronVersion": "33.4.11",
+        "chromeVersion": "130.0.6723.191",
+        "userDataDir": "/tmp/pa-electron-serp-jKiZgd",
+        "showWindow": false,
+        "os": "linux 7.0.0-31-generic",
+        "arch": "x64"
+      },
+      "elapsedMs": 6182,
+      "error": null
+    },
+    {
+      "method": "electron-background",
+      "run": 2,
+      "query": "PostgreSQL 17",
+      "queryEntered": true,
+      "querySubmitted": true,
+      "navigation": true,
+      "challenge": false,
+      "organicResults": 12,
+      "containsPostgresqlOrg": true,
+      "organicDomains": [
+        "postgresql.org",
+        "postgresql.org",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com",
+        "youtube.com"
+      ],
+      "finalUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+      "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+      "env": {
+        "webdriver": false,
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+        "platform": "Linux x86_64",
+        "language": "en-US",
+        "languages": [
+          "en-US",
+          "en",
+          "en"
+        ],
+        "deviceMemory": 8,
+        "hardwareConcurrency": 32,
+        "innerWidth": 1920,
+        "innerHeight": 1080,
+        "devicePixelRatio": 2,
+        "screenWidth": 1704,
+        "screenHeight": 1065,
+        "webglVendor": "Google Inc. (Intel)",
+        "webglRenderer": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL 4.6)"
+      },
+      "browserMeta": {
+        "channel": "electron-background",
+        "electronVersion": "33.4.11",
+        "chromeVersion": "130.0.6723.191",
+        "userDataDir": "/tmp/pa-electron-serp-HUyQHp",
+        "showWindow": false,
+        "os": "linux 7.0.0-31-generic",
+        "arch": "x64"
+      },
+      "elapsedMs": 4560,
+      "error": null
+    },
+    {
+      "method": "electron-background",
+      "run": 3,
+      "query": "PostgreSQL 17",
+      "queryEntered": true,
+      "querySubmitted": true,
+      "navigation": true,
+      "challenge": false,
+      "organicResults": 12,
+      "containsPostgresqlOrg": true,
+      "organicDomains": [
+        "postgresql.org",
+        "postgresql.org",
+        "versionlog.com",
+        "pgpedia.info",
+        "postgre-sql.github.io",
+        "dev.to",
+        "rapydo.io",
+        "linuxcapable.com",
+        "pg.edu.rich",
+        "pgedge.com",
+        "youtube.com",
+        "youtube.com"
+      ],
+      "finalUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+      "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+      "env": {
+        "webdriver": false,
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.191 Electron/33.4.11 Safari/537.36",
+        "platform": "Linux x86_64",
+        "language": "en-US",
+        "languages": [
+          "en-US",
+          "en",
+          "en"
+        ],
+        "deviceMemory": 8,
+        "hardwareConcurrency": 32,
+        "innerWidth": 1920,
+        "innerHeight": 1080,
+        "devicePixelRatio": 2,
+        "screenWidth": 1704,
+        "screenHeight": 1065,
+        "webglVendor": "Google Inc. (Intel)",
+        "webglRenderer": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL 4.6)"
+      },
+      "browserMeta": {
+        "channel": "electron-background",
+        "electronVersion": "33.4.11",
+        "chromeVersion": "130.0.6723.191",
+        "userDataDir": "/tmp/pa-electron-serp-fvlvDX",
+        "showWindow": false,
+        "os": "linux 7.0.0-31-generic",
+        "arch": "x64"
+      },
+      "elapsedMs": 4768,
+      "error": null
+    }
+  ]
+}

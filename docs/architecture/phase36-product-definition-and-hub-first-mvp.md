@@ -24,7 +24,7 @@ PHASE 35 cerró la arquitectura (**MVP-READY WITH DEBT**). Esta fase **no** audi
 | Protocol WS | Auth, chat, confirm, chunks | **REAL** |
 | `@mxideass/workspace-http` | CRUD Workspace + History | **REAL** |
 | Packaging / smoke | dist + handshake | **REAL** |
-| OpenClaw Gateway path | Cliente Android paralelo | **LEGACY** (producto) |
+| Gateway legacy Gateway path | Cliente Android paralelo | **LEGACY** (producto) |
 | Voice (Sherpa/on-device) | UI + pipeline | **PARCIAL** / **EXPERIMENTAL** para Hub MVP |
 | User / ACL / multi-node | — | **NO EXISTE** |
 
@@ -47,7 +47,7 @@ PHASE 35 cerró la arquitectura (**MVP-READY WITH DEBT**). Esta fase **no** audi
 | Node death fail-closed | **REAL** | tools fallan; health stale |
 | Gateway / Android restart | **REAL** | SQLite + History |
 | Diagnóstico operador | **PARCIAL** | stderr; sin runbook |
-| OpenClaw chat | **LEGACY** | default backend release |
+| Gateway legacy chat | **LEGACY** | default backend release |
 | Voice hands-free | **EXPERIMENTAL** | existe; no requisito Hub MVP |
 
 ### 1.3 Hipótesis de visión vs repositorio
@@ -60,7 +60,7 @@ PHASE 35 cerró la arquitectura (**MVP-READY WITH DEBT**). Esta fase **no** audi
 
 1. Hoy el “cerebro” es el **Gateway en la PC** (LLM + Runtime); el teléfono es **cliente**.  
 2. “Vive en la computadora” = instalación Single Node, no cloud multi-tenant.  
-3. OpenClaw en la app **no** es el producto MVP; es legado.  
+3. Gateway legacy en la app **no** es el producto MVP; es legado.  
 4. Voice existe pero **no** define el MVP Hub-first.
 
 ---
@@ -96,7 +96,7 @@ PHASE 35 cerró la arquitectura (**MVP-READY WITH DEBT**). Esta fase **no** audi
 | Workspace | REAL | **sí** básico | | Ya existe; no Active Workspace |
 | Android Hub-first | PARCIAL | **sí** | | D-35-01 |
 | Voice | EXPERIMENTAL | **no** | **sí** | No bloquea |
-| OpenClaw | LEGACY | **ocultar/degradar** | mantener interno | No producto MVP |
+| Gateway legacy | LEGACY | **ocultar/degradar** | mantener interno | No producto MVP |
 | Onboarding | PARCIAL | **sí** | | First-run |
 | Config / FS root | PARCIAL | **sí** docs+UX | | E-34-01 |
 | Health liveness | DEBT | **no** | **sí** | stderr suficiente inicial |
@@ -119,7 +119,7 @@ PHASE 35 cerró la arquitectura (**MVP-READY WITH DEBT**). Esta fase **no** audi
 
 ### Principios
 
-- **Hub es el producto.** OpenClaw no aparece en el camino feliz (ajustes avanzados / debug).  
+- **Hub es el producto.** Gateway legacy no aparece en el camino feliz (ajustes avanzados / debug).  
 - **Conversation** es el objeto central de la UI.  
 - El usuario no ve MCP, tool names internos ni “Gateway vs Hub” jerga de ingeniería.  
 - Copy: «el agente» / «Agente».
@@ -130,7 +130,7 @@ PHASE 35 cerró la arquitectura (**MVP-READY WITH DEBT**). Esta fase **no** audi
 |------|------------------|
 | **Pantalla inicial** | Si no configurado → Conexión Hub (dirección + token). Si configurado y conectado → **Chat** de la Conversation activa. |
 | **Navegación** | Chat (home) · Conversaciones · (Workspace) · Ajustes. Sin bifurcar “backend”. |
-| **Sesiones** | Dejar de mezclar semántica OpenClaw `sessionKey` en copy; UI habla de **Conversaciones** (`conversationId`). |
+| **Sesiones** | Dejar de mezclar semántica Gateway legacy `sessionKey` en copy; UI habla de **Conversaciones** (`conversationId`). |
 | **Estado Agent** | Conectado / reconectando / sin configurar / error auth. |
 | **Estado Node** | Producto: “Herramientas disponibles” vs “Herramientas no disponibles” (derivado de fallos de tool / señal futura; hoy health snapshot — messaging honesto). |
 | **Conexión** | Solo Hub address + token; guardado; FGS. |
@@ -138,7 +138,7 @@ PHASE 35 cerró la arquitectura (**MVP-READY WITH DEBT**). Esta fase **no** audi
 | **Herramientas** | Invisibles como catálogo; visibles como **acciones en curso** / resultados en el hilo. |
 | **Confirmaciones** | Globales (ver §6), no atadas a ChatScreen. |
 | **Errores** | Mensajes accionables (“No se pudo escribir el archivo”, “El agente en la PC no responde”). |
-| **Configuración** | Token, dirección, (avanzado) OpenClaw oculto. |
+| **Configuración** | Token, dirección, (avanzado) Gateway legacy oculto. |
 | **Diagnóstico** | Versión app + “última conexión” + hint a logs PC; no panel SRE. |
 
 ---
@@ -253,7 +253,7 @@ Ejemplos cubiertos hoy:
 
 ### MUST HAVE (MVP)
 
-1. Hub-first UX (default Hub; OpenClaw fuera del camino feliz) — **D-35-01**  
+1. Hub-first UX (default Hub; Gateway legacy fuera del camino feliz) — **D-35-01**  
 2. HITL global / fuera de Chat — **D-34-01**  
 3. Onboarding first-run (conexión Hub clara + copy)  
 4. `AGENT_FILESYSTEM_ROOT` requerido o very-hard warning — **E-34-01**  
@@ -285,7 +285,7 @@ La secuencia propuesta se **acepta** con un matiz: **onboarding docs/FS root** p
 | Phase | Objetivo | Resultado | Código probable | NO tocar | Aceptación | Depende | Riesgo |
 |-------|----------|-----------|-----------------|----------|------------|---------|--------|
 | **36** | Definición producto | Este doc | docs + arch test | productivo | Decision READY | 35 | bajo |
-| **37** | Hub-first UX | App default Hub; OpenClaw avanzado/oculto | Android connection/nav/copy | protocol, Runtime, MCP, DB | Usuario release conecta Hub sin long-press debug | 36 | medio (regresión OpenClaw) |
+| **37** | Hub-first UX | App default Hub; Gateway legacy avanzado/oculto | Android connection/nav/copy | protocol, Runtime, MCP, DB | Usuario release conecta Hub sin long-press debug | 36 | medio (regresión Gateway legacy) |
 | **38** | HITL product UX | Confirm global + notif/banner | Android ChatStore/Service/UI; opcional copy timeout | PermissionManager, protocol (salvo additive) | Confirm usable fuera de Chat | 37 | medio |
 | **39** | First-run / onboarding | Flujo setup + docs + FS root | Android Connection; README; `.env.example` hints | schema, Runtime core | First-run documentado y operable | 37 | bajo |
 | **40** | Agent capabilities / Tool UX | Acciones visibles como producto; demos ocultas | prompts/copy UI; no nuevas tools obligatorias | ToolRegistry arquitectura, MCP topo | Tareas FS/process claras | 38 | bajo |
@@ -310,7 +310,7 @@ Fail-closed Node · MCP stdio · deny-by-default policy · Confirmation Session-
 
 ### Deuda aceptada
 
-Health snapshot · shutdown WS · tool timeout no aborta Node · Excel Linux gap · OpenClaw código residual oculto · observabilidad stderr.
+Health snapshot · shutdown WS · tool timeout no aborta Node · Excel Linux gap · Gateway legacy código residual oculto · observabilidad stderr.
 
 ### Riesgos aceptados
 
@@ -353,7 +353,7 @@ Happy path E2E · persistencia Conversation · History API · stream routing · 
 
 ### Pendiente por producto
 
-Hub-first UI · HITL visibility · onboarding · copy errores · FS root productización · docs usuario · ocultar OpenClaw · estados vacíos/loading · (luego) voice/ops polish.
+Hub-first UI · HITL visibility · onboarding · copy errores · FS root productización · docs usuario · ocultar Gateway legacy · estados vacíos/loading · (luego) voice/ops polish.
 
 ---
 
@@ -370,7 +370,7 @@ Hub-first UI · HITL visibility · onboarding · copy errores · FS root product
 9. **Offline:** Sin Tools (fail-closed); UI explica reiniciar PC agent; chat no finge éxito de herramientas.  
 10. **Fuera:** User/ACL, multi-node, A2A, voice GA, installer, cloud, memory.  
 11. **Siguiente fase:** **PHASE 37 — Hub-first UX**.  
-12. **Implementar primero:** Default/path Android = Hub; selector OpenClaw solo avanzado/debug; copy Conexión Hub.
+12. **Implementar primero:** Default/path Android = Hub; selector Gateway legacy solo avanzado/debug; copy Conexión Hub.
 
 ---
 
@@ -381,7 +381,7 @@ Hub-first UI · HITL visibility · onboarding · copy errores · FS root product
 | P-36-01 | Visión validada vs repo | A | Adoptar |
 | P-36-02 | Hub-first es el primer trabajo | D→producto | PHASE 37 |
 | P-36-03 | HITL global es segundo | D | PHASE 38 |
-| P-36-04 | OpenClaw = legacy de producto | LEGACY | Ocultar en 37 |
+| P-36-04 | Gateway legacy = legacy de producto | LEGACY | Ocultar en 37 |
 | P-36-05 | Voice = post-MVP | FUTURE/EXP | No 37–39 |
 | P-36-06 | Excel no bloquea MVP Linux | PARCIAL | Post/opcional |
 | P-36-07 | No nuevas abstracciones | A | Hard rule |
@@ -429,7 +429,7 @@ Decision:
 READY FOR PHASE 37
 
 PHASE 37:
-Hub-first UX — Android trata Hub como experiencia principal (conexión, default, navegación, copy); OpenClaw fuera del camino feliz.
+Hub-first UX — Android trata Hub como experiencia principal (conexión, default, navegación, copy); Gateway legacy fuera del camino feliz.
 
 Productive Code Changed:
 **NONE**

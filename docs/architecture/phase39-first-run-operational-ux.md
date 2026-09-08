@@ -15,7 +15,7 @@ MVP técnico OK (37–38), pero el usuario nuevo enfrentaba fricción: copy Gate
 |------|----------|
 | `AGENT_FILESYSTEM_ROOT` obligatorio en código | **No** — requeriría fail-fast Node/Hub (cambio de contrato). **Sí** docs + UX + `.env.example` “recomendado”. |
 | Node live status | **No** nueva API. Header: WS conectado → «Agente listo»; desconectado → «Sin conexión». Node mid-run solo vía error humanizado. |
-| OpenClaw | Sigue Avanzado/Legacy (37). |
+| Gateway legacy | Sigue Avanzado/Legacy (37). |
 | Architecture | **NONE** |
 
 ## Cambios

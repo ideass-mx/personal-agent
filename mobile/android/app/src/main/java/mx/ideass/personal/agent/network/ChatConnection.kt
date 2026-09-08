@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Contrato de conexión de chat que consumen UI y AgentService.
- * Implementaciones: hub legacy y Gateway OpenClaw.
+ * Implementaciones: hub legacy y Gateway legacy.
  */
 interface ChatConnection {
     val connectionState: StateFlow<ConnectionState>
@@ -15,7 +15,7 @@ interface ChatConnection {
     fun reconnectNow()
     fun sendUserMessage(text: String, conversationId: String?)
 
-    /** Hub: confirm_response. OpenClaw: no-op. */
+    /** Hub: confirm_response. Gateway legacy: no-op. */
     fun sendConfirmResponse(confirmationId: String, approved: Boolean)
 
     fun isConnected(): Boolean

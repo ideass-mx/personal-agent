@@ -147,7 +147,14 @@ export async function fetchMessages(
   base: string,
   token: string,
   conversationId: string,
-): Promise<Array<{ id: string; role: string; content: string }>> {
+): Promise<
+  Array<{
+    id: string;
+    role: string;
+    content: string;
+    sources?: unknown;
+  }>
+> {
   const res = await fetch(`${base}/conversations/${conversationId}/messages`, {
     headers: authHeaders(token),
   });
@@ -156,6 +163,7 @@ export async function fetchMessages(
     id: string;
     role: string;
     content: string;
+    sources?: unknown;
   }>;
 }
 

@@ -1,0 +1,285 @@
+{
+  "phase": "60.12",
+  "generatedAt": "2026-09-08T15:33:10.193Z",
+  "totalElapsedMs": 90411,
+  "decision": "CASE_A",
+  "strategyRecommended": "B_research_session_warm_idle",
+  "hypothesis": "Strategy B — research-triggered warm + idle timeout (default 5 min)",
+  "metrics": {
+    "cold": {
+      "n": 5,
+      "avgMs": 3711,
+      "p50Ms": 2803,
+      "p95Ms": 5961,
+      "rows": [
+        {
+          "label": "cold-1",
+          "ok": true,
+          "latencyMs": 5961,
+          "resultCount": 10,
+          "top3": 2.5,
+          "official": 2,
+          "rssMb": 99.9
+        },
+        {
+          "label": "cold-2",
+          "ok": true,
+          "latencyMs": 2728,
+          "resultCount": 10,
+          "top3": 1,
+          "official": 2,
+          "rssMb": 85.3
+        },
+        {
+          "label": "cold-3",
+          "ok": true,
+          "latencyMs": 4414,
+          "resultCount": 10,
+          "top3": 1.5,
+          "official": 0,
+          "rssMb": 86.8
+        },
+        {
+          "label": "cold-4",
+          "ok": true,
+          "latencyMs": 2650,
+          "resultCount": 10,
+          "top3": 3,
+          "official": 9,
+          "rssMb": 86.8
+        },
+        {
+          "label": "cold-5",
+          "ok": true,
+          "latencyMs": 2803,
+          "resultCount": 10,
+          "top3": 1.5,
+          "official": 0,
+          "rssMb": 86.8
+        }
+      ]
+    },
+    "warm": {
+      "n": 10,
+      "firstMs": 3505,
+      "avgRestMs": 1476,
+      "avgAllMs": 1679,
+      "p50Ms": 1387,
+      "p95Ms": 3505,
+      "warmGainVsColdAvgMs": 2235,
+      "rows": [
+        {
+          "label": "warm-1",
+          "ok": true,
+          "latencyMs": 3505,
+          "resultCount": 10,
+          "top3": 2.5,
+          "official": 3,
+          "rssMb": 86.7
+        },
+        {
+          "label": "warm-2",
+          "ok": true,
+          "latencyMs": 1581,
+          "resultCount": 10,
+          "top3": 1,
+          "official": 2,
+          "rssMb": 86.7
+        },
+        {
+          "label": "warm-3",
+          "ok": true,
+          "latencyMs": 1387,
+          "resultCount": 10,
+          "top3": 1.5,
+          "official": 0,
+          "rssMb": 86.7
+        },
+        {
+          "label": "warm-4",
+          "ok": true,
+          "latencyMs": 997,
+          "resultCount": 10,
+          "top3": 3,
+          "official": 9,
+          "rssMb": 86.8
+        },
+        {
+          "label": "warm-5",
+          "ok": true,
+          "latencyMs": 1248,
+          "resultCount": 10,
+          "top3": 1.5,
+          "official": 0,
+          "rssMb": 86.8
+        },
+        {
+          "label": "warm-6",
+          "ok": true,
+          "latencyMs": 1308,
+          "resultCount": 10,
+          "top3": 3,
+          "official": 10,
+          "rssMb": 86.8
+        },
+        {
+          "label": "warm-7",
+          "ok": true,
+          "latencyMs": 1319,
+          "resultCount": 10,
+          "top3": 1.5,
+          "official": 1,
+          "rssMb": 86.8
+        },
+        {
+          "label": "warm-8",
+          "ok": true,
+          "latencyMs": 2411,
+          "resultCount": 10,
+          "top3": 1.5,
+          "official": 0,
+          "rssMb": 86.8
+        },
+        {
+          "label": "warm-9",
+          "ok": true,
+          "latencyMs": 1623,
+          "resultCount": 10,
+          "top3": 2.5,
+          "official": 6,
+          "rssMb": 86.8
+        },
+        {
+          "label": "warm-10",
+          "ok": true,
+          "latencyMs": 1414,
+          "resultCount": 10,
+          "top3": 1.5,
+          "official": 0,
+          "rssMb": 86.8
+        }
+      ]
+    },
+    "researchSession": {
+      "searches": 5,
+      "totalMs": 9377,
+      "avgSearchMs": 1465,
+      "avgFetchMs": 410,
+      "rows": [
+        {
+          "query": "Banxico",
+          "searchOk": true,
+          "fetchOk": true,
+          "searchMs": 1417,
+          "fetchMs": 80,
+          "urlHost": "www.banxico.org.mx"
+        },
+        {
+          "query": "machine learning research",
+          "searchOk": true,
+          "fetchOk": true,
+          "searchMs": 1328,
+          "fetchMs": 113,
+          "urlHost": "jmlr.org"
+        },
+        {
+          "query": "Kubernetes networking",
+          "searchOk": true,
+          "fetchOk": true,
+          "searchMs": 1619,
+          "fetchMs": 1185,
+          "urlHost": "www.tigera.io"
+        },
+        {
+          "query": "UAQ",
+          "searchOk": true,
+          "fetchOk": true,
+          "searchMs": 1650,
+          "fetchMs": 411,
+          "urlHost": "www.uaq.mx"
+        },
+        {
+          "query": "open source licenses explained",
+          "searchOk": true,
+          "fetchOk": true,
+          "searchMs": 1311,
+          "fetchMs": 262,
+          "urlHost": "en.wikipedia.org"
+        }
+      ]
+    },
+    "stress": {
+      "n": 20,
+      "ok": 20,
+      "avgMs": 1586,
+      "p50Ms": 1374,
+      "p95Ms": 3359
+    },
+    "idle": [
+      {
+        "label": "proxy_1min",
+        "configuredIdleMs": 80,
+        "productionEquivalent": 60000,
+        "wasWarmAfterSearch": true,
+        "warmAfterIdle": false,
+        "elapsedMs": 5200
+      },
+      {
+        "label": "proxy_5min",
+        "configuredIdleMs": 120,
+        "productionEquivalent": 300000,
+        "wasWarmAfterSearch": true,
+        "warmAfterIdle": false,
+        "elapsedMs": 3970
+      },
+      {
+        "label": "proxy_15min",
+        "configuredIdleMs": 180,
+        "productionEquivalent": 900000,
+        "wasWarmAfterSearch": true,
+        "warmAfterIdle": false,
+        "elapsedMs": 3817
+      }
+    ],
+    "memory": [
+      {
+        "at": "initial",
+        "rssMb": 97.3
+      },
+      {
+        "at": "after_warm_1",
+        "rssMb": 86.7
+      },
+      {
+        "at": "after_warm_5",
+        "rssMb": 86.8
+      },
+      {
+        "at": "after_warm_10",
+        "rssMb": 86.8
+      },
+      {
+        "at": "after_stress_20",
+        "rssMb": 99.7
+      },
+      {
+        "at": "after_close",
+        "rssMb": 99.7
+      }
+    ],
+    "processes": {
+      "before": 0,
+      "during": 1,
+      "after": 0,
+      "cleanupMs": 72
+    },
+    "quality": {
+      "coldSuccessRate": 1,
+      "warmSuccessRate": 1,
+      "warmAvgTop3": 1.95,
+      "warmAvgResults": 10,
+      "stressSuccessRate": 1,
+      "targetTop3": 2.3
+    }
+  }
+}

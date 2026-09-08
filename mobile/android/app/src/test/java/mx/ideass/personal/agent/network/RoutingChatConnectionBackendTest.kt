@@ -34,7 +34,7 @@ class RoutingChatConnectionBackendTest {
     }
 
     @Test
-    fun openClawBackend_selectsGateway() {
+    fun legacyGatewayBackend_selectsGateway() {
         val hub = StubChatConnection()
         val gateway = StubChatConnection()
         assertSame(gateway, chatConnectionForBackend(ConnectionBackend.GATEWAY, hub, gateway))

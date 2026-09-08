@@ -127,6 +127,8 @@ function timeoutMsForDiscoveredTool(
   if (name === "office.excel.read" || name === "office.excel.write") {
     return () => mcpTimeoutMsForOfficeExcel();
   }
+  if (name === "research.search") return () => 45_000;
+  if (name === "research.fetch") return () => 30_000;
   return undefined;
 }
 

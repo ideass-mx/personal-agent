@@ -156,10 +156,29 @@ Pedazos de la respuesta en streaming, en orden. Concatenar hasta `assistant_done
 
 ### `assistant_done`
 ```json
-{ "type": "assistant_done", "messageId": "m_xyz", "conversationId": "c_abc123" }
+{
+  "type": "assistant_done",
+  "messageId": "m_xyz",
+  "conversationId": "c_abc123",
+  "sources": [
+    {
+      "id": "source-1",
+      "title": "PostgreSQL 17",
+      "url": "https://www.postgresql.org/docs/17/release-17.html",
+      "domain": "www.postgresql.org",
+      "snippet": "Release notes…",
+      "sourceType": "web"
+    }
+  ]
+}
 ```
 Fin de la respuesta. Entrega el `conversationId` definitivo (nuevo o el mismo).
 
+- `sources` (opcional, PHASE 60.15.1): fuentes estructuradas usadas en el turno
+  (Web Intelligence). Omitir o `[]` si no hubo investigación. Cada `id` es estable
+  dentro de la respuesta (`source-1`, `source-2`, …). `sourceType` ∈
+  `web` | `knowledge` | `academic` | `official` cuando se conoce.
+  Sin secretos, cookies ni providers internos.
 ### `confirm_request`
 ```json
 {

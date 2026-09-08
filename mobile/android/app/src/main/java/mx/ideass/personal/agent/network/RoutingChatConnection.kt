@@ -21,8 +21,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Enruta al Hub o al Gateway OpenClaw (legacy) según preferencias.
- * Default / first paint: Hub (PHASE 37). OpenClaw solo si backend = GATEWAY.
+ * Enruta al Hub o al Gateway Gateway legacy según preferencias.
+ * Default / first paint: Hub (PHASE 37). Gateway legacy solo si backend = GATEWAY.
  * La UI solo conoce [ChatConnection].
  */
 fun chatConnectionForBackend(
@@ -80,7 +80,7 @@ class RoutingChatConnection @Inject constructor(
     override fun isConnected(): Boolean = active.isConnected()
 
     /**
-     * Probe de auth Hub (dirección + token). No usa el adaptador OpenClaw:
+     * Probe de auth Hub (dirección + token). No usa el adaptador Gateway legacy:
      * el flujo de Connection Hub lo invoca antes de persistir prefs.
      */
     override suspend fun probe(

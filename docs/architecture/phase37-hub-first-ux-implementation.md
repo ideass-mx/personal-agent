@@ -7,7 +7,7 @@
 
 ## Objetivo
 
-Hacer que Android sea **Hub-first** en el camino feliz: default Hub, first-run → Connection Hub, OpenClaw solo Avanzado/Legacy.
+Hacer que Android sea **Hub-first** en el camino feliz: default Hub, first-run → Connection Hub, Gateway legacy solo Avanzado/Legacy.
 
 ## Estado anterior
 
@@ -18,9 +18,9 @@ Hacer que Android sea **Hub-first** en el camino feliz: default Hub, first-run �
 
 ## Cambios realizados
 
-1. `ConnectionPrefsPolicy.backendFromStored` → default **HUB** (creds legacy OpenClaw siguen resolviendo a GATEWAY).  
+1. `ConnectionPrefsPolicy.backendFromStored` → default **HUB** (creds legacy Gateway legacy siguen resolviendo a GATEWAY).  
 2. First-run: `firstRunDestination(!configured → Connection, configured → Chat)` en `AppNav`.  
-3. Connection UI Hub-first + sección **Avanzado / Legacy** → OpenClaw.  
+3. Connection UI Hub-first + sección **Avanzado / Legacy** → Gateway legacy.  
 4. `RoutingChatConnection`: active inicial **hub**; `probe` siempre Hub; `chatConnectionForBackend`.  
 5. Settings subtitle: agente en PC.  
 6. Tests prefs / first-run / routing.
@@ -31,13 +31,13 @@ Ver informe de cierre (created/modified).
 
 ## Decisiones
 
-- OpenClaw **no** eliminado.  
+- Gateway legacy **no** eliminado.  
 - HITL global **no** tocado (PHASE 38).  
 - Sin cambios Runtime/MCP/DB/protocol.
 
 ## Riesgos
 
-- Usuarios OpenClaw con prefs `gateway` siguen en OpenClaw (OK).  
+- Usuarios Gateway legacy con prefs `gateway` siguen en Gateway legacy (OK).  
 - First-run Connection sin botón atrás: salida = system back.
 
 ## Deuda restante

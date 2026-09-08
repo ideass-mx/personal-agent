@@ -8,7 +8,7 @@
 Única UI de producto: `mobile/android/` (Compose). No hay web.  
 El npm `@mxideass/workspace-http` no corre en JVM: Android usa `WorkspaceHttpClient` (OkHttp) con **el mismo contrato HTTP** PHASE 16. No es un segundo diseño ni un cliente WS.
 
-Selector: header de `ChatScreen` (bajo el nombre de sesión). Solo si el backend es **Hub** (`ConnectionBackend.HUB`). OpenClaw no tiene esta API.
+Selector: header de `ChatScreen` (bajo el nombre de sesión). Solo si el backend es **Hub** (`ConnectionBackend.HUB`). Gateway legacy no tiene esta API.
 
 ## conversationId
 
@@ -33,4 +33,4 @@ Voz: sin Workspace en frames.
 
 ## FUTURE
 
-OpenClaw no lista Workspaces. Active Workspace (PHASE 17). UI de creación más rica.
+Gateway legacy no lista Workspaces. Active Workspace (PHASE 17). UI de creación más rica.

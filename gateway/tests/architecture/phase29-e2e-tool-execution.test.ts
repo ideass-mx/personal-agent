@@ -27,6 +27,8 @@ const EXPECTED_TOOLS = [
   "customer.demo",
   "office.excel.read",
   "office.excel.write",
+  "research.search",
+  "research.fetch",
 ] as const;
 
 const CONFIRM = new Set([
@@ -49,8 +51,8 @@ describe("PHASE 29 E2E tool execution (audit)", () => {
     assert.doesNotMatch(doc, /Control Plane/i);
   });
 
-  it("policy: 16 tools; mutating confirm; deny-by-default", () => {
-    assert.equal(Object.keys(DEFAULT_TOOL_POLICY).length, 16);
+  it("policy: 18 tools; mutating confirm; deny-by-default", () => {
+    assert.equal(Object.keys(DEFAULT_TOOL_POLICY).length, 18);
     for (const name of EXPECTED_TOOLS) {
       assert.ok(name in DEFAULT_TOOL_POLICY, name);
       const mode = DEFAULT_TOOL_POLICY[name];

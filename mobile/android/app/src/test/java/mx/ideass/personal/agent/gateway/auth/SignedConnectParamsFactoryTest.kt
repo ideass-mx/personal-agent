@@ -52,7 +52,7 @@ class SignedConnectParamsFactoryTest {
         assertEquals(identity.deviceId, device.id)
         assertEquals("nonce-xyz", device.nonce)
         assertEquals(1_700_000_000_000L, device.signedAt)
-        assertEquals(GatewayClientId.OPENCLAW_ANDROID, params.client.id)
+        assertEquals(GatewayClientId.ANDROID, params.client.id)
         assertEquals(GatewayClientMode.UI, params.client.mode)
         assertEquals(GatewayRoles.OPERATOR, params.role)
         assertEquals("gateway-tok", params.auth?.token)

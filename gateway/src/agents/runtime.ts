@@ -31,6 +31,9 @@ import {
   type ConfirmationRequest,
 } from "./confirmation.ts";
 import {
+  createTurnSourceCollector,
+} from "./sources.ts";
+import {
   resolveAgentInstructions,
   type SkillRegistry,
 } from "./skills/index.ts";
@@ -40,7 +43,12 @@ export type { TurnMemory } from "../memory/types.ts";
 /** Eventos internos del runtime (no son el protocolo WS público). */
 export type AgentEvent =
   | { type: "text_delta"; text: string }
-  | { type: "done"; messageId: string; conversationId: string }
+  | {
+      type: "done";
+      messageId: string;
+      conversationId: string;
+      sources?: import("../../../packages/protocol/messages.ts").AgentSource[];
+    }
   | { type: "error"; message: string; diagnostic?: DiagnosticClientPayload }
   | {
       type: "confirm_request";
@@ -202,6 +210,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           };
         });
         let full = "";
+        const sources = createTurnSourceCollector();
 
         for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
           const toolCalls: Array<{
@@ -235,10 +244,13 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           }
 
           if (toolCalls.length === 0) {
+            const finalized = sources.finalize();
             const messageId = memory.addMessage(
               conversationId,
               "assistant",
               full,
+              undefined,
+              finalized.length > 0 ? finalized : undefined,
             );
             diagnostics?.record({
               diagnosticId,
@@ -251,9 +263,15 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                 outputLength: full.length,
                 historyCount: history.length,
                 toolCount: 0,
+                sourcesCount: finalized.length,
               },
             });
-            yield { type: "done", messageId, conversationId };
+            yield {
+              type: "done",
+              messageId,
+              conversationId,
+              ...(finalized.length > 0 ? { sources: finalized } : {}),
+            };
             return;
           }
 
@@ -378,6 +396,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
             }
 
             const mapped = toolResultForLlm(result);
+            sources.ingestTool(call.name, result);
             resultBlocks.push({
               type: "tool_result",
               toolCallId: call.id,

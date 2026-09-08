@@ -30,7 +30,7 @@ const SECTIONS = [
   "13. Shutdown Audit",
   "14. SQLite Audit",
   "15. Android Audit",
-  "16. Hub/OpenClaw Audit",
+  "16. Hub/legacy Gateway Audit",
   "17. Packaging Audit",
   "18. Configuration Audit",
   "19. Naming Audit",

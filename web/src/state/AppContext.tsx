@@ -37,6 +37,10 @@ import type {
 } from "../types";
 import { HITL_TIMEOUT_MS } from "../lib/toolActivity";
 import { humanizeError } from "../lib/sanitize";
+import {
+  normalizeAgentSources,
+  type AgentSource,
+} from "../sources";
 
 type WsStatus = "disconnected" | "connecting" | "authenticated" | "error";
 
@@ -77,6 +81,11 @@ type AppState = {
   /** Display name from users.name (never local-user / technical ids). */
   userDisplayName: string | null;
   setUserDisplayName: (name: string | null) => void;
+  /** PHASE 60.15.1 — panel de fuentes del mensaje seleccionado. */
+  sourcesPanelMessageId: string | null;
+  openSourcesPanel: (messageId: string) => void;
+  closeSourcesPanel: () => void;
+  sourcesPanelSources: AgentSource[];
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -114,6 +123,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [bannerDiagnostic, setBannerDiagnostic] =
     useState<DiagnosticInfo | null>(null);
   const [userDisplayName, setUserDisplayName] = useState<string | null>(null);
+  const [sourcesPanelMessageId, setSourcesPanelMessageId] = useState<
+    string | null
+  >(null);
   const socketRef = useRef<HubSocket | null>(null);
   const streamIdRef = useRef<string | null>(null);
   const activeRef = useRef<string | null>(null);
@@ -212,12 +224,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       }
     } else if (msg.type === "assistant_done") {
+      const sources = normalizeAgentSources(msg.sources);
+      const prevStreamId = streamIdRef.current;
       streamIdRef.current = null;
       setBusy(false);
       setToolBanner(null);
       setActive(msg.conversationId);
       setMessages((prev) =>
-        prev.map((m) => (m.streaming ? { ...m, streaming: false } : m)),
+        prev.map((m) => {
+          if (m.streaming || (prevStreamId && m.id === prevStreamId)) {
+            return {
+              ...m,
+              id: msg.messageId,
+              streaming: false,
+              ...(sources ? { sources } : { sources: undefined }),
+            };
+          }
+          return m;
+        }),
       );
       // Seed is sync on gateway; poll until title lands (and catch LLM upgrade).
       void refreshConversationsUntilTitled(msg.conversationId);
@@ -345,17 +369,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setActive(id);
       setNav("conversation");
       setBannerError(null);
+      setSourcesPanelMessageId(null);
       try {
         const base = resolveHttpBase(session);
         const rows = await fetchMessages(base, session.token, id);
         setMessages(
           rows
             .filter((r) => r.role === "user" || r.role === "assistant")
-            .map((r) => ({
-              id: r.id,
-              role: r.role as "user" | "assistant",
-              text: r.content,
-            })),
+            .map((r) => {
+              const sources = normalizeAgentSources(r.sources);
+              return {
+                id: r.id,
+                role: r.role as "user" | "assistant",
+                text: r.content,
+                ...(sources ? { sources } : {}),
+              };
+            }),
         );
       } catch {
         setMessages([]);
@@ -363,6 +392,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [session],
   );
+
+  const openSourcesPanel = useCallback((messageId: string) => {
+    setSourcesPanelMessageId(messageId);
+  }, []);
+
+  const closeSourcesPanel = useCallback(() => {
+    setSourcesPanelMessageId(null);
+  }, []);
+
+  const sourcesPanelSources = useMemo(() => {
+    if (!sourcesPanelMessageId) return [];
+    const msg = messages.find((m) => m.id === sourcesPanelMessageId);
+    return msg?.sources ?? [];
+  }, [messages, sourcesPanelMessageId]);
 
   const newConversation = useCallback(async () => {
     if (!session) return;
@@ -374,10 +417,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       );
       setActive(created.id);
       setMessages([]);
+      setSourcesPanelMessageId(null);
       setNav("conversation");
     } catch {
       setActive(null);
       setMessages([]);
+      setSourcesPanelMessageId(null);
       setNav("conversation");
     }
   }, [session]);
@@ -417,6 +462,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setConversations((prev) => prev.filter((c) => c.id !== id));
       if (wasActive) {
         setMessages([]);
+        setSourcesPanelMessageId(null);
         setActive(null);
         setNav("conversation");
       }
@@ -515,6 +561,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       bannerDiagnostic,
       userDisplayName,
       setUserDisplayName,
+      sourcesPanelMessageId,
+      openSourcesPanel,
+      closeSourcesPanel,
+      sourcesPanelSources,
     }),
     [
       session,
@@ -547,6 +597,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       bannerError,
       bannerDiagnostic,
       userDisplayName,
+      sourcesPanelMessageId,
+      openSourcesPanel,
+      closeSourcesPanel,
+      sourcesPanelSources,
     ],
   );
 

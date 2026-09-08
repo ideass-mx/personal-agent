@@ -52,7 +52,7 @@ X inexistente → 404; no se crea Workspace. Cambio posterior: `PATCH /conversat
 
 **Implícito:** `user_message` sin `conversationId` → `ensureConversation()` → `INSERT INTO conversations (id)` → NULL. No infiere Session, deviceId, último Workspace ni Android.
 
-Android Hub: casual vs «Nueva conversación en X» (PHASE 21). OpenClaw: `sessions.create`, sin Workspace.
+Android Hub: casual vs «Nueva conversación en X» (PHASE 21). Gateway legacy: `sessions.create`, sin Workspace.
 
 ---
 
@@ -84,7 +84,7 @@ Sesiones
               → header conversationWorkspace vía GET HTTP
 ```
 
-El Chat **no** lee Workspace de Session, WS, Active Workspace ni «último usado». `ChatViewModel` usa `sessionKey` como `conversationId` y `GET …/workspace`. `ON_RESUME` recarga. Errores HTTP (401/404/red) salen en el coordinador. Vacío: copy de listado sin hilos. Sin conexión: Hub create exige config HTTP; OpenClaw exige WS.
+El Chat **no** lee Workspace de Session, WS, Active Workspace ni «último usado». `ChatViewModel` usa `sessionKey` como `conversationId` y `GET …/workspace`. `ON_RESUME` recarga. Errores HTTP (401/404/red) salen en el coordinador. Vacío: copy de listado sin hilos. Sin conexión: Hub create exige config HTTP; Gateway legacy exige WS.
 
 Crear Workspace: diálogo del header (PHASE 19). Asociar/cambiar/quitar: selector del hilo actual.
 
@@ -138,14 +138,14 @@ Gateway, TypeScript y Android Hub: `null` = casual. Android no interpreta NULL c
 
 ---
 
-## 10. OpenClaw
+## 10. Gateway legacy
 
 ```text
 Hub      → API Workspace
-OpenClaw → no
+Gateway legacy → no
 ```
 
-Colisión **solo de UI**: `SessionsScreen` mezcla `sessionKey` OpenClaw (`agent:…`) y `conversationId` Hub (`c_…`). No son el mismo concepto. No se unifican. No se lleva Workspace al protocolo OpenClaw.
+Colisión **solo de UI**: `SessionsScreen` mezcla `sessionKey` Gateway legacy (`agent:…`) y `conversationId` Hub (`c_…`). No son el mismo concepto. No se unifican. No se lleva Workspace al protocolo Gateway legacy.
 
 ---
 
@@ -158,7 +158,7 @@ Workspace vive en Gateway (SQLite + HTTP). **No** en Agent Runtime, `AgentTurnIn
 ## Deuda real (no implementar ahora)
 
 - No hay `GET /conversations` global: las casuales no se listan por HTTP entre dispositivos; el catálogo Android es local.
-- Misma pantalla de Sesiones para OpenClaw y Hub.
+- Misma pantalla de Sesiones para Gateway legacy y Hub.
 - Voz: hilo nuevo = casual.
 - Sin paginación del listado por Workspace.
 
@@ -168,4 +168,4 @@ Workspace vive en Gateway (SQLite + HTTP). **No** en Agent Runtime, `AgentTurnIn
 
 El modelo actual **es suficiente**. No Active Workspace, no Runtime Workspace-aware, no A2A.
 
-Siguiente trabajo **solo** si hay consumidor: por ejemplo listar casuales por HTTP (multi-dispositivo) o separar UX Hub/OpenClaw. Si no hay producto nuevo: detenerse.
+Siguiente trabajo **solo** si hay consumidor: por ejemplo listar casuales por HTTP (multi-dispositivo) o separar UX Hub/Gateway legacy. Si no hay producto nuevo: detenerse.

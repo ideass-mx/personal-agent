@@ -36,7 +36,7 @@ describe("PHASE 36 product definition & Hub-first MVP", () => {
     assert.match(doc, /Dentro del MVP/);
     assert.match(doc, /Fuera del MVP/);
     assert.match(doc, /User \/ ACL/);
-    assert.match(doc, /OpenClaw/);
+    assert.match(doc, /legacy Gateway/);
     assert.match(doc, /LEGACY/);
   });
 

@@ -11,6 +11,7 @@ import { systemExtension } from "./system.ts";
 import { diagnosticsExtension } from "./diagnostics.ts";
 import { customerDemoExtension } from "./customer-demo.ts";
 import { createOfficeExtension } from "./office.ts";
+import { createResearchExtension } from "./research.ts";
 import type { AgentExtension } from "./types.ts";
 
 export function createDefaultExtensions(
@@ -25,5 +26,6 @@ export function createDefaultExtensions(
     diagnosticsExtension,
     customerDemoExtension,
     createOfficeExtension(config),
+    createResearchExtension(),
   ];
 }

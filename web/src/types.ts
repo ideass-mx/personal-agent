@@ -66,6 +66,8 @@ export type ChatMessage = {
   streaming?: boolean;
   /** Capacidad que respondió (UI); el protocolo aún no la envía. */
   capability?: CapabilityId;
+  /** Fuentes Web Intelligence de esta respuesta (PHASE 60.15.1). */
+  sources?: import("./sources/types").AgentSource[];
 };
 
 export type ConfirmPending = {

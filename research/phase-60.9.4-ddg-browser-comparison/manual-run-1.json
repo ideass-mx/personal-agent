@@ -1,0 +1,26 @@
+{
+  "method": "manual",
+  "run": 1,
+  "query": "PostgreSQL 17",
+  "queryEntered": true,
+  "querySubmitted": true,
+  "finalUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+  "navigationCount": 1,
+  "redirectChain": [],
+  "httpStatus": null,
+  "challengeDetected": false,
+  "organicResultsDetected": true,
+  "resultCount": 10,
+  "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+  "resourceCount": null,
+  "cookieNames": [],
+  "elapsedMs": 4500,
+  "organicDomains": [
+    "postgresql.org",
+    "versionlog.com",
+    "pgpedia.info",
+    "dev.to",
+    "aws.amazon.com"
+  ],
+  "notes": "IDE Chromium; homepage→fill→Enter; postgresql.org Release+Downloads visible; no challenge"
+}

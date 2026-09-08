@@ -1,0 +1,284 @@
+{
+  "phase": "60.9.5-browser-divergence",
+  "generatedAt": "2026-09-08T13:38:48.929Z",
+  "query": "PostgreSQL 17",
+  "productionUntouched": true,
+  "causeIdentified": false,
+  "causeStatement": "CAUSE NOT IDENTIFIED",
+  "firstDivergencePoint": "T0",
+  "classification": {
+    "caseId": "A",
+    "label": "Existe diferencia observable fuerte antes del submit",
+    "causeIdentified": false
+  },
+  "evidenceMatrix": [
+    {
+      "observable": "userAgent",
+      "manual": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Cursor/3.5.38 Chrome/142.0.7444.265 Electron/39.8.1 Safari/537.36",
+      "playwright": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+      "difference": "DIFFERENT",
+      "potentialRelevance": "possible",
+      "evidenceStrength": "medium"
+    },
+    {
+      "observable": "platform",
+      "manual": "Linux x86_64",
+      "playwright": "Linux x86_64",
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "language",
+      "manual": "en-US",
+      "playwright": "en-US",
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "languages",
+      "manual": [
+        "en-US",
+        "en",
+        "en"
+      ],
+      "playwright": [
+        "en-US"
+      ],
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "timezone",
+      "manual": "America/Mexico_City",
+      "playwright": "America/Mexico_City",
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "webdriver",
+      "manual": false,
+      "playwright": true,
+      "difference": "DIFFERENT",
+      "potentialRelevance": "possible",
+      "evidenceStrength": "medium"
+    },
+    {
+      "observable": "hardwareConcurrency",
+      "manual": 32,
+      "playwright": 32,
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "deviceMemory",
+      "manual": 8,
+      "playwright": 32,
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "maxTouchPoints",
+      "manual": 0,
+      "playwright": 0,
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "cookieEnabled",
+      "manual": true,
+      "playwright": true,
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "pluginsLength",
+      "manual": 5,
+      "playwright": 5,
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "mimeTypesLength",
+      "manual": 2,
+      "playwright": 2,
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "innerWidth",
+      "manual": 1920,
+      "playwright": 1280,
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "innerHeight",
+      "manual": 1080,
+      "playwright": 800,
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "devicePixelRatio",
+      "manual": 2,
+      "playwright": 1,
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "screenWidth",
+      "manual": 1704,
+      "playwright": 1280,
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "screenHeight",
+      "manual": 1065,
+      "playwright": 800,
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "webglVendor",
+      "manual": "Google Inc. (Intel)",
+      "playwright": "Google Inc. (Google)",
+      "difference": "DIFFERENT",
+      "potentialRelevance": "possible",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "webglRenderer",
+      "manual": "ANGLE (Intel, Mesa Intel(R) Graphics (RPL-S), OpenGL 4.6)",
+      "playwright": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "difference": "DIFFERENT",
+      "potentialRelevance": "possible",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "cookieNames",
+      "manual": [],
+      "playwright": [],
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "localStorageKeys",
+      "manual": [
+        "origin_conversions"
+      ],
+      "playwright": [],
+      "difference": "DIFFERENT",
+      "potentialRelevance": "possible",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "sessionStorageKeys",
+      "manual": [],
+      "playwright": [],
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "serviceWorkerScopes",
+      "manual": [],
+      "playwright": [],
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "cacheStorageKeys",
+      "manual": [],
+      "playwright": [],
+      "difference": "SAME",
+      "potentialRelevance": "none",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "permissions",
+      "manual": {},
+      "playwright": {
+        "notifications": "prompt",
+        "geolocation": "prompt",
+        "camera": "prompt",
+        "microphone": "prompt"
+      },
+      "difference": "DIFFERENT",
+      "potentialRelevance": "low",
+      "evidenceStrength": "weak"
+    },
+    {
+      "observable": "challengeDetected",
+      "manual": [
+        false,
+        false,
+        false
+      ],
+      "playwright": [
+        true,
+        true,
+        true
+      ],
+      "difference": "DIFFERENT",
+      "potentialRelevance": "outcome",
+      "evidenceStrength": "strong"
+    },
+    {
+      "observable": "organicResultsDetected",
+      "manual": [
+        true,
+        true,
+        true
+      ],
+      "playwright": [
+        false,
+        false,
+        false
+      ],
+      "difference": "DIFFERENT",
+      "potentialRelevance": "outcome",
+      "evidenceStrength": "strong"
+    }
+  ],
+  "possibleRelevantDiffs": [
+    "userAgent",
+    "webdriver",
+    "webglVendor",
+    "webglRenderer",
+    "localStorageKeys"
+  ],
+  "rates": {
+    "manualChallenge": 0,
+    "playwrightChallenge": 3,
+    "manualOrganic": 3,
+    "playwrightOrganic": 0,
+    "manualN": 3,
+    "playwrightN": 3
+  },
+  "answers": {
+    "q1_queryEnteredBoth": true,
+    "q2_submitBoth": true,
+    "q3_navigationBoth": true,
+    "q4_firstDifference": "T0",
+    "q8_causeIdentified": false,
+    "q10_continueResearch": true
+  }
+}

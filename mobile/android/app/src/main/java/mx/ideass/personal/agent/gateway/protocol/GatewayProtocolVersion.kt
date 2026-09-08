@@ -1,7 +1,7 @@
 package mx.ideass.personal.agent.gateway.protocol
 
 /**
- * Versión del protocolo Gateway alineada con OpenClaw `v2026.7.1`
+ * Versión del protocolo Gateway alineada con Gateway legacy `v2026.7.1`
  * (`packages/gateway-protocol/src/version.ts`).
  */
 object GatewayProtocolVersion {

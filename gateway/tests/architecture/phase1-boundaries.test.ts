@@ -179,7 +179,7 @@ describe("PHASE 1 fronteras Agent Platform", () => {
       assert.doesNotMatch(text, /ControlPlane/);
     }
     assert.match(terminology, /Gateway/);
-    assert.match(terminology, /OpenClaw Gateway/);
+    assert.match(terminology, /legacy Gateway Gateway/);
     assert.match(terminology, /`attachGateway`/);
     assert.match(terminology, /Deuda de nomenclatura/);
     assert.match(terminology, /Local Node/);

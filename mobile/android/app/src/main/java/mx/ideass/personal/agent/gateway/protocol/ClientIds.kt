@@ -4,8 +4,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Ids de cliente cerrados (`GATEWAY_CLIENT_IDS` en el tag).
- * Para Android operator/node usar [OPENCLAW_ANDROID].
+ * Ids de cliente cerrados del protocolo gateway legacy (`GATEWAY_CLIENT_IDS`).
+ * Para Android operator/node usar [ANDROID].
  */
 @Serializable
 enum class GatewayClientId {
@@ -33,8 +33,9 @@ enum class GatewayClientId {
     @SerialName("openclaw-ios")
     IOS_APP,
 
+    /** Valor de wire del enum cerrado del protocolo legacy; no renombrar en el cable. */
     @SerialName("openclaw-android")
-    OPENCLAW_ANDROID,
+    ANDROID,
 
     @SerialName("node-host")
     NODE_HOST,

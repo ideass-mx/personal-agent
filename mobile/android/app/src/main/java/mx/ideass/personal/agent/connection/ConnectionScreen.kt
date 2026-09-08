@@ -130,7 +130,7 @@ fun ConnectionScreen(
         ) {
             Text(
                 text = if (ui.backend == ConnectionBackend.GATEWAY) {
-                    "OpenClaw (legacy)"
+                    "Gateway legacy"
                 } else {
                     "Conecta tu agente"
                 },
@@ -139,7 +139,7 @@ fun ConnectionScreen(
             )
             Text(
                 text = if (ui.backend == ConnectionBackend.GATEWAY) {
-                    "Conexión avanzada a un Gateway OpenClaw. El camino recomendado es el agente en tu PC (Hub)."
+                    "Conexión avanzada a un Gateway legacy. El camino recomendado es el agente en tu PC (Hub)."
                 } else {
                     "Tu agente vive en tu PC. Usa tu teléfono para hablar con él y autorizar acciones."
                 },
@@ -212,16 +212,16 @@ fun ConnectionScreen(
                 }
                 if (ui.showAdvanced) {
                     Text(
-                        text = "OpenClaw es un backend legacy. Solo úsalo si ya tienes un Gateway OpenClaw.",
+                        text = "Este es un backend legacy. Solo úsalo si ya tienes un Gateway legacy.",
                         color = AppColors.textMuted,
                         fontSize = 13.sp,
                     )
                     OutlinedButton(
-                        onClick = viewModel::useOpenClawLegacy,
+                        onClick = viewModel::useLegacyGateway,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.warn),
                     ) {
-                        Text("Usar OpenClaw (legacy)")
+                        Text("Usar Gateway legacy")
                     }
                 }
             } else {

@@ -94,6 +94,18 @@ export type DiagnosticPayload = {
   model?: string;
 };
 
+export type AgentSourceType = "web" | "knowledge" | "academic" | "official";
+
+/** Fuente estructurada de una respuesta (PHASE 60.15.1). Sin providers internos. */
+export type AgentSource = {
+  id: string;
+  title: string;
+  url: string;
+  domain: string;
+  snippet?: string;
+  sourceType?: AgentSourceType;
+};
+
 export type ServerMessage =
   | { type: "auth_ok"; deviceId: string }
   | {
@@ -115,7 +127,13 @@ export type ServerMessage =
       deviceCredential?: string;
     }
   | { type: "assistant_chunk"; text: string; conversationId?: string }
-  | { type: "assistant_done"; messageId: string; conversationId: string }
+  | {
+      type: "assistant_done";
+      messageId: string;
+      conversationId: string;
+      /** PHASE 60.15.1 — fuentes Web Intelligence del turno (opcional). */
+      sources?: AgentSource[];
+    }
   | {
       type: "confirm_request";
       confirmationId: string;

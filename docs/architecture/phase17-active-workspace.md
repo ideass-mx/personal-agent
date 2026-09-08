@@ -23,7 +23,7 @@ La frase «agrega esto al proyecto en el que estamos trabajando» es un problema
 | `ToolContext` | `conversationId` + `deviceId`. Envelope MCP. |
 | Agent Runtime | Sin Workspace. |
 | SQLite | Sin `users`, sin `active_workspace_id`, sin tabla de preferencias. |
-| Android `AppPreferences` | `device_id`, `conversation_id`, config Hub/OpenClaw, voz neuronal. **No** Workspace. `gateway_agent_id` es OpenClaw, no `agentId` de plataforma. |
+| Android `AppPreferences` | `device_id`, `conversation_id`, config Hub/Gateway legacy, voz neuronal. **No** Workspace. `gateway_agent_id` es Gateway legacy, no `agentId` de plataforma. |
 
 No existe mecanismo de preferencias usuario/dispositivo en el Gateway.
 

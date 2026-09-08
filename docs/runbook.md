@@ -56,7 +56,7 @@ npm run smoke:package
 5. Crea o selecciona una Conversation.
 6. Prueba una acción de lectura; luego una escritura y **aprueba** en el diálogo HITL.
 
-OpenClaw solo en **Avanzado / Legacy** (no es el camino feliz).
+Gateway legacy solo en **Avanzado / Legacy** (no es el camino feliz).
 
 ## Verificación rápida
 

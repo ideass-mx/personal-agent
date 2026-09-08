@@ -49,7 +49,7 @@ describe("PHASE 37 Hub-first UX P0 implementation", () => {
     assert.match(helper, /configured\) FirstRunDestination\.Chat/);
   });
 
-  it("Routing defaults to Hub and maps GATEWAY to OpenClaw adapter", () => {
+  it("Routing defaults to Hub and maps GATEWAY to legacy Gateway adapter", () => {
     const routing = read(
       "mobile/android/app/src/main/java/mx/ideass/personal/agent/network/RoutingChatConnection.kt",
     );

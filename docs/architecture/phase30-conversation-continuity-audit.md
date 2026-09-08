@@ -51,7 +51,7 @@ No hay **B** ni **C** bloqueantes de integridad Gateway. Deuda de producto: hist
 |----|---------------|-------------|
 | A-30-01 | **A** | `ensureConversation` reutiliza fila existente; no duplica. |
 | A-30-02 | **A** | `ensureConversation` INSERT solo `(id)` — **no** sobrescribe `workspace_id` ni `title` de POST previo. |
-| E-30-01 | **E** | `ensureConversation` acepta **cualquier** string como id (p. ej. keys OpenClaw). Sin validación de prefijo `c_`. |
+| E-30-01 | **E** | `ensureConversation` acepta **cualquier** string como id (p. ej. keys Gateway legacy). Sin validación de prefijo `c_`. |
 | E-30-02 | **E** | Cada `user_message` sin id crea Conversation nueva (casual implícita). No hay “hilo default” en Gateway. |
 | A-30-03 | **A** | Primer mensaje no se pierde: `addMessage(user)` ocurre **antes** del LLM (`runtime.ts`). |
 | A-30-04 | **A** | Android Hub crea vía `POST /conversations` + `registerAndActivate(created.id)` (`SessionsViewModel`). |
@@ -287,7 +287,7 @@ Mitigación futura: `conversationId` en chunk/error (protocolo) o bloquear cambi
 | Pregunta | Respuesta |
 |----------|-----------|
 | ¿Recuperar mensajes Hub? | Solo vía SQLite en servidor; no expuesto HTTP |
-| ¿Android depende de memoria? | DataStore local para Hub; `ChatHistorySync` = OpenClaw `chat.history` |
+| ¿Android depende de memoria? | DataStore local para Hub; `ChatHistorySync` = Gateway legacy `chat.history` |
 | ¿Tras restart? | Local sobrevive; no rehidrata desde Gateway |
 | ¿Abrir Conversation listada? | Sí identidad + Workspace HTTP; historial = local vacío si nunca chateó en device |
 | ¿Continuar hilo histórico cross-device? | **No** en Hub |
@@ -296,9 +296,9 @@ Clasificación: **G** (requerimiento futuro) + **D** (UX gap).
 
 ---
 
-## 15. Hub/OpenClaw audit
+## 15. Hub/Gateway legacy audit
 
-| Concepto | Hub | OpenClaw |
+| Concepto | Hub | Gateway legacy |
 |----------|-----|----------|
 | sessionKey | `c_…` (= conversationId) | `agent:main:…` |
 | Historial remoto | ninguno | `chat.history` |
@@ -390,7 +390,7 @@ Sin `workspaceId` en WS. Sin endpoints nuevos introducidos.
 | D-30-02 | D | Confirm pending perdida en disconnect |
 | D-30-03 | D | Historial Hub no rehidratable tras wipe cliente |
 | D-30-04 | D | Sin History API (reconfirm D-27-03) |
-| D-30-05 | D | Hub vs OpenClaw keys en misma UI |
+| D-30-05 | D | Hub vs Gateway legacy keys en misma UI |
 | E-30-01 | E | ensureConversation acepta ids arbitrarios |
 | E-30-02 | E | WS sin id siempre crea Conversation nueva |
 | E-30-03 | E | Tool transcript no en SQLite |

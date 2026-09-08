@@ -34,7 +34,8 @@ CREATE TABLE messages (
     role             TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
     content          TEXT NOT NULL,
     device_id        TEXT,
-    created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    sources_json     TEXT
 );
 
 CREATE INDEX idx_messages_conversation

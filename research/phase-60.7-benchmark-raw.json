@@ -1,0 +1,49 @@
+{
+  "phase": "60.7",
+  "generatedAt": "2026-09-08T06:16:57.073Z",
+  "productionUntouched": true,
+  "metrics": {
+    "originalParser_v1": {
+      "resultCount": 3,
+      "meanConfidence": 1,
+      "latencyMs": 1,
+      "fieldCompleteness": {
+        "title": 1,
+        "url": 1,
+        "snippet": 1
+      }
+    },
+    "originalParser_v2": {
+      "resultCount": 0,
+      "meanConfidence": 0,
+      "latencyMs": 0
+    },
+    "adaptiveEngine_v2": {
+      "resultCount": 3,
+      "strategy": "semantic",
+      "meanConfidence": 1,
+      "latencyMs": 1
+    },
+    "drift": {
+      "kind": "STRUCTURAL_CHANGE",
+      "health": "HEALTHY",
+      "candidateCount": 3,
+      "latencyMs": 1
+    },
+    "repairedSelector_v2": {
+      "resultCount": 2,
+      "meanConfidence": 1,
+      "latencyMs": 0
+    },
+    "validation": {
+      "ok": true,
+      "passed": 2,
+      "failed": 0,
+      "latencyMs": 0
+    },
+    "captcha": {
+      "health": "BLOCKED",
+      "hits": 0
+    }
+  }
+}

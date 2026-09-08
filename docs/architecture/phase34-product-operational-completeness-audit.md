@@ -187,7 +187,7 @@ SIGINT/SIGTERM → http.close → agent.shutdown → exit(0)
 | HITL confirm UI | **A** si ChatScreen activo; **D-34-01** si no |
 | Workspace selector | **A** |
 | History rehydrate Hub | **A** (PHASE 32) |
-| Hub vs OpenClaw same UI | **D-34-02** |
+| Hub vs Gateway legacy same UI | **D-34-02** |
 | Battery/Doze guidance | parcial (ConnectionScreen) | **D/E** |
 | allowBackup | **E** (PHASE 33) |
 
@@ -250,7 +250,7 @@ SQLite WAL + migrations + Conversation/Messages/Workspaces. DB bajo `hub/data` (
 ## 21. UX completeness (producto)
 
 Usable: chat, voice (roadmap), workspace, confirm, tools.  
-Incompleto: onboarding “token=casa”, health live, HITL fuera de Chat, OpenClaw confusion, first-run sin filesystem root, sin update UX.
+Incompleto: onboarding “token=casa”, health live, HITL fuera de Chat, Gateway legacy confusion, first-run sin filesystem root, sin update UX.
 
 ---
 
@@ -286,7 +286,7 @@ Incompleto: onboarding “token=casa”, health live, HITL fuera de Chat, OpenCl
 | Node muere en runtime | tools fallan; health stale | E |
 | Shutdown con WS abierto | posible hang | E |
 | First-run sin FS root | tools más permisivas | E/D |
-| Usuario solo OpenClaw UI | no History Hub | D |
+| Usuario solo Gateway legacy UI | no History Hub | D |
 | Confirm con Chat cerrado | timeout | D |
 
 ---
@@ -301,7 +301,7 @@ Incompleto: onboarding “token=casa”, health live, HITL fuera de Chat, OpenCl
 | A-34-04 | Packaging + smoke | A | — | package.mjs, smoke-package | No |
 | A-34-05 | Conversation recovery end-to-end | A | — | PHASE 32 | No |
 | D-34-01 | HITL solo con ChatScreen | D | Med | ChatScreen, PHASE 29 | Sí (opcional) |
-| D-34-02 | Hub/OpenClaw misma UI | D | Low | SessionsScreen | Docs/UX |
+| D-34-02 | Hub/Gateway legacy misma UI | D | Low | SessionsScreen | Docs/UX |
 | E-34-01 | AGENT_FILESYSTEM_ROOT opcional | E | Med | agent config, filesystem | Opcional |
 | E-34-02 | Sin CI | E | Low | no .github/workflows | Futuro |
 | E-34-03 | Sin panel diagnóstico | E | Low | — | Futuro |

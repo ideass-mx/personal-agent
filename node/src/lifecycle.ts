@@ -9,6 +9,7 @@ import { createAgentMcpServer } from "./mcp/server.ts";
 import { createDefaultToolRegistry } from "./tools/defaults.ts";
 import { abortActiveProcessExecutes } from "./tools/process-execute.ts";
 import { shutdownExcelCom } from "./tools/excel-com-lock.ts";
+import { shutdownElectronSerp } from "./research/providers/electron-serp.ts";
 import type { ToolRegistry } from "./tools/registry.ts";
 
 export interface LocalAgent {
@@ -52,6 +53,7 @@ export async function startLocalAgent(
     closed = true;
     await abortActiveProcessExecutes();
     await shutdownExcelCom();
+    await shutdownElectronSerp();
     try {
       await mcp.close();
     } catch {

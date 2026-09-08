@@ -47,7 +47,7 @@ class SignedConnectParamsFactory(
         val signatureToken = sharedToken ?: bootstrap
 
         val signedAtMs = clockMs()
-        val clientIdWire = wireEnum(GatewayClientId.OPENCLAW_ANDROID)
+        val clientIdWire = wireEnum(GatewayClientId.ANDROID)
         val modeWire = wireEnum(mode)
         val payload = DeviceAuthPayload.buildV3(
             deviceId = identity.deviceId,
@@ -67,7 +67,7 @@ class SignedConnectParamsFactory(
             minProtocol = GatewayProtocolVersion.CURRENT,
             maxProtocol = GatewayProtocolVersion.CURRENT,
             client = GatewayClientInfo(
-                id = GatewayClientId.OPENCLAW_ANDROID,
+                id = GatewayClientId.ANDROID,
                 displayName = config.clientDisplayName,
                 version = config.clientVersion,
                 platform = config.platform,

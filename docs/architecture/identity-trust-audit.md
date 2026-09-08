@@ -99,7 +99,7 @@ Código clave:
 | Diagnostics redaction | **Sí** | Evita tokens en store |
 | Tailscale en Desktop para QR endpoint | **Sí como reachability** | No es firewall del bind Gateway |
 | Android DataStore device credential | **Parcial** | Funciona; plaintext en prefs Hub path |
-| OpenClaw Keystore path (Android) | **No mezclar** | Camino avanzado distinto del QR Hub |
+| Gateway legacy Keystore path (Android) | **No mezclar** | Camino avanzado distinto del QR Hub |
 
 ---
 

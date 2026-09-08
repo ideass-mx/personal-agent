@@ -20,7 +20,7 @@ class ConnectRoundTripTest {
             minProtocol = GatewayProtocolVersion.CURRENT,
             maxProtocol = GatewayProtocolVersion.CURRENT,
             client = GatewayClientInfo(
-                id = GatewayClientId.OPENCLAW_ANDROID,
+                id = GatewayClientId.ANDROID,
                 version = "0.1.0",
                 platform = "android",
                 mode = GatewayClientMode.UI,
@@ -43,14 +43,14 @@ class ConnectRoundTripTest {
 
         assertEquals(4, decoded.minProtocol)
         assertEquals(4, decoded.maxProtocol)
-        assertEquals(GatewayClientId.OPENCLAW_ANDROID, decoded.client.id)
+        assertEquals(GatewayClientId.ANDROID, decoded.client.id)
         assertEquals(GatewayClientMode.UI, decoded.client.mode)
         assertEquals(GatewayRoles.OPERATOR, decoded.role)
         assertEquals(listOf("operator.read", "operator.write"), decoded.scopes)
         assertEquals("boot-secret", decoded.auth?.bootstrapToken)
         assertEquals("nonce-1", decoded.device?.nonce)
 
-        assertTrue(encoded.contains("\"id\":\"openclaw-android\""))
+        assertTrue(encoded.contains("\"id\":\"gateway-legacy-android\""))
         assertTrue(encoded.contains("\"mode\":\"ui\""))
         assertTrue(encoded.contains("\"role\":\"operator\""))
     }
@@ -61,7 +61,7 @@ class ConnectRoundTripTest {
             minProtocol = 4,
             maxProtocol = 4,
             client = GatewayClientInfo(
-                id = GatewayClientId.OPENCLAW_ANDROID,
+                id = GatewayClientId.ANDROID,
                 version = "0.1.0",
                 platform = "android",
                 mode = GatewayClientMode.UI,

@@ -358,7 +358,7 @@ Después (roadmap de refactor, no ahora): MCP normalization, Agent/Node topology
 
 ## 13. Non-goals
 
-- Android, OpenClaw, protocolo WS, transporte MCP, rename `hub/`, `attachGateway`, Capability, ToolLookup, A2A, Workspace en código.
+- Android, Gateway legacy, protocolo WS, transporte MCP, rename `hub/`, `attachGateway`, Capability, ToolLookup, A2A, Workspace en código.
 
 ---
 

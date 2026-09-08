@@ -34,6 +34,8 @@ export const DEFAULT_TOOL_POLICY: ToolPolicy = Object.freeze({
   "customer.demo": "automatic",
   "office.excel.read": "automatic",
   "office.excel.write": "confirm",
+  "research.search": "automatic",
+  "research.fetch": "automatic",
 });
 
 export function assertValidToolPolicy(value: unknown): ToolPolicy {

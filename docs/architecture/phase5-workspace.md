@@ -117,7 +117,7 @@ Gateway
 ## 6. Protocolo y clientes
 
 El WS solo conoce `conversationId`. **No** se añade `workspaceId`.  
-Android / OpenClaw / `packages/protocol/` **sin cambios**.
+Android / Gateway legacy / `packages/protocol/` **sin cambios**.
 
 Evolución futura (documentada, no implementada): el cliente o el Gateway asociarán Conversation → Workspace cuando exista UX y persistencia. Hasta entonces el protocolo no tiene suficiente información para transportar Workspace.
 

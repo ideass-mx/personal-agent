@@ -94,7 +94,7 @@ describe("10A AgentExtension", () => {
     assert.equal(valid.tools.length, 0);
   });
 
-  it("H–K: defaults solo vía extensions (echo, filesystem, process, math, system, diagnostics, customer, office)", () => {
+  it("H–K: defaults solo vía extensions (echo, filesystem, process, math, system, diagnostics, customer, office, research)", () => {
     const names = createDefaultExtensions().map((e) => e.name);
     assert.deepEqual(names, [
       "echo",
@@ -105,6 +105,7 @@ describe("10A AgentExtension", () => {
       "diagnostics",
       "customer",
       "office",
+      "research",
     ]);
     const registry = createDefaultToolRegistry();
     assert.ok(registry.get("agent.echo"));
@@ -122,6 +123,8 @@ describe("10A AgentExtension", () => {
     assert.ok(registry.get("customer.test"));
     assert.ok(registry.get("office.excel.read"));
     assert.ok(registry.get("office.excel.write"));
+    assert.ok(registry.get("research.search"));
+    assert.ok(registry.get("research.fetch"));
   });
 });
 
@@ -192,6 +195,8 @@ describe("10B filesystem/process extensions", () => {
         "office.excel.read",
         "office.excel.write",
         "process.execute",
+        "research.fetch",
+        "research.search",
         "system.info",
       ]);
     } finally {

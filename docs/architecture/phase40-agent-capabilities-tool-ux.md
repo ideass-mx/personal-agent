@@ -285,7 +285,7 @@ Si se quisiera catálogo live en Android: sería **opcional/futuro** (exponer su
 
 ## 17. Non-blocking Debt
 
-E-29/31 timeouts/transcript/schema; health snapshot; OpenClaw legacy; Voice.
+E-29/31 timeouts/transcript/schema; health snapshot; Gateway legacy legacy; Voice.
 
 ---
 

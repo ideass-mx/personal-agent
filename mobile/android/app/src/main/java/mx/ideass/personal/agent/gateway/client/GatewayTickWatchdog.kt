@@ -5,7 +5,7 @@ package mx.ideass.personal.agent.gateway.client
  * Silencio > [tickIntervalMs]×2 → cerrar con [CLOSE_CODE] y reconectar.
  */
 object GatewayTickWatchdog {
-    /** Código WebSocket de referencia OpenClaw: tick timeout. */
+    /** Código WebSocket de referencia Gateway legacy: tick timeout. */
     const val CLOSE_CODE: Int = 4000
     const val CLOSE_REASON: String = "tick timeout"
     const val DEFAULT_TICK_INTERVAL_MS: Long = 30_000L

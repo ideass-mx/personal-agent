@@ -1,0 +1,931 @@
+{
+  "phase": "60.9.3-ddg-search-space",
+  "generatedAt": "2026-09-08T13:07:35.107Z",
+  "productionUntouched": true,
+  "browser": "chrome",
+  "decision": "D",
+  "answers": {
+    "runnerPerformsUserLikeSearch": "YES — query entered and submitted; outcome after submit",
+    "queryEntersInput": true,
+    "querySubmitted": true,
+    "reachesSerpOrChallenge": true
+  },
+  "observationCount": 15,
+  "observations": [
+    {
+      "run": 1,
+      "queryId": "q1-general",
+      "query": "React TypeScript",
+      "method": "manual",
+      "status": "SUCCESS",
+      "latencyMs": 4000,
+      "resultCount": 10,
+      "blocked": false,
+      "blockReason": null,
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=React+TypeScript",
+      "pageTitle": "React TypeScript at DuckDuckGo",
+      "results": [],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": false,
+        "inputValueBeforeSubmit": "",
+        "inputValueAfterSubmit": "React TypeScript",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "notes": "Cursor IDE Chromium (no Playwright). Homepage→fill input→Enter. Ads+organic visible. No challenge."
+    },
+    {
+      "run": 1,
+      "queryId": "q2-technical",
+      "query": "PostgreSQL 17",
+      "method": "manual",
+      "status": "SUCCESS",
+      "latencyMs": 3000,
+      "resultCount": 10,
+      "blocked": false,
+      "blockReason": null,
+      "currentUrl": "https://duckduckgo.com/?q=PostgreSQL+17&t=h_&ia=web",
+      "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+      "results": [],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": false,
+        "inputValueBeforeSubmit": "React TypeScript",
+        "inputValueAfterSubmit": "PostgreSQL 17",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "notes": "Same IDE browser session. Organic postgresql.org release + downloads visible. No challenge."
+    },
+    {
+      "run": 1,
+      "queryId": "q3-mexico",
+      "query": "universidades doctorado inteligencia artificial México",
+      "method": "manual",
+      "status": "SUCCESS",
+      "latencyMs": 3500,
+      "resultCount": 10,
+      "blocked": false,
+      "blockReason": null,
+      "currentUrl": "https://duckduckgo.com/?q=universidades+doctorado+inteligencia+artificial+M%C3%A9xico&t=h_&ia=web",
+      "pageTitle": "universidades doctorado inteligencia artificial México at DuckDuckGo",
+      "results": [],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": false,
+        "inputValueBeforeSubmit": "PostgreSQL 17",
+        "inputValueAfterSubmit": "universidades doctorado inteligencia artificial México",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "notes": "Organic UANL/UP/UTM doctorados visibles. No challenge."
+    },
+    {
+      "run": 1,
+      "queryId": "q1-general",
+      "query": "React TypeScript",
+      "method": "playwright_fill",
+      "status": "CHALLENGE",
+      "latencyMs": 5021,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=React+TypeScript",
+      "pageTitle": "React TypeScript at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "React TypeScript",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 156,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=fill; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q1-general",
+      "query": "React TypeScript",
+      "method": "playwright_insertText",
+      "status": "CHALLENGE",
+      "latencyMs": 4209,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=React+TypeScript",
+      "pageTitle": "React TypeScript at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "React TypeScript",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 157,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=insertText; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q1-general",
+      "query": "React TypeScript",
+      "method": "playwright_type",
+      "status": "CHALLENGE",
+      "latencyMs": 5019,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=React+TypeScript",
+      "pageTitle": "React TypeScript at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "React TypeScript",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 172,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=type; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q1-general",
+      "query": "React TypeScript",
+      "method": "http",
+      "status": "SUCCESS",
+      "latencyMs": 4067,
+      "resultCount": 10,
+      "blocked": false,
+      "blockReason": null,
+      "results": [
+        {
+          "position": 1,
+          "title": "Using TypeScript - React",
+          "url": "https://react.dev/learn/typescript",
+          "domain": "react.dev",
+          "snippet": "TypeScript is a popular way to add type definitions to JavaScript codebases. Out of the box, TypeScript supports JSXand you can get full React Web support by adding @types/reactand @types/ react -domto your project."
+        },
+        {
+          "position": 2,
+          "title": "TypeScript with React - W3Schools",
+          "url": "https://www.w3schools.com/typescript/typescript_react.php",
+          "domain": "www.w3schools.com",
+          "snippet": "Learn how to use TypeScript with React for robust, type-safe front-end development with comprehensive examples and best practices."
+        },
+        {
+          "position": 3,
+          "title": "React TypeScript - W3Schools",
+          "url": "https://www.w3schools.com/react/react_typescript.asp",
+          "domain": "www.w3schools.com",
+          "snippet": "Benefits of using TypeScript with React : Catch errors early during development Better code completion in your editor Easier refactoring Clear interface definitions for components"
+        },
+        {
+          "position": 4,
+          "title": "TypeScript: Documentation - React",
+          "url": "https://www.typescriptlang.org/docs/handbook/react.html",
+          "domain": "www.typescriptlang.org",
+          "snippet": "Learn how to use TypeScript with React , a popular JavaScript library for building user interfaces. Find setup guides, cheatsheets, and links to other resources for React and TypeScript ."
+        },
+        {
+          "position": 5,
+          "title": "React TypeScript Tutorial: A Comprehensive Guide",
+          "url": "https://www.xjavascript.com/blog/react-typescript-tutorial",
+          "domain": "www.xjavascript.com"
+        },
+        {
+          "position": 6,
+          "title": "The Full TypeScript Guide with Easy React Examples",
+          "url": "https://dev.to/utkvishwas/the-full-typescript-guide-with-easy-react-examples-355m",
+          "domain": "dev.to"
+        },
+        {
+          "position": 7,
+          "title": "How to use TypeScript with React? - GeeksforGeeks",
+          "url": "https://www.geeksforgeeks.org/typescript/how-to-use-react-with-typescript",
+          "domain": "www.geeksforgeeks.org"
+        },
+        {
+          "position": 8,
+          "title": "Adding TypeScript | Create React App",
+          "url": "https://create-react-app.dev/docs/adding-typescript",
+          "domain": "create-react-app.dev",
+          "snippet": "Learn how to use TypeScript , a typed superset of JavaScript, with Create React App, a popular tool for building React applications. Follow the installation steps, see the TypeScript handbook and troubleshoot common issues."
+        },
+        {
+          "position": 9,
+          "title": "React TypeScript Cheatsheet",
+          "url": "https://react-typescript-cheatsheet.netlify.app/",
+          "domain": "react-typescript-cheatsheet.netlify.app",
+          "snippet": "Learn how to use TypeScript with React , a popular JavaScript library for building user interfaces. Find cheatsheets, docs, guides, and community resources for experienced React developers."
+        },
+        {
+          "position": 10,
+          "title": "How to use TypeScript with React: A tutorial with examples - LogRocket Blog",
+          "url": "https://blog.logrocket.com/how-to-use-typescript-react-tutorial-examples",
+          "domain": "blog.logrocket.com",
+          "snippet": "Learn how using TypeScript with React can increase development speed, improve code readability, and much more."
+        }
+      ],
+      "notes": "SerpDiscoveryProvider duckduckgo adapter (unchanged)"
+    },
+    {
+      "run": 1,
+      "queryId": "q2-technical",
+      "query": "PostgreSQL 17",
+      "method": "playwright_fill",
+      "status": "CHALLENGE",
+      "latencyMs": 4210,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+      "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "PostgreSQL 17",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 156,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=fill; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q2-technical",
+      "query": "PostgreSQL 17",
+      "method": "playwright_insertText",
+      "status": "CHALLENGE",
+      "latencyMs": 4242,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+      "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "PostgreSQL 17",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 157,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=insertText; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q2-technical",
+      "query": "PostgreSQL 17",
+      "method": "playwright_type",
+      "status": "CHALLENGE",
+      "latencyMs": 4820,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+      "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "PostgreSQL 17",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 169,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=type; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q2-technical",
+      "query": "PostgreSQL 17",
+      "method": "http",
+      "status": "SUCCESS",
+      "latencyMs": 658,
+      "resultCount": 10,
+      "blocked": false,
+      "blockReason": null,
+      "results": [
+        {
+          "position": 1,
+          "title": "PostgreSQL 17 Released!",
+          "url": "https://www.postgresql.org/about/news/postgresql-17-released-2936",
+          "domain": "www.postgresql.org"
+        },
+        {
+          "position": 2,
+          "title": "PostgreSQL: Downloads",
+          "url": "https://www.postgresql.org/download",
+          "domain": "www.postgresql.org",
+          "snippet": "PostgreSQL is available for download as ready-to-use packages or installers for various platforms, as well as a source code archive if you want to build it yourself."
+        },
+        {
+          "position": 3,
+          "title": "PostgreSQL 17 - What&#x27;s New, Support Lifecycle & EOL",
+          "url": "https://versionlog.com/postgresql/17",
+          "domain": "versionlog.com",
+          "snippet": "Discover what&#x27;s new in PostgreSQL 17 . Complete release history, support lifecycle, release dates, LTS schedule and End of Life (EOL) status. PostgreSQL ,..."
+        },
+        {
+          "position": 4,
+          "title": "PostgreSQL 17 - pgPedia - a PostgreSQL Encyclopedia",
+          "url": "https://pgpedia.info/postgresql-versions/postgresql-17.html",
+          "domain": "pgpedia.info"
+        },
+        {
+          "position": 5,
+          "title": "What&#x27;s New in PostgreSQL 17 (and What&#x27;s Coming Next)",
+          "url": "https://dev.to/haris_/whats-new-in-postgresql-17-and-whats-coming-next-1j3p",
+          "domain": "dev.to"
+        },
+        {
+          "position": 6,
+          "title": "PostgreSQL 16 vs 17: What&#x27;s New and What It Means on AWS",
+          "url": "https://www.rapydo.io/blog/postgresql-16-vs-17-whats-new-and-what-it-means-on-aws",
+          "domain": "www.rapydo.io"
+        },
+        {
+          "position": 7,
+          "title": "How to Install PostgreSQL 17 on Ubuntu 26.04, 24.04 and 22.04 ...",
+          "url": "https://linuxcapable.com/how-to-install-postgresql-17-on-ubuntu-linux",
+          "domain": "linuxcapable.com",
+          "snippet": "Install PostgreSQL 17 on Ubuntu 26.04, 24.04, or 22.04 with the official PGDG repository. Includes remote access, firewall setup and tips."
+        },
+        {
+          "position": 8,
+          "title": "PostgreSQL 17 - A Major Step Forward in Performance, Logical ...",
+          "url": "https://www.pgedge.com/blog/postgresql-17-a-major-step-forward-in-performance-logical-replication-and-more",
+          "domain": "www.pgedge.com"
+        },
+        {
+          "position": 9,
+          "title": "PostgreSQL: The World&#x27;s Most Advanced Open Source Relational Database",
+          "url": "https://access.crunchydata.com/documentation/postgresql17/latest",
+          "domain": "access.crunchydata.com",
+          "snippet": "Source License View All Documentation PostgreSQL : The World&#x27;s Most Advanced Open Source Relational Database Available Formats PDF EPUB"
+        },
+        {
+          "position": 10,
+          "title": "PostgreSQL 17 now available on Cloud SQL | Google Cloud Blog",
+          "url": "https://cloud.google.com/blog/products/databases/postgresql-17-now-available-on-cloud-sql",
+          "domain": "cloud.google.com"
+        }
+      ],
+      "notes": "SerpDiscoveryProvider duckduckgo adapter (unchanged)"
+    },
+    {
+      "run": 1,
+      "queryId": "q3-mexico",
+      "query": "universidades doctorado inteligencia artificial México",
+      "method": "playwright_fill",
+      "status": "CHALLENGE",
+      "latencyMs": 4207,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=universidades+doctorado+inteligencia+artificial+M%C3%A9xico",
+      "pageTitle": "universidades doctorado inteligencia artificial México at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "universidades doctorado inteligencia artificial México",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 157,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=fill; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q3-mexico",
+      "query": "universidades doctorado inteligencia artificial México",
+      "method": "playwright_insertText",
+      "status": "CHALLENGE",
+      "latencyMs": 4240,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=universidades+doctorado+inteligencia+artificial+M%C3%A9xico",
+      "pageTitle": "universidades doctorado inteligencia artificial México at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "universidades doctorado inteligencia artificial México",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 156,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=insertText; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q3-mexico",
+      "query": "universidades doctorado inteligencia artificial México",
+      "method": "playwright_type",
+      "status": "CHALLENGE",
+      "latencyMs": 6812,
+      "resultCount": 5,
+      "blocked": true,
+      "blockReason": "challenge",
+      "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=universidades+doctorado+inteligencia+artificial+M%C3%A9xico",
+      "pageTitle": "universidades doctorado inteligencia artificial México at DuckDuckGo",
+      "results": [
+        {
+          "position": 1,
+          "title": "iOS Browser",
+          "url": "https://apps.apple.com/app/duckduckgo-private-browser/id663592361?platform=iphone&pt=866401&mt=8&ct=serp-atb-serp",
+          "domain": "apps.apple.com"
+        },
+        {
+          "position": 2,
+          "title": "Android Browser",
+          "url": "https://play.google.com/store/apps/details?id=com.duckduckgo.mobile.android&referrer=utm_campaign%3Dserp-atb-serp%26origin%3Dfunnel_playstore_searchresults",
+          "domain": "play.google.com"
+        },
+        {
+          "position": 3,
+          "title": "Duck.ai",
+          "url": "https://duck.ai/",
+          "domain": "duck.ai"
+        },
+        {
+          "position": 4,
+          "title": "Podcast",
+          "url": "https://insideduckduckgo.substack.com/?showWelcome=true",
+          "domain": "insideduckduckgo.substack.com"
+        },
+        {
+          "position": 5,
+          "title": "Community",
+          "url": "https://www.reddit.com/r/duckduckgo/",
+          "domain": "www.reddit.com"
+        }
+      ],
+      "interaction": {
+        "queryEntered": true,
+        "querySubmitted": true,
+        "navigationOccurred": true,
+        "resultsPageDetected": true,
+        "challengeDetected": true,
+        "inputValueBeforeSubmit": null,
+        "inputValueAfterSubmit": "universidades doctorado inteligencia artificial México",
+        "submitTriggered": true,
+        "runnerFailure": false
+      },
+      "network": {
+        "documentRequests": 3,
+        "navigationRequests": 3,
+        "redirectCount": 0,
+        "resourceCount": 210,
+        "lastDocumentStatus": 200,
+        "contentType": "text/html; charset=UTF-8",
+        "cookiesSet": false,
+        "cookieCount": 0
+      },
+      "notes": "browser=chrome; mode=type; no direct ?q= navigation"
+    },
+    {
+      "run": 1,
+      "queryId": "q3-mexico",
+      "query": "universidades doctorado inteligencia artificial México",
+      "method": "http",
+      "status": "SUCCESS",
+      "latencyMs": 685,
+      "resultCount": 10,
+      "blocked": false,
+      "blockReason": null,
+      "results": [
+        {
+          "position": 1,
+          "title": "Doctorado en Inteligencia Artificial y Optimización",
+          "url": "https://posgrado.uanl.mx/ofertas_educativas/doctorado-en-inteligencia-artificial-y-optimizacion",
+          "domain": "posgrado.uanl.mx"
+        },
+        {
+          "position": 2,
+          "title": "DOCTORADO EN INTELIGENCIA ARTIFICIAL - Universidad Americana de Europa",
+          "url": "https://unade.edu.mx/doctorados-en-linea/doctorado-inteligencia-artificial",
+          "domain": "unade.edu.mx"
+        },
+        {
+          "position": 3,
+          "title": "Doctorado en Inteligencia Artificial | TECH Universidad México",
+          "url": "https://www.techtitute.com/es-mx/informatica/doctorado/inteligencia-artificial",
+          "domain": "www.techtitute.com"
+        },
+        {
+          "position": 4,
+          "title": "Doctorado en Inteligencia Artificial - Universidad Panamericana",
+          "url": "https://posgrados-panamericana.up.edu.mx/cdmx/ingenieria/doctorado-en-inteligencia-artificial",
+          "domain": "posgrados-panamericana.up.edu.mx"
+        },
+        {
+          "position": 5,
+          "title": "Doctorado en Inteligencia Artificial | TECH Universidad México",
+          "url": "https://www.techtitute.com/es-mx/inteligencia-artificial/doctorado/inteligencia-artificial",
+          "domain": "www.techtitute.com"
+        },
+        {
+          "position": 6,
+          "title": "Doctorado en Inteligencia Artificial | Universidad Panamericana",
+          "url": "https://www.up.edu.mx/oferta-educativa/doctorado-en-inteligencia-artificial",
+          "domain": "www.up.edu.mx"
+        },
+        {
+          "position": 7,
+          "title": "Doctorado en Inteligencia Artificial | UTM",
+          "url": "https://www.utm.mx/web/ense%C3%B1anza/posgrados/doctorado_en_inteligencia_artificial",
+          "domain": "www.utm.mx"
+        },
+        {
+          "position": 8,
+          "title": "Doctorado en Ciencia de Datos e Inteligencia Artificial",
+          "url": "https://utel.edu.mx/doctorado-en-ciencia-de-datos-e-inteligencia-artificial",
+          "domain": "utel.edu.mx"
+        },
+        {
+          "position": 9,
+          "title": "Doctorado en Investigación e Inteligencia Artificial - Posgrado",
+          "url": "https://posgrados.cocid.edu.mx/doctorado-en-investigacion-e-inteligencia-artificial",
+          "domain": "posgrados.cocid.edu.mx"
+        },
+        {
+          "position": 10,
+          "title": "Doctorados en Inteligencia Artificial - Universidades de México",
+          "url": "https://universidadesdemexico.mx/explorar/inteligencia-artificial-doctorados-z-y-w-3-2125-1",
+          "domain": "universidadesdemexico.mx",
+          "snippet": "Accede al listado de doctorados en Inteligencia Artificial para cursar en las universidades de México ."
+        }
+      ],
+      "notes": "SerpDiscoveryProvider duckduckgo adapter (unchanged)"
+    }
+  ]
+}

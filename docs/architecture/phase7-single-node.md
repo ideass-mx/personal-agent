@@ -96,7 +96,7 @@ Deuda: `model` también aparece en `hub/src/config.ts` (espejo). dotenv del Hub 
 
 ## 14. Fuera de PHASE 7
 
-Distributed, A2A, Workspace, registries, `agentId`/`nodeId`, nuevos transports MCP, Docker/K8s, installers OS, Android/OpenClaw/protocolo WS.
+Distributed, A2A, Workspace, registries, `agentId`/`nodeId`, nuevos transports MCP, Docker/K8s, installers OS, Android/Gateway legacy/protocolo WS.
 
 ## 15. Evolución a Distributed (no implementada)
 

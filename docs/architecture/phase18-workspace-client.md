@@ -5,7 +5,7 @@
 
 ## Diagnóstico
 
-No había cliente HTTP del Gateway. Android `HubClient` es **solo WebSocket** (chat). OpenClaw es otro backend. `/health` no tiene consumidor de Workspace. `HUB_TOKEN` vive en `hub/.env` y en `AppPreferences` del móvil (WS `auth`). La API PHASE 16 ya existía.
+No había cliente HTTP del Gateway. Android `HubClient` es **solo WebSocket** (chat). Gateway legacy es otro backend. `/health` no tiene consumidor de Workspace. `HUB_TOKEN` vive en `hub/.env` y en `AppPreferences` del móvil (WS `auth`). La API PHASE 16 ya existía.
 
 **Decisión:** capa reutilizable TypeScript, no UI Android (el chat no necesita Workspace todavía). El token lo pasa el caller; no hay almacén nuevo.
 

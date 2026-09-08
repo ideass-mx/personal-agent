@@ -1,0 +1,80 @@
+[
+  {
+    "run": 1,
+    "queryId": "q1-general",
+    "query": "React TypeScript",
+    "method": "manual",
+    "status": "SUCCESS",
+    "latencyMs": 4000,
+    "resultCount": 10,
+    "blocked": false,
+    "blockReason": null,
+    "currentUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=React+TypeScript",
+    "pageTitle": "React TypeScript at DuckDuckGo",
+    "results": [],
+    "interaction": {
+      "queryEntered": true,
+      "querySubmitted": true,
+      "navigationOccurred": true,
+      "resultsPageDetected": true,
+      "challengeDetected": false,
+      "inputValueBeforeSubmit": "",
+      "inputValueAfterSubmit": "React TypeScript",
+      "submitTriggered": true,
+      "runnerFailure": false
+    },
+    "notes": "Cursor IDE Chromium (no Playwright). Homepage→fill input→Enter. Ads+organic visible. No challenge."
+  },
+  {
+    "run": 1,
+    "queryId": "q2-technical",
+    "query": "PostgreSQL 17",
+    "method": "manual",
+    "status": "SUCCESS",
+    "latencyMs": 3000,
+    "resultCount": 10,
+    "blocked": false,
+    "blockReason": null,
+    "currentUrl": "https://duckduckgo.com/?q=PostgreSQL+17&t=h_&ia=web",
+    "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+    "results": [],
+    "interaction": {
+      "queryEntered": true,
+      "querySubmitted": true,
+      "navigationOccurred": true,
+      "resultsPageDetected": true,
+      "challengeDetected": false,
+      "inputValueBeforeSubmit": "React TypeScript",
+      "inputValueAfterSubmit": "PostgreSQL 17",
+      "submitTriggered": true,
+      "runnerFailure": false
+    },
+    "notes": "Same IDE browser session. Organic postgresql.org release + downloads visible. No challenge."
+  },
+  {
+    "run": 1,
+    "queryId": "q3-mexico",
+    "query": "universidades doctorado inteligencia artificial México",
+    "method": "manual",
+    "status": "SUCCESS",
+    "latencyMs": 3500,
+    "resultCount": 10,
+    "blocked": false,
+    "blockReason": null,
+    "currentUrl": "https://duckduckgo.com/?q=universidades+doctorado+inteligencia+artificial+M%C3%A9xico&t=h_&ia=web",
+    "pageTitle": "universidades doctorado inteligencia artificial México at DuckDuckGo",
+    "results": [],
+    "interaction": {
+      "queryEntered": true,
+      "querySubmitted": true,
+      "navigationOccurred": true,
+      "resultsPageDetected": true,
+      "challengeDetected": false,
+      "inputValueBeforeSubmit": "PostgreSQL 17",
+      "inputValueAfterSubmit": "universidades doctorado inteligencia artificial México",
+      "submitTriggered": true,
+      "runnerFailure": false
+    },
+    "notes": "Organic UANL/UP/UTM doctorados visibles. No challenge."
+  }
+]

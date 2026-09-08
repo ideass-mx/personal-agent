@@ -1,13 +1,13 @@
 /**
  * Adapter TurnMemory → funciones SQLite de history.ts.
- * touchDevice permanece en history.ts, fuera de este puerto.
  */
-import type { HistoryEntry, Role, TurnMemory } from "./types.ts";
+import type { AgentSource } from "../../../packages/protocol/messages.ts";
 import {
   addMessage,
   ensureConversation,
   getHistory,
 } from "./history.ts";
+import type { HistoryEntry, Role, TurnMemory } from "./types.ts";
 
 export class SqliteTurnMemory implements TurnMemory {
   ensureConversation(conversationId?: string): string {
@@ -19,8 +19,9 @@ export class SqliteTurnMemory implements TurnMemory {
     role: Role,
     content: string,
     deviceId?: string,
+    sources?: readonly AgentSource[],
   ): string {
-    return addMessage(conversationId, role, content, deviceId);
+    return addMessage(conversationId, role, content, deviceId, sources);
   }
 
   getHistory(conversationId: string): HistoryEntry[] {

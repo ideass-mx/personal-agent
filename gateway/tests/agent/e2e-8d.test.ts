@@ -140,6 +140,10 @@ describe("8D E2E FakeLLM ↔ Hub ↔ MCP ↔ Agent", () => {
       assert.equal(loop.tools.get("office.excel.read")?.executionMode, "automatic");
       assert.ok(loop.names.includes("office.excel.write"));
       assert.equal(loop.tools.get("office.excel.write")?.executionMode, "confirm");
+      assert.ok(loop.names.includes("research.search"));
+      assert.ok(loop.names.includes("research.fetch"));
+      assert.equal(loop.tools.get("research.search")?.executionMode, "automatic");
+      assert.equal(loop.tools.get("research.fetch")?.executionMode, "automatic");
       assert.equal(loop.names.includes("customer.test"), false);
       assert.equal(loop.tools.get("customer.test"), undefined);
       assert.equal(loop.tools.get("agent.echo")?.executionMode, "automatic");

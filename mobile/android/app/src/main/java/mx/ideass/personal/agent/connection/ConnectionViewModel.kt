@@ -45,7 +45,7 @@ data class ConnectionUiState(
     val pairingDeviceIdShort: String? = null,
     val connected: Boolean = false,
     val hasSavedConfig: Boolean = false,
-    /** Sección Avanzado / Legacy (OpenClaw). Visible en release. */
+    /** Sección Avanzado / Legacy (Gateway legacy). Visible en release. */
     val showAdvanced: Boolean = false,
 )
 
@@ -121,7 +121,7 @@ class ConnectionViewModel @Inject constructor(
         _ui.update { it.copy(showAdvanced = !it.showAdvanced) }
     }
 
-    /** Vuelve al camino feliz Hub desde OpenClaw legacy. */
+    /** Vuelve al camino feliz Hub desde Gateway legacy. */
     fun useHubBackend() {
         viewModelScope.launch {
             applyPrefill(forceBackend = ConnectionBackend.HUB)
@@ -129,8 +129,8 @@ class ConnectionViewModel @Inject constructor(
         }
     }
 
-    /** Activa OpenClaw (GATEWAY) solo desde Avanzado / Legacy. */
-    fun useOpenClawLegacy() {
+    /** Activa Gateway legacy (GATEWAY) solo desde Avanzado / Legacy. */
+    fun useLegacyGateway() {
         viewModelScope.launch {
             applyPrefill(forceBackend = ConnectionBackend.GATEWAY)
             _ui.update { it.copy(showAdvanced = true, resultMessage = null) }
@@ -462,7 +462,7 @@ class ConnectionViewModel @Inject constructor(
 
     private fun pairingMessage(deviceIdShort: String): String =
         "Emparejando… Aprueba este dispositivo en el servidor " +
-            "(openclaw devices approve · id $deviceIdShort)"
+            "(devices approve · id $deviceIdShort)"
 
     private companion object {
         const val SOCKET_OPEN_BUFFER_MS = 5_000L

@@ -55,7 +55,7 @@ Sin saltos que exijan abstracción nueva.
 | WS sin id | `ensureConversation()` mint `c_` |
 | WS id desconocido | INSERT esa id (`history.ts`) — no hereda Workspace |
 
-Hub: `sessionKey` **es** `conversationId`. OpenClaw: `sessionKey` es otro modelo (D-27-02). Reconnect: cola HubClient. App restart: DataStore local; SQLite Gateway independiente. Gateway restart: hilos SQLite; Session WS nueva.
+Hub: `sessionKey` **es** `conversationId`. Gateway legacy: `sessionKey` es otro modelo (D-27-02). Reconnect: cola HubClient. App restart: DataStore local; SQLite Gateway independiente. Gateway restart: hilos SQLite; Session WS nueva.
 
 No asociación automática en `user_message`. No Active Workspace.
 
@@ -161,13 +161,13 @@ Migraciones 001–003, `_migrations`, WAL, FK ON, index workspace/messages. DELE
 
 ## 15. Android Audit
 
-Hub WS + HTTP Workspace. Autoridad workspace: `coordinator.load(conversationId)` → GET Gateway. No workspaceId local como SoT. `registerAndActivate(conversationId)`. Historial: DataStore; no HTTP messages; `ChatHistorySync` → OpenClaw RPC (`GatewayClient.loadHistory`). Hub: no-op si no hay gatewaySession. **D-27-03.**
+Hub WS + HTTP Workspace. Autoridad workspace: `coordinator.load(conversationId)` → GET Gateway. No workspaceId local como SoT. `registerAndActivate(conversationId)`. Historial: DataStore; no HTTP messages; `ChatHistorySync` → Gateway legacy RPC (`GatewayClient.loadHistory`). Hub: no-op si no hay gatewaySession. **D-27-03.**
 
 ---
 
-## 16. Hub/OpenClaw Audit
+## 16. Hub/Gateway legacy Audit
 
-Misma UI `SessionsScreen`. Keys `c_` / `w_` vs `agent:`. `ensureConversation` no valida prefijo. Riesgo de filas SQLite con ids OpenClaw si backend Hub. ChatHistorySync solo OpenClaw. No unificar. **D-27-02.**
+Misma UI `SessionsScreen`. Keys `c_` / `w_` vs `agent:`. `ensureConversation` no valida prefijo. Riesgo de filas SQLite con ids Gateway legacy si backend Hub. ChatHistorySync solo Gateway legacy. No unificar. **D-27-02.**
 
 ---
 
@@ -185,7 +185,7 @@ AgentDefinition: prompt/model/toolPolicy. GatewayConfig: key, token, port, db, m
 
 ## 19. Naming Audit
 
-Histórico/ambiguo: `attachLocalAgent`, `LocalAgent`, `[hub] Agent READY`, `agentReady`, `AgentConfig` (= NodeConfig). Correcto: MCP Server in-process, Node. Peligroso (colisión): Android `gateway` = OpenClaw. No rename.
+Histórico/ambiguo: `attachLocalAgent`, `LocalAgent`, `[hub] Agent READY`, `agentReady`, `AgentConfig` (= NodeConfig). Correcto: MCP Server in-process, Node. Peligroso (colisión): Android `gateway` = Gateway legacy. No rename.
 
 ---
 
@@ -226,7 +226,7 @@ Test PHASE 27: protege inventario HTTP, SET NULL, ignore confirm Hub, reload Wor
 
 - **Clasificación:** D · Medium  
 - **Archivo:** `ChatHistorySync.kt` → `GatewayClient.loadHistory`  
-- **Evidencia:** RPC OpenClaw; Hub sin GET messages  
+- **Evidencia:** RPC Gateway legacy; Hub sin GET messages  
 - **Observado:** reinstall → UI vacía, SQLite con hilos  
 - **¿Requiere código?** Opcional  
 - **Recomendación:** documentar o HTTP history futuro  
@@ -244,7 +244,7 @@ Health snapshot (`server.ts` / `index.ts`); shutdown WS; `mergeEnv`; timeout hu�
 1. Tools `confirm` inutilizables en Android Hub.  
 2. `/health.agentReady` tras Node crash.  
 3. SIGINT con WS abierto.  
-4. Mezcla OpenClaw/Hub en un hilo SQLite.
+4. Mezcla Gateway legacy/Hub en un hilo SQLite.
 
 ---
 

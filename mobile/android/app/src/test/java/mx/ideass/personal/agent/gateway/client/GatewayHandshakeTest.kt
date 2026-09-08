@@ -101,7 +101,7 @@ class GatewayHandshakeTest {
                         )
                         capturedConnect.set(params)
                         assertEquals("nonce-test-1", params.device?.nonce)
-                        assertEquals(GatewayClientId.OPENCLAW_ANDROID, params.client.id)
+                        assertEquals(GatewayClientId.ANDROID, params.client.id)
                         assertEquals(GatewayClientMode.UI, params.client.mode)
                         assertEquals(GatewayRoles.OPERATOR, params.role)
                         assertEquals(4, params.minProtocol)
@@ -145,7 +145,7 @@ class GatewayHandshakeTest {
                     minProtocol = GatewayProtocolVersion.CURRENT,
                     maxProtocol = GatewayProtocolVersion.CURRENT,
                     client = GatewayClientInfo(
-                        id = GatewayClientId.OPENCLAW_ANDROID,
+                        id = GatewayClientId.ANDROID,
                         version = "0.1.0",
                         platform = "android",
                         mode = GatewayClientMode.UI,
@@ -205,7 +205,7 @@ class GatewayHandshakeTest {
                     minProtocol = 4,
                     maxProtocol = 4,
                     client = GatewayClientInfo(
-                        id = GatewayClientId.OPENCLAW_ANDROID,
+                        id = GatewayClientId.ANDROID,
                         version = "0.1.0",
                         platform = "android",
                         mode = GatewayClientMode.UI,
@@ -280,7 +280,7 @@ class GatewayHandshakeTest {
                     minProtocol = 4,
                     maxProtocol = 4,
                     client = GatewayClientInfo(
-                        id = GatewayClientId.OPENCLAW_ANDROID,
+                        id = GatewayClientId.ANDROID,
                         version = "0.1.0",
                         platform = "android",
                         mode = GatewayClientMode.UI,

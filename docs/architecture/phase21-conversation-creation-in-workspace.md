@@ -49,7 +49,7 @@ Sin UX nueva. Un hilo de voz nuevo sigue siendo casual (NULL). No se infiere el 
 
 ## Android
 
-En **Sesiones** (donde ya se crea un hilo): backend Hub ofrece «Nueva conversación» (NULL) y, por cada Workspace listado, «Nueva conversación en {nombre}». OpenClaw conserva `sessions.create` sin Workspace.
+En **Sesiones** (donde ya se crea un hilo): backend Hub ofrece «Nueva conversación» (NULL) y, por cada Workspace listado, «Nueva conversación en {nombre}». Gateway legacy conserva `sessions.create` sin Workspace.
 
 Tras crear, se `registerAndActivate` el id Gateway y se vuelve al chat; el selector recarga `conversationWorkspace`.
 
@@ -59,4 +59,4 @@ No implementado: User, Active Workspace, `workspaceId` en WS, A2A, multi-Agent.
 
 ## Recomendación PHASE 22
 
-Detenerse aquí salvo producto nuevo. Candidatos: listar Conversations por Workspace en HTTP; o UX Hub vs OpenClaw más clara. **No** Active Workspace.
+Detenerse aquí salvo producto nuevo. Candidatos: listar Conversations por Workspace en HTTP; o UX Hub vs Gateway legacy más clara. **No** Active Workspace.

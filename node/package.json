@@ -2,14 +2,26 @@
   "name": "@mxideass/node",
   "version": "0.0.0",
   "private": true,
-  "description": "Personal Agent Node — MCP Server + Native Tools. Legacy package name was @mxideass/agent.",
+  "description": "Personal Agent Node \u2014 MCP Server + Native Tools. Legacy package name was @mxideass/agent.",
   "type": "module",
   "license": "UNLICENSED",
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx src/index.ts",
     "test": "tsx --test \"tests/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "research:search": "tsx scripts/research-search.ts",
+    "research:benchmark": "tsx scripts/research-search.ts --benchmark",
+    "research:benchmark:60.9.4": "LOG_LEVEL=silent NODE_PATH=./node_modules tsx ../research/phase-60.9.4-ddg-browser-comparison/benchmark.ts",
+    "research:benchmark:60.9.5": "LOG_LEVEL=silent NODE_PATH=./node_modules tsx ../research/phase-60.9.5-browser-divergence/benchmark.ts",
+    "research:benchmark:60.9.6": "LOG_LEVEL=silent NODE_PATH=./node_modules tsx ../research/phase-60.9.6-electron-serp/benchmark.ts",
+    "research:benchmark:60.12": "LOG_LEVEL=silent NODE_PATH=./node_modules tsx ../research/phase-60.12-runtime-optimization/benchmark.ts",
+    "research:benchmark:60.13": "LOG_LEVEL=silent NODE_PATH=./node_modules tsx ../research/phase-60.13-brave-serp/benchmark.ts",
+    "research:benchmark:60.13.1": "LOG_LEVEL=silent NODE_PATH=./node_modules tsx ../research/phase-60.13.1-brave-pacing/benchmark.ts",
+    "research:eval:agent-search": "LOG_LEVEL=silent tsx scripts/research-search.ts --benchmark --provider agent-search-mcp --runs 3",
+    "research:robustness:live": "LOG_LEVEL=silent tsx scripts/research-robustness-live.ts",
+    "research:agent:live": "LOG_LEVEL=silent tsx ../gateway/scripts/research-agent-live.ts",
+    "research:verify:60.15": "LOG_LEVEL=silent WEB_INTELLIGENCE_LIVE=1 tsx --test tests/research/web-intelligence-60.15.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -17,7 +29,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "electron": "^33.4.11",
+    "playwright": "^1.49.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
+  },
+  "optionalDependencies": {
+    "agent-search-mcp": "^3.2.1"
   }
 }

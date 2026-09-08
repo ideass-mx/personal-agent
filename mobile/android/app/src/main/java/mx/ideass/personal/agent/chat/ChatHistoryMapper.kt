@@ -58,6 +58,7 @@ object ChatHistoryMapper {
             ?.let { return it }
         (obj["messageId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { return it }
+        // Clave de metadata del protocolo gateway legacy (no renombrar en el cable).
         val meta = obj["__openclaw"] as? JsonObject
         return (meta?.get("id") as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
     }

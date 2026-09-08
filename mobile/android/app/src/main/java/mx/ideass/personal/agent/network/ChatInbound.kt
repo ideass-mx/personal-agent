@@ -2,7 +2,7 @@ package mx.ideass.personal.agent.network
 
 /**
  * Eventos de chat normalizados para la UI/store.
- * Independiente del wire (hub casero vs Gateway OpenClaw).
+ * Independiente del wire (hub casero vs Gateway legacy).
  *
  * [sessionKey] enruta al hilo correcto. Null = sesión activa (hub legacy).
  * [runId] identifica el turno/run del stream (protocolo Gateway v4); null = legado mono-stream.

@@ -54,7 +54,7 @@ Hub backend + WS conectado + sessionKey activa
   → ChatStore.replaceThread (si no hay assistant work en vuelo)
 ```
 
-Arranca en `AgentService` junto a `ChatHistorySync` (OpenClaw).
+Arranca en `AgentService` junto a `ChatHistorySync` (Gateway legacy).
 
 ---
 

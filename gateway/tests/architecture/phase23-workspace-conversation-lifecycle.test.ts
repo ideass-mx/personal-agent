@@ -30,7 +30,7 @@ describe("PHASE 23 Workspace / Conversation lifecycle (audit)", () => {
     assert.match(doc, /Resultado A/);
     assert.match(doc, /sin Workspace/);
     assert.match(doc, /ensureConversation/);
-    assert.match(doc, /OpenClaw/);
+    assert.match(doc, /legacy Gateway/);
     assert.match(doc, /ON DELETE SET NULL/);
     assert.doesNotMatch(doc, /Control Plane/i);
   });

@@ -6,7 +6,7 @@ Single Node no duplica código: es Gateway + Agent Runtime + Local Node + MCP en
 Vocabulario: [`terminology.md`](./terminology.md). PHASE 3: [`phase3-contracts.md`](./phase3-contracts.md). PHASE 4: [`phase4-agent-node.md`](./phase4-agent-node.md). PHASE 5: [`phase5-workspace.md`](./phase5-workspace.md). PHASE 6: [`phase6-agent-definition.md`](./phase6-agent-definition.md). PHASE 7: [`phase7-single-node.md`](./phase7-single-node.md). PHASE 8: [`phase8-agent-node-configuration.md`](./phase8-agent-node-configuration.md). PHASE 10: [`phase10-agent-selection.md`](./phase10-agent-selection.md). PHASE 11: [`phase11-interaction-workspace.md`](./phase11-interaction-workspace.md). PHASE 14: [`phase14-workspace-context.md`](./phase14-workspace-context.md). PHASE 15: [`phase15-workspace-context.md`](./phase15-workspace-context.md). PHASE 16: [`phase16-workspace-http.md`](./phase16-workspace-http.md). PHASE 17: [`phase17-active-workspace.md`](./phase17-active-workspace.md). PHASE 18: [`phase18-workspace-client.md`](./phase18-workspace-client.md). PHASE 19: [`phase19-workspace-ui.md`](./phase19-workspace-ui.md). PHASE 20: [`phase20-workspace-continuity.md`](./phase20-workspace-continuity.md). **Tool** es el concepto canónico.
 
 ```text
-Clientes (Android Hub protocol | Agent Console Web | OpenClaw opcional | otros)
+Clientes (Android Hub protocol | Agent Console Web | Gateway legacy opcional | otros)
         │  WS  packages/protocol
         ▼
 ┌──────────────────────────────────────────┐
@@ -51,7 +51,7 @@ Sin HTTP/SSE MCP, sin registry global de plataforma, sin A2A.
 
 **Sí:** conectividad de clientes, token de dispositivo, sesiones WS, **API HTTP de Workspace** (CRUD y asociación Conversation→Workspace), policy de Tools, descubrimiento MCP, lifecycle del proceso `agent/`, confirmación fail-closed, health HTTP, estado ready.
 
-**No:** razonamiento LLM (eso es Agent Runtime), ejecución OS/Excel (eso es Node / MCP Server), ser el servidor OpenClaw, ser un Agent.
+**No:** razonamiento LLM (eso es Agent Runtime), ejecución OS/Excel (eso es Node / MCP Server), ser el servidor Gateway legacy, ser un Agent.
 
 El Agent Runtime **en el mismo proceso** no viola la frontera: el Gateway *aloja* el runtime.
 
@@ -109,9 +109,9 @@ PHASE 34: Single Node operable (arranque fail-closed, packaging, Conversation re
 
 PHASE 35: exit de arquitectura — **MVP-READY WITH DEBT**. Criterios A–G PASS; sin B/C; no nuevas abstracciones; siguiente trabajo = producto (Hub-first UX, HITL, docs). Ver [`phase35-mvp-readiness-and-architecture-exit.md`](./phase35-mvp-readiness-and-architecture-exit.md).
 
-PHASE 36: definición de producto Hub-first MVP — **READY FOR PHASE 37**. OpenClaw = legacy de producto; Conversation = unidad de trabajo; HITL global pendiente (38). Ver [`phase36-product-definition-and-hub-first-mvp.md`](./phase36-product-definition-and-hub-first-mvp.md).
+PHASE 36: definición de producto Hub-first MVP — **READY FOR PHASE 37**. Gateway legacy = legacy de producto; Conversation = unidad de trabajo; HITL global pendiente (38). Ver [`phase36-product-definition-and-hub-first-mvp.md`](./phase36-product-definition-and-hub-first-mvp.md).
 
-PHASE 37: Hub-first UX P0 **PASS** — default HUB; first-run Connection; OpenClaw Avanzado/Legacy; sin tocar Runtime/MCP/DB. Ver [`phase37-hub-first-ux-implementation.md`](./phase37-hub-first-ux-implementation.md).
+PHASE 37: Hub-first UX P0 **PASS** — default HUB; first-run Connection; Gateway legacy Avanzado/Legacy; sin tocar Runtime/MCP/DB. Ver [`phase37-hub-first-ux-implementation.md`](./phase37-hub-first-ux-implementation.md).
 
 PHASE 38: HITL global Android **PASS** — `HubConfirmHost` en AppNav; estado `ChatStore`; countdown UX; disconnect clear; sin PermissionManager / sin frames nuevos. Ver [`phase38-hitl-global-product-ux.md`](./phase38-hitl-global-product-ux.md).
 

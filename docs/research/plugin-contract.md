@@ -2,7 +2,7 @@
 
 **Etapa:** 6B — diseño únicamente  
 **Fecha:** 2026-08-21  
-**Dependencia:** `docs/research/openclaw-plugin-audit.md` (Etapa 6)  
+**Dependencia:** investigación de plugins (Etapa 6); contrato propio first-party.  
 **Alcance:** definir el contrato conceptual para plugins first-party.  
 **Fuera de alcance (no implementar aquí):** `PluginRegistry`, `PluginLoader`, manifest runtime, filesystem, MCP, IPC, cambios a `AgentRuntime` / `ToolRegistry`.
 
@@ -171,7 +171,7 @@ Plugin {
 | `configSchema` | Solo si el plugin tiene config | Configuración |
 | `optional` por tool | Posteriormente | Capacidades / availability |
 | `enabled` | **No en el plugin** — lo decide el sistema | Sistema |
-| `capabilities` tipo OpenClaw (speech, channels, …) | **No** | Evitar capability zoo |
+| `capabilities` tipo zoo de capabilities (speech, channels, …) | **No** | Evitar capability zoo |
 | `skills` | **No** (pospuesto) | — |
 | Factories | **No** (pospuesto) | — |
 
@@ -188,7 +188,7 @@ RUNTIME            register() + implementaciones execute (local o IPC)
 
 ### 2.4 Qué no es el contrato
 
-- No es el SDK de OpenClaw
+- No es un SDK de terceros
 - No exige `api.registerProvider` / channels / hooks
 - No incluye install desde npm/ClawHub
 - No incluye Permission System
@@ -283,7 +283,7 @@ Core tools (`calculator`) usan `pluginId: "core"` o un registro sin plugin — d
 | `config` values | **Sistema** | Persistidos fuera del código del plugin |
 | Allowlists de optional | **Sistema** | Usuario opt-in |
 | `trust` / isolation mode | **Sistema** (con hint del empaquetado) | First-party vs third-party |
-| `capabilities` OpenClaw-like | **Ninguno** | No adoptar |
+| `capabilities` estilo gateway multi-capability | **Ninguno** | No adoptar |
 
 Metadata-only discovery (futuro): el sistema lee este bloque **sin** ejecutar `register`.
 
@@ -519,7 +519,7 @@ No modificar código en esta etapa.
 
 ## 11. Lifecycle (simplificado)
 
-OpenClaw: discover → validate → enable → load → register → …  
+Ciclo típico de plugin host: discover → validate → enable → load → register → …  
 
 **First-party v1 conceptual (mínimo real):**
 
@@ -564,7 +564,7 @@ Orden mental: **validate antes de register**; **execute solo si registered**; **
 ### Qué no hace el contrato
 
 - Sandbox Docker
-- Allow/deny matrices estilo OpenClaw
+- Allow/deny matrices estilo host monolítico
 - Un tercer proceso de aislamiento
 - Firmar/verificar paquetes (futuro install)
 
@@ -590,26 +590,6 @@ Eso evita reescribir adapters cuando algún día existan plugins externos.
 
 ---
 
-## 14. Comparación con OpenClaw
-
-| Tema | OpenClaw | Nuestra propuesta |
-|------|----------|-------------------|
-| Ejecución | Plugins nativos **in-process** (sin sandbox) | Contrato **agnóstico**; in-process solo trusted no privilegiado; privilegiados → IPC/Windows |
-| Manifest | `openclaw.plugin.json` muy rico | Metadata mínima (identidad + tools + configSchema) |
-| Registry | `PluginRegistry` multi-capability | `ToolRegistry` actual + **PluginIndex** futuro (no zoo) |
-| Ownership | `contracts.tools` + register | Declaraciones en metadata + records laterales; **no** `pluginId` en `AgentTool` |
-| Optional tools | Sí (`optional` + allowlist) | Diseñado; implementar después |
-| Enable/disable | `plugins.entries.*.enabled` | Sistema; no campo runtime del paquete |
-| Config | `configSchema` + entries | Igual en espíritu; values fuera del paquete |
-| Skills | `SKILL.md` | Pospuesto |
-| Tool Search | Experimental | Pospuesto |
-| Factories | Sí | Pospuesto |
-| Capability model | Providers, channels, speech, … | **Evitar**; plugins aportan **tools** |
-| Permissions | Policy + sandbox + elevated + approvals | Solo `executionMode` + confirm en Hub; validación por tool en Agent; sin Permission System |
-| Marketplace | ClawHub | Evitar ahora |
-| SDK | `openclaw/plugin-sdk/*` | No depender; contrato propio mínimo |
-
----
 
 ## 15. Propuesta final de arquitectura
 
@@ -858,7 +838,7 @@ La defensa sigue siendo namespace + registry + `executionMode` del Hub.
 Una extensión `system` no puede registrar `filesystem.write` ni
 `process.execute`. No hay PluginManager, carga dinámica ni proceso extra.
 
-Confirmation, MCP y Hub **no cambian**. OpenClaw puede extender el **gateway/cerebro** con plugins/nodos in-process.
+Confirmation, MCP y Hub **no cambian**. Un host monolítico podría extender el cerebro con plugins in-process; nosotros no.
 Nosotros separamos:
 
 | Concepto | Rol |
@@ -870,7 +850,7 @@ Nosotros separamos:
 
 No convertimos Extension → proceso, PermissionManager ni Guardian.
 Plugin ≠ proceso Agent ≠ MCP ≠ Hub. No copiamos marketplace, sandbox,
-Permission System ni carga remota de OpenClaw.
+Permission System ni carga remota de hosts de terceros.
 
 ### Etapa 11C — independencia del mecanismo Agent Extension
 

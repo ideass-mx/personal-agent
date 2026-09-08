@@ -1,0 +1,20 @@
+{
+  "method": "playwright",
+  "run": 1,
+  "query": "PostgreSQL 17",
+  "queryEntered": true,
+  "querySubmitted": true,
+  "finalUrl": "https://duckduckgo.com/?ia=web&origin=funnel_home_website&t=h_&q=PostgreSQL+17",
+  "navigationCount": 3,
+  "redirectChain": [],
+  "httpStatus": 200,
+  "challengeDetected": true,
+  "organicResultsDetected": false,
+  "resultCount": 0,
+  "pageTitle": "PostgreSQL 17 at DuckDuckGo",
+  "resourceCount": 157,
+  "cookieNames": [],
+  "elapsedMs": 5003,
+  "organicDomains": [],
+  "notes": "homepage→fill→Enter; no stealth; no direct ?q="
+}
