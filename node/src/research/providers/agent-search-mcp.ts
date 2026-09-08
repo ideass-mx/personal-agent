@@ -8,6 +8,8 @@
  * Carga vía createRequire (audit 12A prohíbe import() dinámico en src/).
  */
 import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   clampLimit,
   normalizeResult,
@@ -87,7 +89,24 @@ export type AgentSearchMcpProviderOptions = {
   readonly onDiagnostics?: (diag: AgentSearchDiagnostics) => void;
 };
 
-const requireFromHere = createRequire(import.meta.url);
+const requireFromHere = createRequire(
+  (() => {
+    try {
+      const url = import.meta.url;
+      if (typeof url === "string" && url.length > 0 && url !== "file://") {
+        return fileURLToPath(url);
+      }
+    } catch {
+      /* CJS bundle */
+    }
+    // eslint-disable-next-line no-undef
+    if (typeof __filename === "string" && __filename) return __filename;
+    if (typeof process.argv[1] === "string" && process.argv[1]) {
+      return process.argv[1];
+    }
+    return path.join(process.cwd(), "package.json");
+  })(),
+);
 
 function loadDefaultSearchFn(): AgentSearchFn {
   try {

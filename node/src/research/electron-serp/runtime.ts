@@ -23,9 +23,27 @@ import {
   type ElectronSerpRuntimeOptions,
 } from "./types.ts";
 
-const here = dirname(fileURLToPath(import.meta.url));
+/** Compatible con ESM (dev) y CJS empaquetado (esbuild: import.meta vacío). */
+function moduleFilename(): string {
+  try {
+    const url = import.meta.url;
+    if (typeof url === "string" && url.length > 0 && url !== "file://") {
+      return fileURLToPath(url);
+    }
+  } catch {
+    /* CJS bundle */
+  }
+  // eslint-disable-next-line no-undef
+  if (typeof __filename === "string" && __filename) return __filename;
+  if (typeof process.argv[1] === "string" && process.argv[1]) {
+    return process.argv[1];
+  }
+  return join(process.cwd(), "node.cjs");
+}
+
+const here = dirname(moduleFilename());
 const MAIN = join(here, "electron-main.cjs");
-const require = createRequire(import.meta.url);
+const require = createRequire(moduleFilename());
 
 export function resolveElectronBinary(): string {
   try {
