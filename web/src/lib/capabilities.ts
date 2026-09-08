@@ -12,9 +12,18 @@ export type Capability = {
 
 export const MVP_CAPABILITIES: Capability[] = [
   {
+    toolName: "filesystem.search",
+    label: "Buscar archivos",
+    description:
+      "Permite al agente localizar archivos en tu computadora por nombre, tipo, fecha o contenido.",
+    category: "Archivos",
+    requiresConfirmation: false,
+  },
+  {
     toolName: "filesystem.read",
     label: "Leer archivos",
-    description: "Permite al agente consultar archivos dentro del espacio autorizado.",
+    description:
+      "Permite al agente consultar el contenido de archivos en tu computadora.",
     category: "Archivos",
     requiresConfirmation: false,
   },
@@ -29,6 +38,13 @@ export const MVP_CAPABILITIES: Capability[] = [
     toolName: "filesystem.write",
     label: "Escribir archivos",
     description: "Permite al agente crear o modificar archivos.",
+    category: "Archivos",
+    requiresConfirmation: true,
+  },
+  {
+    toolName: "filesystem.delete",
+    label: "Eliminar archivos",
+    description: "Permite al agente eliminar archivos (siempre con tu confirmación).",
     category: "Archivos",
     requiresConfirmation: true,
   },

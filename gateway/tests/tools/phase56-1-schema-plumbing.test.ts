@@ -15,9 +15,11 @@ import { ToolRegistry } from "../../src/tools/registry.ts";
 import type { RemoteToolExecutor } from "../../src/tools/remote.ts";
 
 const REQUIRED = [
+  "filesystem.search",
   "filesystem.read",
   "filesystem.list",
   "filesystem.write",
+  "filesystem.delete",
   "process.execute",
 ] as const;
 
@@ -145,9 +147,11 @@ describe("PHASE 56.1-B schema sanitize", () => {
       additionalProperties: false,
     };
     const policy = {
+      "filesystem.search": "automatic" as const,
       "filesystem.read": "automatic" as const,
       "filesystem.list": "automatic" as const,
       "filesystem.write": "confirm" as const,
+      "filesystem.delete": "confirm" as const,
       "process.execute": "confirm" as const,
       "agent.echo": "automatic" as const,
     };
@@ -185,9 +189,11 @@ describe("PHASE 56.1-B schema sanitize", () => {
   it("discovery usa fallback marcado si schema ausente", async () => {
     const registry = new ToolRegistry();
     const policy = {
+      "filesystem.search": "automatic" as const,
       "filesystem.read": "automatic" as const,
       "filesystem.list": "automatic" as const,
       "filesystem.write": "confirm" as const,
+      "filesystem.delete": "confirm" as const,
       "process.execute": "confirm" as const,
       "math.add": "automatic" as const,
     };

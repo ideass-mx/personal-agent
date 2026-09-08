@@ -49,7 +49,7 @@ describe("filesystem.read con root", () => {
     }
   });
 
-  it("fuera del root, traversal y hermano de prefijo similar", async () => {
+  it("PHASE 59: lectura fuera del root permitida (root solo ancla relativos)", async () => {
     const { base, root } = await ctxRoot();
     const secret = "secreto-fuera";
     const outside = path.join(base, "fuera.txt");
@@ -61,22 +61,22 @@ describe("filesystem.read con root", () => {
     const tool = createFilesystemReadTool({ root });
 
     const absOut = await tool.execute({ path: outside }, ctx);
-    assert.equal(absOut.ok, false);
-    if (!absOut.ok) {
-      assert.equal(absOut.error.code, "path_outside_root");
-      assert.doesNotMatch(absOut.error.message, /secreto-fuera/);
+    assert.equal(absOut.ok, true);
+    if (absOut.ok) {
+      assert.equal((absOut.content as { content: string }).content, secret);
     }
 
     const trav = await tool.execute({ path: "../fuera.txt" }, ctx);
-    assert.equal(trav.ok, false);
-    if (!trav.ok) assert.equal(trav.error.code, "path_outside_root");
+    assert.equal(trav.ok, true);
+    if (trav.ok) {
+      assert.equal((trav.content as { content: string }).content, secret);
+    }
 
     const sib = await tool.execute({ path: sibling }, ctx);
-    assert.equal(sib.ok, false);
-    if (!sib.ok) assert.equal(sib.error.code, "path_outside_root");
+    assert.equal(sib.ok, true);
   });
 
-  it("directorio, inexistente y root inexistente", async () => {
+  it("directorio, inexistente y relativo con base ausente", async () => {
     const { root } = await ctxRoot();
     const tool = createFilesystemReadTool({ root });
     await mkdir(path.join(root, "sub"));
@@ -86,7 +86,7 @@ describe("filesystem.read con root", () => {
 
     const dir = await tool.execute({ path: root }, ctx);
     assert.equal(dir.ok, false);
-    if (!dir.ok) assert.equal(dir.error.code, "path_not_allowed");
+    if (!dir.ok) assert.equal(dir.error.code, "not_a_file");
 
     const missing = await tool.execute({ path: "no.txt" }, ctx);
     assert.equal(missing.ok, false);
@@ -97,13 +97,13 @@ describe("filesystem.read con root", () => {
     });
     const badRoot = await gone.execute({ path: "a.txt" }, ctx);
     assert.equal(badRoot.ok, false);
-    if (!badRoot.ok) assert.equal(badRoot.error.code, "file_write_error");
+    if (!badRoot.ok) assert.equal(badRoot.error.code, "file_not_found");
   });
 
-  it("symlink hacia fuera se rechaza; hacia dentro se permite", async () => {
+  it("PHASE 59: symlink de lectura hacia fuera se permite", async () => {
     const { base, root } = await ctxRoot();
     const outside = path.join(base, "secret.txt");
-    await writeFile(outside, "no-debe-leerlo", "utf8");
+    await writeFile(outside, "contenido-fuera", "utf8");
     const inside = path.join(root, "real.txt");
     await writeFile(inside, "ok-dentro", "utf8");
     const tool = createFilesystemReadTool({ root });
@@ -111,10 +111,12 @@ describe("filesystem.read con root", () => {
     await skipIfNoSymlink(async () => {
       await symlink(outside, path.join(root, "link-out.txt"));
       const out = await tool.execute({ path: "link-out.txt" }, ctx);
-      assert.equal(out.ok, false);
-      if (!out.ok) {
-        assert.equal(out.error.code, "symlink_not_allowed");
-        assert.doesNotMatch(JSON.stringify(out), /no-debe-leerlo/);
+      assert.equal(out.ok, true);
+      if (out.ok) {
+        assert.equal(
+          (out.content as { content: string }).content,
+          "contenido-fuera",
+        );
       }
 
       await symlink(inside, path.join(root, "link-in.txt"));

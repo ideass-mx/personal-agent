@@ -126,12 +126,18 @@ describe("10A AgentExtension", () => {
 });
 
 describe("10B filesystem/process extensions", () => {
-  it("filesystemExtension aporta read, list y write", () => {
+  it("filesystemExtension aporta search, read, list, write y delete", () => {
     const ext = createFilesystemExtension();
     assert.equal(ext.name, "filesystem");
     assert.deepEqual(
       ext.tools.map((t) => t.name).sort(),
-      ["filesystem.list", "filesystem.read", "filesystem.write"],
+      [
+        "filesystem.delete",
+        "filesystem.list",
+        "filesystem.read",
+        "filesystem.search",
+        "filesystem.write",
+      ],
     );
   });
 
@@ -174,8 +180,10 @@ describe("10B filesystem/process extensions", () => {
         "customer.demo",
         "customer.test",
         "diagnostics.ping",
+        "filesystem.delete",
         "filesystem.list",
         "filesystem.read",
+        "filesystem.search",
         "filesystem.write",
         "math.add",
         "math.divide",

@@ -2,13 +2,17 @@
  * filesystem.read — lee un archivo de texto desde el proceso Agent.
  *
  * Hub: executionMode automatic. Esta tool NO confirma.
- * Agent: validación técnica + la misma contención que filesystem.write
- * (`resolveSafePath` / filesystem.root).
+ * PHASE 59: lectura amplia en la máquina (resolveReadablePath).
+ * filesystem.root ya no cerca la lectura; la escritura sigue contenida.
  *
- * TOCTOU: misma limitación que write (ver safe-path.ts).
+ * Binarios / formatos sin parser: fallo controlado (no se vuelcan al LLM).
  */
 import { lstat, readFile } from "node:fs/promises";
-import { resolveSafePath } from "./safe-path.ts";
+import {
+  isBinaryExtension,
+  sampleLooksBinary,
+} from "./fs-file-kinds.ts";
+import { resolveReadablePath } from "./fs-readable-path.ts";
 import type { AgentTool, ToolResult } from "./types.ts";
 
 /** Límite único: no leer archivos mayores a este tamaño. */
@@ -17,7 +21,7 @@ export const MAX_FILE_READ_BYTES = 1_048_576;
 export const FILESYSTEM_READ_NAME = "filesystem.read";
 
 export const FILESYSTEM_READ_DESCRIPTION =
-  "Lee un archivo de texto en la máquina local (solo lectura).";
+  "Lee un archivo de texto en la máquina local (solo lectura). No requiere carpeta previa.";
 
 export const FILESYSTEM_READ_INPUT_SCHEMA = {
   type: "object",
@@ -29,6 +33,10 @@ export const FILESYSTEM_READ_INPUT_SCHEMA = {
 } as const;
 
 export type FilesystemReadOptions = {
+  /**
+   * Base opcional para rutas relativas (p. ej. cwd del workspace).
+   * No limita rutas absolutas.
+   */
   root?: string;
 };
 
@@ -47,7 +55,7 @@ function nodeErrorCode(err: unknown): string | undefined {
 export function createFilesystemReadTool(
   options: FilesystemReadOptions = {},
 ): AgentTool {
-  const root = options.root;
+  const base = options.root;
 
   return {
     name: FILESYSTEM_READ_NAME,
@@ -67,7 +75,7 @@ export function createFilesystemReadTool(
         return fail("invalid_input", "path no puede estar vacío.");
       }
 
-      const resolved = await resolveSafePath(filePath, root);
+      const resolved = await resolveReadablePath(filePath, base, "file");
       if (!resolved.ok) return resolved.result;
 
       try {
@@ -78,6 +86,9 @@ export function createFilesystemReadTool(
           const code = nodeErrorCode(err);
           if (code === "ENOENT") {
             return fail("file_not_found", "El archivo no existe.");
+          }
+          if (code === "EACCES" || code === "EPERM") {
+            return fail("access_denied", "Sin permiso para leer el archivo.");
           }
           const message =
             err instanceof Error ? err.message : "Error inspeccionando la ruta";
@@ -100,6 +111,13 @@ export function createFilesystemReadTool(
           );
         }
 
+        if (isBinaryExtension(resolved.resolved)) {
+          return fail(
+            "unsupported_format",
+            "Este tipo de archivo no se puede leer como texto. Usa una herramienta especializada si existe (p. ej. Excel).",
+          );
+        }
+
         const bytes = await readFile(resolved.resolved);
         if (bytes.byteLength > MAX_FILE_READ_BYTES) {
           return fail(
@@ -107,6 +125,13 @@ export function createFilesystemReadTool(
             `El archivo supera el límite de ${MAX_FILE_READ_BYTES} bytes.`,
           );
         }
+        if (sampleLooksBinary(bytes)) {
+          return fail(
+            "unsupported_format",
+            "El archivo parece binario; no se envía contenido al modelo.",
+          );
+        }
+
         const content = bytes.toString("utf8");
         return {
           ok: true,
@@ -120,6 +145,9 @@ export function createFilesystemReadTool(
         const code = nodeErrorCode(err);
         if (code === "ENOENT") {
           return fail("file_not_found", "El archivo no existe.");
+        }
+        if (code === "EACCES" || code === "EPERM") {
+          return fail("access_denied", "Sin permiso para leer el archivo.");
         }
         if (code === "EISDIR") {
           return fail(

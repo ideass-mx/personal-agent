@@ -146,10 +146,10 @@ describe("filesystem.list", () => {
     if (!obj.ok) assert.equal(obj.error.code, "invalid_input");
   });
 
-  it("sin root rechaza traversal ..", async () => {
-    const result = await filesystemListTool.execute({ path: "../outside" }, ctx);
-    assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.error.code, "path_not_allowed");
+  it("PHASE 59: sin root permite resolver traversal relativo si existe", async () => {
+    const result = await filesystemListTool.execute({ path: ".." }, ctx);
+    // ".." desde cwd suele existir → listado OK (lectura amplia).
+    assert.equal(result.ok, true);
   });
 });
 
@@ -188,7 +188,7 @@ describe("filesystem.list con root", () => {
     }
   });
 
-  it("rechaza fuera del root y traversal", async () => {
+  it("PHASE 59: list fuera del root permitido", async () => {
     const base = await mkdtemp(path.join(tmpdir(), "pa-ls-out-"));
     const root = path.join(base, "ws");
     await mkdir(root);
@@ -200,28 +200,25 @@ describe("filesystem.list con root", () => {
     const tool = createFilesystemListTool({ root });
 
     const absOut = await tool.execute({ path: outside }, ctx);
-    assert.equal(absOut.ok, false);
-    if (!absOut.ok) {
-      assert.equal(absOut.error.code, "path_outside_root");
-      assert.doesNotMatch(absOut.error.message, /secreto-list/);
+    assert.equal(absOut.ok, true);
+    if (absOut.ok) {
+      assert.ok(asList(absOut).entries.some((e) => e.name === "secret.txt"));
     }
 
     const trav = await tool.execute({ path: "../fuera" }, ctx);
-    assert.equal(trav.ok, false);
-    if (!trav.ok) assert.equal(trav.error.code, "path_outside_root");
+    assert.equal(trav.ok, true);
 
     const sib = await tool.execute({ path: sibling }, ctx);
-    assert.equal(sib.ok, false);
-    if (!sib.ok) assert.equal(sib.error.code, "path_outside_root");
+    assert.equal(sib.ok, true);
   });
 
-  it("symlink de directorio: fuera rechazado; dentro permitido", async () => {
+  it("PHASE 59: symlink de directorio hacia fuera se permite listar", async () => {
     const base = await mkdtemp(path.join(tmpdir(), "pa-ls-sy-"));
     const root = path.join(base, "ws");
     await mkdir(root);
     const outsideDir = path.join(base, "out-dir");
     await mkdir(outsideDir);
-    await writeFile(path.join(outsideDir, "leak.txt"), "no-listar", "utf8");
+    await writeFile(path.join(outsideDir, "leak.txt"), "visible", "utf8");
     await mkdir(path.join(root, "inside"));
     await writeFile(path.join(root, "inside", "ok.txt"), "ok", "utf8");
     const tool = createFilesystemListTool({ root });
@@ -229,10 +226,9 @@ describe("filesystem.list con root", () => {
     await skipIfNoSymlink(async () => {
       await symlink(outsideDir, path.join(root, "link-out"));
       const out = await tool.execute({ path: "link-out" }, ctx);
-      assert.equal(out.ok, false);
-      if (!out.ok) {
-        assert.equal(out.error.code, "symlink_not_allowed");
-        assert.doesNotMatch(JSON.stringify(out), /no-listar/);
+      assert.equal(out.ok, true);
+      if (out.ok) {
+        assert.ok(asList(out).entries.some((e) => e.name === "leak.txt"));
       }
 
       await symlink(path.join(root, "inside"), path.join(root, "link-in"));

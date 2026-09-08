@@ -19,9 +19,11 @@ const TOOL_NAME_RE = /^[a-z][a-z0-9._-]{0,127}$/i;
  */
 export const DEFAULT_TOOL_POLICY: ToolPolicy = Object.freeze({
   "agent.echo": "automatic",
+  "filesystem.search": "automatic",
   "filesystem.read": "automatic",
   "filesystem.list": "automatic",
   "filesystem.write": "confirm",
+  "filesystem.delete": "confirm",
   "process.execute": "confirm",
   "math.add": "automatic",
   "math.subtract": "automatic",

@@ -222,12 +222,12 @@ describe("Hub → Agent filesystem.read (automatic + MCP)", () => {
     }
   });
 
-  it("fuera del root: fail, sin contenido, archivo intacto", async () => {
+  it("PHASE 59: fuera del root lectura permitida (ALLOWED)", async () => {
     const base = await mkdtemp(path.join(tmpdir(), "pa-hub-rdout-"));
     const root = path.join(base, "ws");
     await mkdir(root);
     const outside = path.join(base, "secreto.txt");
-    await writeFile(outside, "no-exponer", "utf8");
+    await writeFile(outside, "contenido-fuera", "utf8");
 
     const { client, close } = await connectAgentStdioClient({
       env: { [AGENT_FILESYSTEM_ROOT_ENV]: root },
@@ -239,6 +239,7 @@ describe("Hub → Agent filesystem.read (automatic + MCP)", () => {
       registerRemote(tools, FILESYSTEM_READ, executor);
       const waiter = createTestWaiter();
       const memory = createFakeMemory();
+      let sawResult = false;
       const llm = createScriptedLLM([
         () => [
           {
@@ -254,11 +255,11 @@ describe("Hub → Agent filesystem.read (automatic + MCP)", () => {
           assert.ok(last && Array.isArray(last.content));
           const block = last.content.find((b) => b.type === "tool_result");
           assert.ok(block && block.type === "tool_result");
-          assert.equal(block.isError, true);
-          assert.match(block.content, /path_outside_root/);
-          assert.doesNotMatch(block.content, /no-exponer/);
+          assert.equal(block.isError, false);
+          assert.match(block.content, /contenido-fuera/);
+          sawResult = true;
           return [
-            { type: "text_delta", text: "rechazado" },
+            { type: "text_delta", text: "leido" },
             { type: "done" },
           ];
         },
@@ -277,8 +278,7 @@ describe("Hub → Agent filesystem.read (automatic + MCP)", () => {
         },
       );
       assert.equal(counted.calls, 1);
-      assert.equal(existsSync(outside), true);
-      assert.equal(readFileSync(outside, "utf8"), "no-exponer");
+      assert.equal(sawResult, true);
     } finally {
       await close();
     }

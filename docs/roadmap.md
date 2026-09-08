@@ -52,8 +52,10 @@ Principio: cada fase termina en algo usable a diario.
   `confirm`; misma cola COM; no crea workbooks ni hojas).
   13F endurece el contrato Office (policy, namespace, A1, workbook,
   fórmulas, lock COM, timeout MCP > COM, fail-closed).
-  Falta: filesystem.delete; instaladores nativos por OS; carga dinámica
-  de extensiones (fuera de alcance; Agent extensions siguen estáticas).
+  Falta: instaladores nativos por OS; carga dinámica
+  de extensiones (fuera de alcance; Agent extensions siguen estáticas);
+  parsers PDF/DOCX dedicados. PHASE 59 (Local Computer Intelligence):
+  `filesystem.search` + `filesystem.delete` con lectura amplia.
 - **Fase 5 · Cerebro maduro** — memoria vectorial, proactividad,
   confirmaciones destructivas end-to-end.
 

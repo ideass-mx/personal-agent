@@ -61,26 +61,30 @@ class AgentCapabilityUxTest {
     @Test
     fun requiresConfirmation_writeAndExecuteAndExcelWrite() {
         assertTrue(AgentCapabilityUx.presentationFor("filesystem.write")!!.requiresConfirmation)
+        assertTrue(AgentCapabilityUx.presentationFor("filesystem.delete")!!.requiresConfirmation)
         assertTrue(AgentCapabilityUx.presentationFor("process.execute")!!.requiresConfirmation)
         assertTrue(AgentCapabilityUx.presentationFor("office.excel.write")!!.requiresConfirmation)
     }
 
     @Test
     fun requiresConfirmation_readOnly_false() {
+        assertFalse(AgentCapabilityUx.presentationFor("filesystem.search")!!.requiresConfirmation)
         assertFalse(AgentCapabilityUx.presentationFor("filesystem.read")!!.requiresConfirmation)
         assertFalse(AgentCapabilityUx.presentationFor("filesystem.list")!!.requiresConfirmation)
         assertFalse(AgentCapabilityUx.presentationFor("office.excel.read")!!.requiresConfirmation)
     }
 
     @Test
-    fun mvpCapabilities_showsExactlySix() {
+    fun mvpCapabilities_showsExactlyEight() {
         val caps = AgentCapabilityUx.mvpCapabilities()
-        assertEquals(6, caps.size)
+        assertEquals(8, caps.size)
         assertEquals(
             setOf(
+                "filesystem.search",
                 "filesystem.read",
                 "filesystem.list",
                 "filesystem.write",
+                "filesystem.delete",
                 "process.execute",
                 "office.excel.read",
                 "office.excel.write",

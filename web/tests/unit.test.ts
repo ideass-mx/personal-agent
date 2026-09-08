@@ -17,7 +17,7 @@ import { toWsUrl } from "../src/websocket/HubSocket.ts";
 
 describe("capabilities", () => {
   it("maps six MVP capabilities", () => {
-    assert.equal(MVP_CAPABILITIES.length, 6);
+    assert.equal(MVP_CAPABILITIES.length, 8);
     assert.equal(labelForTool("filesystem.write"), "Escribir archivos");
     assert.equal(capabilityFor("process.execute")?.requiresConfirmation, true);
     assert.equal(isHiddenTool("math.add"), true);

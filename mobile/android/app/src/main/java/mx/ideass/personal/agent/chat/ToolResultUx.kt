@@ -50,9 +50,11 @@ object ToolResultUx {
         val excelNote = ToolActivityUx.excelWindowsNote(toolName)
 
         val body = when (toolName) {
+            "filesystem.search" -> summarizeSearch(compact)
             "filesystem.read" -> summarizeRead(compact)
             "filesystem.list" -> summarizeList(compact)
             "filesystem.write" -> summarizeWrite(compact)
+            "filesystem.delete" -> "Se eliminó el archivo."
             "process.execute" -> summarizeProcess(compact)
             "office.excel.read" -> "Se consultó información de Excel."
             "office.excel.write" -> "Se modificó información en Excel."
@@ -69,6 +71,17 @@ object ToolResultUx {
                 append("\n\n")
                 append(excelNote)
             }
+        }
+    }
+
+    private fun summarizeSearch(json: String): String {
+        val count = Regex(""""resultCount"\s*:\s*(\d+)""").find(json)?.groupValues?.getOrNull(1)
+        val names = Regex(""""name"\s*:\s*"([^"]+)"""").findAll(json).map { it.groupValues[1] }.toList()
+        return when {
+            !count.isNullOrBlank() && names.isNotEmpty() ->
+                "Encontrados $count: ${names.take(5).joinToString(", ")}${if (names.size > 5) "…" else ""}"
+            !count.isNullOrBlank() -> "Búsqueda completada ($count resultados)."
+            else -> "Búsqueda de archivos completada."
         }
     }
 

@@ -213,7 +213,7 @@ describe("Hub → Agent filesystem.list (automatic + MCP)", () => {
     }
   });
 
-  it("fuera del root: fail sin listar el directorio ajeno", async () => {
+  it("PHASE 59: fuera del root list permitido (ALLOWED)", async () => {
     const base = await mkdtemp(path.join(tmpdir(), "pa-hub-lsout-"));
     const root = path.join(base, "ws");
     await mkdir(root);
@@ -241,6 +241,7 @@ describe("Hub → Agent filesystem.list (automatic + MCP)", () => {
       );
       const waiter = createTestWaiter();
       const memory = createFakeMemory();
+      let sawResult = false;
       const llm = createScriptedLLM([
         () => [
           {
@@ -256,11 +257,11 @@ describe("Hub → Agent filesystem.list (automatic + MCP)", () => {
           assert.ok(last && Array.isArray(last.content));
           const block = last.content.find((b) => b.type === "tool_result");
           assert.ok(block && block.type === "tool_result");
-          assert.equal(block.isError, true);
-          assert.match(block.content, /path_outside_root/);
-          assert.doesNotMatch(block.content, /oculto\.txt|no-listar/);
+          assert.equal(block.isError, false);
+          assert.match(block.content, /oculto\.txt/);
+          sawResult = true;
           return [
-            { type: "text_delta", text: "rechazado" },
+            { type: "text_delta", text: "listado" },
             { type: "done" },
           ];
         },
@@ -279,6 +280,7 @@ describe("Hub → Agent filesystem.list (automatic + MCP)", () => {
         },
       );
       assert.equal(counted.calls, 1);
+      assert.equal(sawResult, true);
       assert.equal(existsSync(path.join(outside, "oculto.txt")), true);
     } finally {
       await close();

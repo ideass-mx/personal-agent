@@ -2,19 +2,17 @@
  * filesystem.list — lista un directorio desde el proceso Agent.
  *
  * Hub: executionMode automatic. Esta tool NO confirma.
- * Agent: resolveSafePath(..., "directory") + readdir. Sin recursión,
- * sin leer contenido de archivos.
- *
- * TOCTOU: misma limitación que read/write (ver safe-path.ts).
+ * PHASE 59: lectura amplia (resolveReadablePath). Sin recursión,
+ * sin leer contenido de archivos. Sin autorización por carpeta.
  */
 import { readdir } from "node:fs/promises";
-import { resolveSafePath } from "./safe-path.ts";
+import { resolveReadablePath } from "./fs-readable-path.ts";
 import type { AgentTool, ToolResult } from "./types.ts";
 
 export const FILESYSTEM_LIST_NAME = "filesystem.list";
 
 export const FILESYSTEM_LIST_DESCRIPTION =
-  "Lista las entradas de un directorio en la máquina local (un nivel, sin contenido).";
+  "Lista las entradas de un directorio en la máquina local (un nivel, sin contenido). No requiere autorización por carpeta.";
 
 export const FILESYSTEM_LIST_INPUT_SCHEMA = {
   type: "object",
@@ -26,6 +24,7 @@ export const FILESYSTEM_LIST_INPUT_SCHEMA = {
 } as const;
 
 export type FilesystemListOptions = {
+  /** Base opcional para rutas relativas. No limita rutas absolutas. */
   root?: string;
 };
 
@@ -66,7 +65,7 @@ function entryType(dirent: {
 export function createFilesystemListTool(
   options: FilesystemListOptions = {},
 ): AgentTool {
-  const root = options.root;
+  const base = options.root;
 
   return {
     name: FILESYSTEM_LIST_NAME,
@@ -86,7 +85,7 @@ export function createFilesystemListTool(
         return fail("invalid_input", "path no puede estar vacío.");
       }
 
-      const resolved = await resolveSafePath(dirPath, root, "directory");
+      const resolved = await resolveReadablePath(dirPath, base, "directory");
       if (!resolved.ok) return resolved.result;
 
       try {
@@ -110,6 +109,9 @@ export function createFilesystemListTool(
             "not_a_directory",
             "La ruta no apunta a un directorio.",
           );
+        }
+        if (code === "EACCES" || code === "EPERM") {
+          return fail("access_denied", "Sin permiso para listar el directorio.");
         }
         const message =
           err instanceof Error ? err.message : "Error listando el directorio";

@@ -22,9 +22,16 @@ data class AgentCapabilityPresentation(
 object AgentCapabilityUx {
     private val byToolName: Map<String, AgentCapabilityPresentation> = listOf(
         AgentCapabilityPresentation(
+            toolName = "filesystem.search",
+            label = "Buscar archivos",
+            description = "Permite al agente localizar archivos en tu computadora por nombre, tipo, fecha o contenido.",
+            category = AgentCapabilityCategory.Files,
+            requiresConfirmation = false,
+        ),
+        AgentCapabilityPresentation(
             toolName = "filesystem.read",
             label = "Leer archivos",
-            description = "Permite al agente consultar archivos dentro del espacio autorizado.",
+            description = "Permite al agente consultar el contenido de archivos en tu computadora.",
             category = AgentCapabilityCategory.Files,
             requiresConfirmation = false,
         ),
@@ -39,6 +46,13 @@ object AgentCapabilityUx {
             toolName = "filesystem.write",
             label = "Escribir archivos",
             description = "Permite al agente crear o modificar archivos.",
+            category = AgentCapabilityCategory.Files,
+            requiresConfirmation = true,
+        ),
+        AgentCapabilityPresentation(
+            toolName = "filesystem.delete",
+            label = "Eliminar archivos",
+            description = "Permite al agente eliminar archivos (siempre con tu confirmación).",
             category = AgentCapabilityCategory.Files,
             requiresConfirmation = true,
         ),

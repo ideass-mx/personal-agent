@@ -12,9 +12,11 @@ const repoRoot = path.resolve(
 
 const EXPECTED_TOOLS = [
   "agent.echo",
+  "filesystem.search",
   "filesystem.read",
   "filesystem.list",
   "filesystem.write",
+  "filesystem.delete",
   "process.execute",
   "math.add",
   "math.subtract",
@@ -29,6 +31,7 @@ const EXPECTED_TOOLS = [
 
 const CONFIRM = new Set([
   "filesystem.write",
+  "filesystem.delete",
   "process.execute",
   "office.excel.write",
 ]);
@@ -46,8 +49,8 @@ describe("PHASE 29 E2E tool execution (audit)", () => {
     assert.doesNotMatch(doc, /Control Plane/i);
   });
 
-  it("policy: 14 tools; mutating confirm; deny-by-default", () => {
-    assert.equal(Object.keys(DEFAULT_TOOL_POLICY).length, 14);
+  it("policy: 16 tools; mutating confirm; deny-by-default", () => {
+    assert.equal(Object.keys(DEFAULT_TOOL_POLICY).length, 16);
     for (const name of EXPECTED_TOOLS) {
       assert.ok(name in DEFAULT_TOOL_POLICY, name);
       const mode = DEFAULT_TOOL_POLICY[name];

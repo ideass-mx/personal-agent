@@ -26,7 +26,7 @@ async function skipIfNoSymlink(fn: () => Promise<void>): Promise<void> {
 }
 
 describe("7G filesystem containment audit", () => {
-  it("rechaza ../, ../../, ../../../ y root/../outside", async () => {
+  it("PHASE 59: lectura amplia fuera del root; escritura sigue contenida", async () => {
     const base = await mkdtemp(path.join(tmpdir(), "pa-7g-trav-"));
     const root = path.join(base, "ws");
     await mkdir(root);
@@ -35,28 +35,31 @@ describe("7G filesystem containment audit", () => {
     const write = createFilesystemWriteTool({ root });
     const list = createFilesystemListTool({ root });
 
-    for (const p of ["../fuera.txt", "../../fuera.txt", "../../../fuera.txt"]) {
+    for (const p of ["../fuera.txt"]) {
       const r = await read.execute({ path: p }, ctx);
-      assert.equal(r.ok, false, p);
-      if (!r.ok) assert.equal(r.error.code, "path_outside_root");
+      assert.equal(r.ok, true, p);
+      if (r.ok) {
+        assert.equal((r.content as { content: string }).content, "secret");
+      }
       const w = await write.execute({ path: p, content: "x" }, ctx);
       assert.equal(w.ok, false, p);
-      const l = await list.execute({ path: p }, ctx);
-      assert.equal(l.ok, false, p);
+      if (!w.ok) assert.equal(w.error.code, "path_outside_root");
     }
+
+    const absList = await list.execute({ path: base }, ctx);
+    assert.equal(absList.ok, true);
 
     await mkdir(path.join(root, "sub"));
     const mix = await read.execute(
       { path: path.join("sub", "..", "..", "fuera.txt") },
       ctx,
     );
-    assert.equal(mix.ok, false);
-    if (!mix.ok) assert.equal(mix.error.code, "path_outside_root");
+    assert.equal(mix.ok, true);
     assert.equal(existsSync(path.join(base, "fuera.txt")), true);
     assert.equal(await readFile(path.join(base, "fuera.txt"), "utf8"), "secret");
   });
 
-  it("rechaza absoluto fuera, hermano y slash final de prefijo", async () => {
+  it("escritura rechaza absoluto fuera; lectura lo permite", async () => {
     const base = await mkdtemp(path.join(tmpdir(), "pa-7g-abs-"));
     const root = path.join(base, "ws");
     await mkdir(root);
@@ -64,12 +67,21 @@ describe("7G filesystem containment audit", () => {
     await mkdir(sibling);
     await writeFile(path.join(sibling, "x.txt"), "no", "utf8");
     const read = createFilesystemReadTool({ root });
+    const write = createFilesystemWriteTool({ root });
     const outside = await read.execute(
       { path: path.join(base, "ws-secret", "x.txt") },
       ctx,
     );
-    assert.equal(outside.ok, false);
-    if (!outside.ok) assert.equal(outside.error.code, "path_outside_root");
+    assert.equal(outside.ok, true);
+    if (outside.ok) {
+      assert.equal((outside.content as { content: string }).content, "no");
+    }
+    const w = await write.execute(
+      { path: path.join(base, "ws-secret", "y.txt"), content: "x" },
+      ctx,
+    );
+    assert.equal(w.ok, false);
+    if (!w.ok) assert.equal(w.error.code, "path_outside_root");
     assert.equal(
       classifyContainment(path.join(sibling, "x.txt"), root),
       "outside",
@@ -107,7 +119,7 @@ describe("7G filesystem containment audit", () => {
     const list = createFilesystemListTool({ root });
     const asFile = await read.execute({ path: root }, ctx);
     assert.equal(asFile.ok, false);
-    if (!asFile.ok) assert.equal(asFile.error.code, "path_not_allowed");
+    if (!asFile.ok) assert.equal(asFile.error.code, "not_a_file");
     const w = await write.execute({ path: ".", content: "x" }, ctx);
     assert.equal(w.ok, false);
     const ls = await list.execute({ path: "." }, ctx);
@@ -128,7 +140,7 @@ describe("7G filesystem containment audit", () => {
     if (!lFile.ok) assert.equal(lFile.error.code, "not_a_directory");
   });
 
-  it("symlink intermedio y destino fuera se rechazan; dentro se permite", async () => {
+  it("PHASE 59: symlink de lectura fuera permitido; write sigue contenida", async () => {
     const base = await mkdtemp(path.join(tmpdir(), "pa-7g-sy-"));
     const root = path.join(base, "ws");
     await mkdir(root);
@@ -138,19 +150,28 @@ describe("7G filesystem containment audit", () => {
     await mkdir(path.join(root, "in"));
     await writeFile(path.join(root, "in", "ok.txt"), "ok", "utf8");
     const read = createFilesystemReadTool({ root });
+    const write = createFilesystemWriteTool({ root });
     await skipIfNoSymlink(async () => {
       await symlink(outsideDir, path.join(root, "link-out"));
       const mid = await read.execute(
         { path: path.join("link-out", "leak.txt") },
         ctx,
       );
-      assert.equal(mid.ok, false);
-      if (!mid.ok) assert.equal(mid.error.code, "symlink_not_allowed");
+      assert.equal(mid.ok, true);
+      if (mid.ok) {
+        assert.equal((mid.content as { content: string }).content, "leak");
+      }
 
       await symlink(path.join(outsideDir, "leak.txt"), path.join(root, "file-out"));
       const destFile = await read.execute({ path: "file-out" }, ctx);
-      assert.equal(destFile.ok, false);
-      if (!destFile.ok) assert.equal(destFile.error.code, "symlink_not_allowed");
+      assert.equal(destFile.ok, true);
+
+      const w = await write.execute(
+        { path: path.join("link-out", "evil.txt"), content: "x" },
+        ctx,
+      );
+      assert.equal(w.ok, false);
+      if (!w.ok) assert.equal(w.error.code, "symlink_not_allowed");
 
       await symlink(path.join(root, "in", "ok.txt"), path.join(root, "alias.txt"));
       const inn = await read.execute({ path: "alias.txt" }, ctx);

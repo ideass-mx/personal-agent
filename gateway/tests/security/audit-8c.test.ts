@@ -342,18 +342,20 @@ describe("8C arquitectura Hub ↔ Agent", () => {
     assert.doesNotMatch(src, /while\s*\(.*retry/);
   });
 
-  it("read/write/list comparten resolveSafePath", () => {
-    for (const name of [
-      "filesystem-read.ts",
-      "filesystem-write.ts",
-      "filesystem-list.ts",
-    ]) {
+  it("PHASE 59: read/list usan resolveReadablePath; write usa resolveSafePath", () => {
+    for (const name of ["filesystem-read.ts", "filesystem-list.ts"]) {
       const src = readFileSync(
         path.join(repoRoot, "node/src/tools", name),
         "utf8",
       );
-      assert.match(src, /resolveSafePath/, name);
+      assert.match(src, /resolveReadablePath/, name);
+      assert.doesNotMatch(src, /resolveSafePath/, name);
     }
+    const writeSrc = readFileSync(
+      path.join(repoRoot, "node/src/tools/filesystem-write.ts"),
+      "utf8",
+    );
+    assert.match(writeSrc, /resolveSafePath/);
   });
 
   it("process.execute spawn: shell false y stdio no hereda MCP stdout", () => {

@@ -88,13 +88,13 @@ describe("filesystem.read", () => {
     if (!result.ok) assert.equal(result.error.code, "not_a_file");
   });
 
-  it("sin root rechaza traversal ..", async () => {
+  it("PHASE 59: sin root permite traversal relativo (file_not_found si no existe)", async () => {
     const result = await filesystemReadTool.execute(
-      { path: "../outside.txt" },
+      { path: "../outside-no-existe-pa59.txt" },
       ctx,
     );
     assert.equal(result.ok, false);
-    if (!result.ok) assert.equal(result.error.code, "path_not_allowed");
+    if (!result.ok) assert.equal(result.error.code, "file_not_found");
   });
 
   it("archivo mayor que MAX_FILE_READ_BYTES es file_too_large", async () => {

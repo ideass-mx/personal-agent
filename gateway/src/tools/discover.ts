@@ -58,9 +58,11 @@ export function mcpTimeoutMsForProcessExecute(input: unknown): number {
 }
 
 const REQUIRED_AGENT_TOOLS = [
+  "filesystem.search",
   "filesystem.read",
   "filesystem.list",
   "filesystem.write",
+  "filesystem.delete",
   "process.execute",
 ] as const;
 

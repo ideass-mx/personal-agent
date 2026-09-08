@@ -42,10 +42,10 @@ Policy de datos: `DEFAULT_TOOL_POLICY` / `AgentDefinition.toolPolicy`.
 
 | Tool | Decisión |
 |------|----------|
-| `filesystem.read` / `filesystem.list` | ALLOWED |
+| `filesystem.search` / `filesystem.read` / `filesystem.list` | ALLOWED |
 | `office.excel.read` | ALLOWED |
 | `agent.echo`, `math.*`, `system.info`, `diagnostics.ping`, `customer.demo` | ALLOWED |
-| `filesystem.write` | CONFIRMATION_REQUIRED |
+| `filesystem.write` / `filesystem.delete` | CONFIRMATION_REQUIRED |
 | `office.excel.write` | CONFIRMATION_REQUIRED |
 | `process.execute` | CONFIRMATION_REQUIRED |
 | `customer.test` (omitida) | DENIED |
