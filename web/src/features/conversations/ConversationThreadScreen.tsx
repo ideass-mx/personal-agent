@@ -33,11 +33,19 @@ export function ConversationScreen() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, toolBanner]);
+  }, [messages, toolBanner, busy]);
 
   const isBlank = messages.length === 0;
   const canSend =
     wsStatus === "authenticated" && draft.trim().length > 0 && !busy;
+  const showThinkingPulse =
+    busy &&
+    !messages.some(
+      (m) =>
+        m.role === "assistant" &&
+        m.streaming === true &&
+        m.text.trim().length > 0,
+    );
 
   useLayoutEffect(() => {
     const el = textareaRef.current;
@@ -165,7 +173,9 @@ export function ConversationScreen() {
                   <div key={m.id} className="msg agent" data-agent="personal">
                     <p>
                       {m.text}
-                      {m.streaming ? "▍" : ""}
+                      {m.streaming && m.text.trim().length > 0 ? (
+                        <span className="stream-caret" aria-hidden />
+                      ) : null}
                     </p>
                   </div>
                 ) : (
@@ -174,6 +184,16 @@ export function ConversationScreen() {
                   </div>
                 ),
               )}
+              {showThinkingPulse ? (
+                <div
+                  className="msg agent thinking"
+                  data-agent="personal"
+                  aria-live="polite"
+                  aria-label="Pensando"
+                >
+                  <span className="thinking-pulse" aria-hidden />
+                </div>
+              ) : null}
               <div ref={endRef} />
             </div>
           </div>
