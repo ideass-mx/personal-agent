@@ -11,6 +11,7 @@ import {
   resolveReadablePath,
 } from "./fs-readable-path.ts";
 import { isWindowsDriveRoot } from "./fs-windows-path.ts";
+import { unwrapToolBusinessInput } from "./fs-user-paths.ts";
 import type { AgentTool, ToolResult } from "./types.ts";
 
 export const FILESYSTEM_LIST_NAME = "filesystem.list";
@@ -81,10 +82,11 @@ export function createFilesystemListTool(
     inputSchema: FILESYSTEM_LIST_INPUT_SCHEMA,
     executionMode: "automatic",
     async execute(input): Promise<ToolResult> {
-      if (typeof input !== "object" || input === null) {
+      const business = unwrapToolBusinessInput(input);
+      if (typeof business !== "object" || business === null) {
         return fail("invalid_input", "Se espera { path: string }.");
       }
-      const rec = input as { path?: unknown };
+      const rec = business as { path?: unknown };
       if (typeof rec.path !== "string") {
         return fail("invalid_input", "Se espera { path: string }.");
       }

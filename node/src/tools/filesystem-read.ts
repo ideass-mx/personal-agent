@@ -13,6 +13,7 @@ import {
   sampleLooksBinary,
 } from "./fs-file-kinds.ts";
 import { resolveReadablePath } from "./fs-readable-path.ts";
+import { unwrapToolBusinessInput } from "./fs-user-paths.ts";
 import type { AgentTool, ToolResult } from "./types.ts";
 
 /** Límite único: no leer archivos mayores a este tamaño. */
@@ -63,10 +64,11 @@ export function createFilesystemReadTool(
     inputSchema: FILESYSTEM_READ_INPUT_SCHEMA,
     executionMode: "automatic",
     async execute(input): Promise<ToolResult> {
-      if (typeof input !== "object" || input === null) {
+      const business = unwrapToolBusinessInput(input);
+      if (typeof business !== "object" || business === null) {
         return fail("invalid_input", "Se espera { path: string }.");
       }
-      const rec = input as { path?: unknown };
+      const rec = business as { path?: unknown };
       if (typeof rec.path !== "string") {
         return fail("invalid_input", "Se espera { path: string }.");
       }

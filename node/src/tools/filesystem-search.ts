@@ -25,6 +25,7 @@ import {
   resolveReadablePath,
 } from "./fs-readable-path.ts";
 import { isWindowsDriveRoot, normalizeWindowsFsPath } from "./fs-windows-path.ts";
+import { unwrapToolBusinessInput } from "./fs-user-paths.ts";
 import type { AgentTool, ToolResult } from "./types.ts";
 
 export const FILESYSTEM_SEARCH_NAME = "filesystem.search";
@@ -194,13 +195,14 @@ export function createFilesystemSearchTool(
     inputSchema: FILESYSTEM_SEARCH_INPUT_SCHEMA,
     executionMode: "automatic",
     async execute(input): Promise<ToolResult> {
-      if (typeof input !== "object" || input === null) {
+      const business = unwrapToolBusinessInput(input);
+      if (typeof business !== "object" || business === null) {
         return fail(
           "invalid_input",
           "Se espera un objeto con query y/o filtros.",
         );
       }
-      const rec = input as Record<string, unknown>;
+      const rec = business as Record<string, unknown>;
 
       const query =
         typeof rec.query === "string" ? rec.query.trim() : "";

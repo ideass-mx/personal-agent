@@ -1,6 +1,25 @@
 # PHASE 59 — Local Computer Intelligence
 
-**Estado:** PARTIAL (fix Windows drive-root + timeout MCP search; falta E2E Windows real)  
+## Hotfix (2026-09-07 evening)
+
+Síntoma: el agente decía que “listar falla en todos los casos” e inventaba
+Hub/confirmación/admin.
+
+Causas reales:
+1. El schema anunciado al LLM era el envelope MCP (`requestId/context/input`),
+   no `{ path }` → llamadas mal formadas → `invalid_input`.
+2. PHASE 64 convertía todo error de Node en `execution_failed` / “La ejecución
+   falló.” → el modelo no veía `file_not_found` / `access_denied`.
+3. Rutas relativas (`Desktop`, `Documents`) se resolvían contra el cwd del
+   Node (instalación), no el perfil del usuario.
+
+Mitigación:
+- Discovery sustituye envelope → business schemas (`business-schemas.ts`)
+- `mapToolError` pasa códigos de dominio al LLM (sin secretos)
+- Atajos `Desktop`/`Documents`/`~`/`%USERPROFILE%` + unwrap de envelope anidado
+- Prompt: lectura no pide confirmación ni admin
+
+**Estado:** PARTIAL (fix Windows drive-root + timeout MCP search + schema/errores; falta E2E Windows real)  
 **Fecha:** 2026-09-07  
 
 ## Hotfix (2026-09-07)

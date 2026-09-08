@@ -101,8 +101,35 @@ function mapToolError(
   if (/transport/i.test(code)) {
     return failStatus(requestId, "unavailable", "transport_error", resolution);
   }
-  // Client-safe: never echo raw tool error message (may contain paths).
-  return failStatus(requestId, "failed", "execution_failed", resolution);
+  // Errores de dominio del Node (filesystem.*, etc.): el LLM necesita el
+  // código real (file_not_found, access_denied, invalid_input…). Sin secretos.
+  return {
+    requestId,
+    status: "failed",
+    error: {
+      code: sanitizeDomainErrorCode(code),
+      message: sanitizeDomainErrorMessage(result.error.message),
+    },
+    resolution,
+  };
+}
+
+const DOMAIN_ERROR_CODE_RE =
+  /^[a-z][a-z0-9_]{0,63}$/;
+
+function sanitizeDomainErrorCode(code: string): string {
+  if (DOMAIN_ERROR_CODE_RE.test(code) && code !== "remote_tool_error") {
+    return code;
+  }
+  return "execution_failed";
+}
+
+function sanitizeDomainErrorMessage(message: string): string {
+  let out = message
+    .replace(/\b(sk-[a-zA-Z0-9_-]+|HUB_TOKEN|api[_-]?key\s*[:=]\s*\S+)/gi, "[redacted]")
+    .replace(/\bBearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [redacted]");
+  if (out.length > 480) out = `${out.slice(0, 480)}…`;
+  return out.trim().length > 0 ? out : EXECUTION_SAFE_MESSAGES.execution_failed;
 }
 
 function toToolResult(exec: CapabilityExecutionResult): ToolResult {

@@ -14,6 +14,7 @@ import {
   WINDOWS_DRIVE_ROOT_FALLBACK_NAMES,
   windowsDriveRootReadCandidates,
 } from "./fs-windows-path.ts";
+import { expandUserPathShortcuts } from "./fs-user-paths.ts";
 import { readdir } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 
@@ -30,10 +31,11 @@ function nodeErrorCode(err: unknown): string | undefined {
 }
 
 function preparePathInput(rawPath: string): string {
-  if (process.platform === "win32" || looksWindowsPath(rawPath)) {
-    return normalizeWindowsFsPath(rawPath);
+  const expanded = expandUserPathShortcuts(rawPath);
+  if (process.platform === "win32" || looksWindowsPath(expanded)) {
+    return normalizeWindowsFsPath(expanded);
   }
-  return rawPath;
+  return expanded;
 }
 
 /**

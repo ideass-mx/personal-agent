@@ -23,12 +23,18 @@ import {
   GENERIC_INPUT_SCHEMA,
   sanitizeDiscoveredInputSchema,
 } from "./schema-sanitize.ts";
+import { resolveLlmInputSchema } from "./business-schemas.ts";
 
 export { GENERIC_INPUT_SCHEMA, sanitizeDiscoveredInputSchema };
 export {
   SCHEMA_FALLBACK_KEY,
   isSchemaFallback,
 } from "./schema-sanitize.ts";
+export {
+  BUSINESS_TOOL_INPUT_SCHEMAS,
+  looksLikeRemoteEnvelopeSchema,
+  resolveLlmInputSchema,
+} from "./business-schemas.ts";
 
 const PROCESS_EXECUTE_DEFAULT_TIMEOUT_MS = 30_000;
 const PROCESS_EXECUTE_MIN_TIMEOUT_MS = 1_000;
@@ -183,7 +189,8 @@ export async function registerDiscoveredAgentTools(
   for (const tool of listed.tools) {
     const executionMode = policy[tool.name];
     if (executionMode === undefined) continue;
-    const sanitized = sanitizeDiscoveredInputSchema(tool.inputSchema);
+    const forLlm = resolveLlmInputSchema(tool.name, tool.inputSchema);
+    const sanitized = sanitizeDiscoveredInputSchema(forLlm);
     registry.register(
       createRemoteAgentTool({
         name: tool.name,

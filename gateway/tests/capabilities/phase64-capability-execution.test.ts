@@ -312,6 +312,40 @@ describe("PHASE 64 CapabilityExecutor", () => {
     assert.doesNotMatch(result.error!.message, /secret|apiKey|sk-live|\.pem/i);
   });
 
+  it("errores de dominio filesystem llegan al LLM (código real)", async () => {
+    const index = createCapabilityIndex();
+    index.upsertDescriptor({ id: "filesystem.list" });
+    index.registerImplementation({
+      capabilityId: "filesystem.list",
+      toolName: "filesystem.list",
+      executionTargetId: "node-local",
+      implementationKind: "native",
+    });
+    const tools = new ToolRegistry();
+    tools.register(
+      fakeTool("filesystem.list", async () => ({
+        ok: false,
+        error: {
+          code: "file_not_found",
+          message: "El directorio no existe.",
+        },
+      })),
+    );
+    const executor = createCapabilityExecutor({
+      index,
+      tools,
+      policy: { "filesystem.list": "automatic" },
+    });
+    const result = await executor.execute({
+      capabilityId: "filesystem.list",
+      input: { path: "C:\\nope" },
+      context: { conversationId: "c1" },
+    });
+    assert.equal(result.status, "failed");
+    assert.equal(result.error?.code, "file_not_found");
+    assert.match(result.error!.message, /directorio no existe/i);
+  });
+
   it("Test 10: Artifact passthrough sin storage.key", async () => {
     const index = createCapabilityIndex();
     index.upsertDescriptor({ id: "demo.echo" });
