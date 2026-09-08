@@ -43,11 +43,11 @@ function dto(partial: Partial<SetupStatusDto>): SetupStatusDto {
 }
 
 describe("setup-flow", () => {
-  it("AGENT_READY maps to llm_intro (no premature agent_ready)", () => {
-    assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "llm_intro");
+  it("AGENT_READY maps to hardware (local-first; no premature agent_ready)", () => {
+    assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "hardware");
     assert.equal(
       stepFromStatus(dto({ state: "INSTALLED", installationReady: true })),
-      "llm_intro",
+      "hardware",
     );
   });
 
@@ -128,7 +128,7 @@ describe("setup-flow", () => {
           llmConfigured: false,
         }),
       ),
-      "llm_intro",
+      "hardware",
     );
     // H: both complete → chat
     assert.equal(
@@ -170,7 +170,7 @@ describe("setup-flow", () => {
     );
   });
 
-  it("READY without llmConfigured forces llm_intro (stale after uninstall)", () => {
+  it("READY without llmConfigured forces hardware (stale after uninstall)", () => {
     assert.equal(
       stepFromStatus(
         dto({
@@ -180,7 +180,7 @@ describe("setup-flow", () => {
           verified: true,
         }),
       ),
-      "llm_intro",
+      "hardware",
     );
   });
 
@@ -200,7 +200,7 @@ describe("setup-flow", () => {
   it("reload preserves mid-flow via status", () => {
     assert.equal(
       stepFromStatus(dto({ state: "LLM_REQUIRED" })),
-      "llm_intro",
+      "hardware",
     );
     assert.equal(
       stepFromStatus(dto({ state: "LLM_CONNECTED", llmConfigured: true })),

@@ -1,9 +1,11 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SegmentedControl, Toggle } from "../../components/controls";
 import { MVP_CAPABILITIES } from "../../lib/capabilities";
 import { useApp } from "../../state/AppContext";
 import type { SettingsSectionId } from "../../types";
 import { TrustedDevicesPanel } from "./TrustedDevicesPanel";
+import { resolveHttpBase } from "../../api/http";
+import { fetchLocalLlmStatus } from "../../api/local-llm";
 
 type NavItem =
   | { kind: "item"; id: SettingsSectionId; label: string }
@@ -13,6 +15,7 @@ const NAV: NavItem[] = [
   { kind: "item", id: "profile", label: "Perfil" },
   { kind: "item", id: "my-agent", label: "Mi agente" },
   { kind: "item", id: "memory", label: "Memoria" },
+  { kind: "item", id: "intelligence", label: "Inteligencia" },
   { kind: "sep" },
   { kind: "item", id: "capabilities", label: "Capacidades" },
   { kind: "item", id: "connections", label: "Conexiones" },
@@ -69,6 +72,28 @@ export function SettingsScreen() {
   } = useApp();
   const [prefs, setPrefs] = useState<UiPrefs>(DEFAULT_PREFS);
   const section = settingsSection;
+  const [localStatus, setLocalStatus] = useState<{
+    ready: boolean;
+    displayName: string;
+    state: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (section !== "intelligence" || !session) return;
+    const base = resolveHttpBase(session);
+    void (async () => {
+      try {
+        const st = await fetchLocalLlmStatus(base, session.token);
+        setLocalStatus({
+          ready: st.ready,
+          displayName: st.model.displayName,
+          state: st.model.state,
+        });
+      } catch {
+        setLocalStatus(null);
+      }
+    })();
+  }, [section, session]);
 
   return (
     <div className="settings-layout" data-agent="personal">
@@ -182,6 +207,33 @@ export function SettingsScreen() {
                 ni «recuerdos» administrables desde la UI.
               </p>
             </div>
+          </Section>
+        ) : null}
+
+        {section === "intelligence" ? (
+          <Section title="Inteligencia">
+            <p className="muted lead">
+              Modelo local por defecto. Los proveedores en la nube son opcionales.
+            </p>
+            <div className="settings-row">
+              <strong>Modelo</strong>
+              <span>{localStatus?.displayName || "Qwen3 4B"}</span>
+            </div>
+            <div className="settings-row">
+              <strong>Estado</strong>
+              <span>
+                {localStatus?.ready
+                  ? "Listo"
+                  : localStatus?.state === "not_installed"
+                    ? "No instalado"
+                    : "Preparando…"}
+              </span>
+            </div>
+            <p className="muted" style={{ marginTop: 12 }}>
+              Motor de inferencia local administrado por Personal Agent (sin
+              Ollama ni claves en la nube). Los proveedores externos son
+              opcionales y no sustituyen el modelo local automáticamente.
+            </p>
           </Section>
         ) : null}
 

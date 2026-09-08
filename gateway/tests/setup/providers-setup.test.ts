@@ -54,18 +54,20 @@ after(() => {
 });
 
 describe("ProviderRegistry", () => {
-  it("lists anthropic available; openai/google not faked", () => {
+  it("lists local + anthropic available; openai/google not faked", () => {
     const list = listProviders();
-    assert.equal(list.length, 3);
+    assert.equal(list.length, 4);
+    assert.equal(isProviderAvailable("local"), true);
     assert.equal(isProviderAvailable("anthropic"), true);
     assert.equal(isProviderAvailable("openai"), false);
     assert.equal(isProviderAvailable("google"), false);
     assert.equal(getProviderDescriptor("openai")?.available, false);
   });
 
-  it("DEFAULT_AGENT_MODEL is claude-sonnet-4-6; Anthropic is the available provider", () => {
+  it("DEFAULT_AGENT_MODEL is claude-sonnet-4-6; local + Anthropic available", () => {
     assert.equal(DEFAULT_AGENT_MODEL, "claude-sonnet-4-6");
     assert.equal(DEFAULT_AGENT_NAME, "Personal Agent");
+    assert.equal(isProviderAvailable("local"), true);
     assert.equal(isProviderAvailable("anthropic"), true);
   });
 });

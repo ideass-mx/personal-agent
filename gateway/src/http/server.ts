@@ -14,9 +14,11 @@ import { mountArtifactHttp } from "./artifact-http.ts";
 import { mountBrowserBootstrapHttp } from "./browser-bootstrap-http.ts";
 import { mountDiagnosticsHttp } from "./diagnostics-http.ts";
 import { mountSetupHttp } from "./setup-http.ts";
+import { mountLocalModelHttp } from "./local-model-http.ts";
 import { mountDevicesHttp } from "./devices-http.ts";
 import { mountDeviceAuthHttp } from "./device-auth-http.ts";
 import { mountIdentityHttp } from "./identity-http.ts";
+import type { LocalModelManager } from "../local-llm/index.ts";
 import {
   isLoopbackRequest,
   isRemoteAccessEnabled,
@@ -87,6 +89,8 @@ export type StartServerExtras = {
   /** PHASE 58 — delivery HTTP de Artifacts. */
   artifacts?: ArtifactManager;
   diagnostics?: SqliteDiagnosticsStore;
+  /** PHASE 61 — manager compartido con LocalProvider. */
+  localModelManager?: LocalModelManager;
 };
 
 function resolveHealth(extras?: StartServerExtras): {
@@ -178,6 +182,11 @@ export function startServer(
 
   mountSetupHttp(app, {
     hubToken: config.hubToken,
+  });
+
+  mountLocalModelHttp(app, {
+    hubToken: config.hubToken,
+    manager: extras?.localModelManager,
   });
 
   mountDevicesHttp(app, {

@@ -21,31 +21,40 @@ import {
   writePersistedProviderApiKey,
 } from "../setup/llm-key.ts";
 import {
+  isAnyLlmConfigured,
   isProviderAvailable,
   listProviders,
   verifyProviderConnectivity,
   type LlmConnectivityResult,
 } from "../providers/registry.ts";
 import { DEFAULT_AGENT_MODEL } from "../agents/definition.ts";
+import {
+  createLocalModelManager,
+  isLocalLlmConfigured,
+} from "../local-llm/index.ts";
 
 function setupStatusPayload() {
   const record = getSetupState();
   const dto = toSetupStatusDto(record);
-  const providerId = record.llmProvider || "anthropic";
-  // Reflect real credential files/env — uninstall may wipe keys while SQLite
-  // still says READY; UI must not treat onboarding as done without a key.
-  const keyOk = hasProviderApiKeyConfigured(providerId);
+  const providerId = (record.llmProvider || "local").toLowerCase();
+  // Reflect real readiness — local model file OR cloud key.
+  const keyOk =
+    providerId === "local"
+      ? isLocalLlmConfigured(createLocalModelManager())
+      : hasProviderApiKeyConfigured(providerId);
+  // Also accept: any LLM ready even if setup_state provider lags.
+  const anyOk = keyOk || isAnyLlmConfigured();
   const staleReadyWithoutKey =
-    !keyOk &&
+    !anyOk &&
     (record.state === SetupStates.READY ||
       record.state === SetupStates.VERIFIED ||
       record.state === SetupStates.LLM_CONNECTED);
   return {
     ...dto,
-    // Stale READY without credential → surface as LLM_REQUIRED for the console.
     state: staleReadyWithoutKey ? SetupStates.LLM_REQUIRED : dto.state,
-    llmConfigured: keyOk,
-    onboardingCompleted: Boolean(dto.onboardingCompleted && keyOk),
+    llmConfigured: anyOk,
+    llmProvider: providerId,
+    onboardingCompleted: Boolean(dto.onboardingCompleted && anyOk),
   };
 }
 
@@ -222,8 +231,18 @@ export function mountSetupHttp(
     const denied = requireSetup(c);
     if (denied) return denied;
     const record0 = getSetupState();
-    const providerId = record0.llmProvider || "anthropic";
-    if (!hasProviderApiKeyConfigured(providerId)) {
+    const providerId = record0.llmProvider || "local";
+    if (providerId === "local") {
+      if (!isLocalLlmConfigured(createLocalModelManager())) {
+        return c.json(
+          httpErrorBody(
+            "llm_not_configured",
+            "Instala el modelo local antes de continuar.",
+          ),
+          400,
+        );
+      }
+    } else if (!hasProviderApiKeyConfigured(providerId)) {
       return c.json(
         httpErrorBody(
           "llm_not_configured",

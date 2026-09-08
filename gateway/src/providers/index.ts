@@ -6,6 +6,7 @@ export {
   isProviderAvailable,
   createLlmProvider,
   verifyProviderConnectivity,
+  isAnyLlmConfigured,
   type LlmProviderId,
   type LlmProviderDescriptor,
   type LlmConnectivityResult,

@@ -83,6 +83,8 @@ Name: "{localappdata}\Ideass\PersonalAgent\config"
 Name: "{localappdata}\Ideass\PersonalAgent\logs"
 Name: "{localappdata}\Ideass\PersonalAgent\data"
 Name: "{localappdata}\Ideass\PersonalAgent\runtime"
+Name: "{localappdata}\Ideass\PersonalAgent\models"
+Name: "{localappdata}\Ideass\PersonalAgent\credentials"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: {#MyAppParams}; WorkingDir: "{app}"

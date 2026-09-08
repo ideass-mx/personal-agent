@@ -1,11 +1,11 @@
 Instalando Personal Agent…
 
 Este asistente solo instala los componentes en tu equipo.
-No configura inteligencia artificial, teléfono ni acceso remoto.
+No solicita claves de servicios externos ni cuentas en la nube.
 
 Después de instalar:
 1. Se abrirá Personal Agent.
-2. Prepararemos tu agente automáticamente.
-3. En la pantalla web continuarás la configuración de forma sencilla.
+2. Detectaremos tu computadora y te recomendaremos un modelo local.
+3. Podrás descargar Qwen3 4B (u otro modelo compatible) cuando tengas red.
 
-Tu agente estará listo para configurarse sin pasos técnicos.
+Tu agente podrá funcionar sin API keys externas una vez instalado el modelo.

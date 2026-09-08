@@ -41,7 +41,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  const { createAnthropicProvider } = await import("./providers/anthropic.ts");
   const { createSqliteDiagnosticsStore } = await import(
     "./diagnostics/store.ts"
   );
@@ -52,6 +51,18 @@ async function main(): Promise<void> {
   const { createSqliteWorkspaceStore } = await import(
     "./workspace/sqlite-workspace-store.ts"
   );
+  const {
+    createLocalModelManager,
+    createDefaultLocalRuntime,
+    createFakeLocalRuntime,
+    createLocalProvider,
+    resolveLlmSelection,
+    DEFAULT_LOCAL_MODEL_ID,
+    writeLlmPreference,
+    defaultLocalPreference,
+    readLlmPreference,
+  } = await import("./local-llm/index.ts");
+  const { createAnthropicProvider } = await import("./providers/anthropic.ts");
 
   const capabilityExecutor = createCapabilityExecutor({
     index: capabilityIndex,
@@ -66,8 +77,48 @@ async function main(): Promise<void> {
   const boundTools = bindToolsToCapabilityExecutor(tools, capabilityExecutor);
 
   const diagnostics = createSqliteDiagnosticsStore();
-  const llm = createAnthropicProvider({ diagnostics });
+  const localModelManager = createLocalModelManager();
+  try {
+    if (!readLlmPreference()) {
+      writeLlmPreference(defaultLocalPreference());
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const selection = resolveLlmSelection(localModelManager);
+  let llm;
+  let localRuntime: Awaited<
+    ReturnType<typeof createDefaultLocalRuntime>
+  > | null = null;
+  if (selection.provider === "local") {
+    localRuntime =
+      process.env.PERSONAL_AGENT_LOCAL_LLM_FAKE === "1"
+        ? createFakeLocalRuntime()
+        : await createDefaultLocalRuntime();
+    llm = createLocalProvider({
+      manager: localModelManager,
+      runtime: localRuntime,
+      diagnostics,
+    });
+    process.stderr.write(
+      `[gateway] LLM provider=local model=${selection.modelId} ready=${selection.ready}\n`,
+    );
+  } else {
+    llm = createAnthropicProvider({ diagnostics });
+    process.stderr.write(
+      `[gateway] LLM provider=anthropic ready=${selection.ready}\n`,
+    );
+  }
+
+  const activeDef = agents.getActiveDefinition();
+  const runtimeAgent =
+    selection.provider === "local"
+      ? { ...activeDef, model: DEFAULT_LOCAL_MODEL_ID }
+      : activeDef;
+
   const agentRuntime = agents.createRuntime({
+    agent: runtimeAgent,
     memory: createSqliteTurnMemory(),
     llm,
     tools: boundTools,
@@ -115,6 +166,7 @@ async function main(): Promise<void> {
     workspaces: createSqliteWorkspaceStore(),
     artifacts: artifactManager,
     diagnostics,
+    localModelManager,
   });
   process.stderr.write("[gateway] READY\n");
 
@@ -127,6 +179,11 @@ async function main(): Promise<void> {
     }
     try {
       await http.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      await localRuntime?.shutdown();
     } catch {
       /* ignore */
     }

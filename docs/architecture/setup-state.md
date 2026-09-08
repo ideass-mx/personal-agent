@@ -25,7 +25,9 @@ Sin Tailscale, Android, pairing, HUB_TOKEN manual, ANTHROPIC_API_KEY en boot ni 
 
 ## Providers
 
-- `gateway/src/providers/registry.ts` — Anthropic available; OpenAI/Google `available: false`
+- `gateway/src/providers/registry.ts` — **local** + Anthropic `available`; OpenAI/Google `available: false`
+- Default de producto (PHASE 61): modelo local Qwen3 4B — ver `docs/architecture/phase-61-local-llm.md`
+- Anthropic es opcional; no se exige API key en instalación nueva
 
 ## Electron
 

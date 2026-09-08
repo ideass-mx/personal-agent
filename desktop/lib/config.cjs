@@ -33,6 +33,8 @@ function paths() {
     objectsDir: path.join(root, "objects"),
     /** Encrypted SecretStore fallback root (PHASE 59) — no secrets.json. */
     credentialsDir: path.join(root, "credentials"),
+    /** Local GGUF models (PHASE 61). */
+    modelsDir: path.join(root, "models"),
   };
 }
 
@@ -45,6 +47,7 @@ function ensureDirs() {
     p.dbDir,
     p.objectsDir,
     p.credentialsDir,
+    p.modelsDir,
   ]) {
     fs.mkdirSync(dir, { recursive: true });
   }

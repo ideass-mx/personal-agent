@@ -8,6 +8,9 @@ export type OnboardingStep =
   | "welcome"
   | "preparing"
   | "agent_ready"
+  | "hardware"
+  | "local_recommend"
+  | "local_installing"
   | "llm_intro"
   | "llm_key"
   | "verifying"
@@ -70,7 +73,7 @@ export function stepFromStatus(s: SetupStatusDto): OnboardingStep {
       s.state === "LLM_CONNECTED" ||
       s.onboardingCompleted)
   ) {
-    return "llm_intro";
+    return "hardware";
   }
   if (s.state === "VERIFYING" || s.state === "VERIFICATION_ERROR") return "verifying";
   if (s.state === "LLM_CONNECTED" && isLlmConfigured(s)) return "verifying";
@@ -79,10 +82,10 @@ export function stepFromStatus(s: SetupStatusDto): OnboardingStep {
     s.state === "LLM_CONFIGURATION_ERROR" ||
     s.state === "ONBOARDING"
   ) {
-    return "llm_intro";
+    return "hardware";
   }
-  // Instalación lista ≠ producto listo: falta LLM. Nunca «Agente listo» aquí.
-  if (s.state === "AGENT_READY" || s.installationReady) return "llm_intro";
+  // Instalación lista ≠ producto listo: falta modelo local / LLM.
+  if (s.state === "AGENT_READY" || s.installationReady) return "hardware";
   return "preparing";
 }
 

@@ -8,6 +8,11 @@ import {
   verifySetup,
   type SetupProviderDto,
 } from "../../api/setup";
+import {
+  fetchLocalRecommendation,
+  installLocalModel,
+  type LocalRecommendationDto,
+} from "../../api/local-llm";
 import { resolveHttpBase } from "../../api/http";
 import { useApp } from "../../state/AppContext";
 import type { SetupStatusDto } from "../../types";
@@ -46,9 +51,15 @@ export function OnboardingWizard({
   const [err, setErr] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [providers, setProviders] = useState<SetupProviderDto[]>([]);
-  const [selectedProvider, setSelectedProvider] = useState<string>("anthropic");
+  const [selectedProvider, setSelectedProvider] = useState<string>("local");
   const [pairingQr, setPairingQr] = useState<string | null>(null);
   const [remoteMsg, setRemoteMsg] = useState<string | null>(null);
+  const [recommendation, setRecommendation] =
+    useState<LocalRecommendationDto | null>(null);
+  const [hwSummary, setHwSummary] = useState<{
+    memoryGb: number;
+    cpuCores: number;
+  } | null>(null);
 
   const base = session ? resolveHttpBase(session) : "";
   const token = session?.token || "";
@@ -118,14 +129,58 @@ export function OnboardingWizard({
       }
       setStatus(s);
       await loadProviders();
-      // Tras el nombre / instalación: ir a LLM. «Listo» solo con llmConfigured.
-      setStep("llm_intro");
+      // Camino por defecto: modelo local (sin API key).
+      setStep("hardware");
+      try {
+        const rec = await fetchLocalRecommendation(base, token);
+        setRecommendation(rec.recommendation);
+        setHwSummary(rec.hardware);
+        setStep("local_recommend");
+      } catch {
+        setStep("local_recommend");
+      }
     } catch {
       setErr("Algo falló al preparar. Inténtalo de nuevo.");
       setStep("error");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onInstallLocalModel() {
+    setBusy(true);
+    setErr(null);
+    setStep("local_installing");
+    try {
+      await installLocalModel(base, token, {
+        modelId: recommendation?.modelId || "qwen3-4b",
+      });
+      await transitionSetup(base, token, "LLM_REQUIRED", { llmProvider: "local" });
+      await transitionSetup(base, token, "LLM_CONNECTED", { llmProvider: "local" });
+      try {
+        await verifySetup(base, token);
+      } catch {
+        /* runtime puede no estar; el modelo ya está instalado */
+      }
+      const ready = await transitionSetup(base, token, "READY", {
+        llmProvider: "local",
+      });
+      setStatus(ready);
+      setStep("optional_android");
+    } catch (ex) {
+      setErr(
+        ex instanceof Error
+          ? ex.message
+          : "No pudimos descargar el modelo. Puedes reintentarlo después.",
+      );
+      setStep("local_recommend");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onSkipLocalModel() {
+    setStep("llm_intro");
   }
 
   async function onContinueToLlm() {
@@ -137,6 +192,19 @@ export function OnboardingWizard({
     const p = providers.find((x) => x.id === id);
     if (!p || !isProviderSelectable(p)) return;
     setSelectedProvider(id);
+    if (id === "local") {
+      setStep("local_recommend");
+      void (async () => {
+        try {
+          const rec = await fetchLocalRecommendation(base, token);
+          setRecommendation(rec.recommendation);
+          setHwSummary(rec.hardware);
+        } catch {
+          /* ignore */
+        }
+      })();
+      return;
+    }
     setStep("llm_key");
   }
 
@@ -356,6 +424,86 @@ export function OnboardingWizard({
               Continuar
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "hardware" || step === "local_recommend") {
+    const rec = recommendation;
+    return (
+      <div className="setup-center">
+        <div className="panel" style={{ width: "min(440px, 100%)" }}>
+          <h1>
+            {step === "hardware"
+              ? "Analizando tu computadora…"
+              : "Tu computadora está lista"}
+          </h1>
+          {hwSummary ? (
+            <p className="lead">
+              {hwSummary.memoryGb} GB de memoria · {hwSummary.cpuCores} núcleos
+              de CPU
+            </p>
+          ) : (
+            <p className="lead">Detectando recursos disponibles…</p>
+          )}
+          {rec ? (
+            <>
+              <p>
+                <strong>Modelo recomendado</strong>
+                <br />
+                {rec.displayName}
+                {rec.tierLabel ? ` · ${rec.tierLabel}` : ""}
+              </p>
+              <p className="muted">{rec.reason}</p>
+            </>
+          ) : (
+            <p className="muted">Preparando recomendación…</p>
+          )}
+          {err ? <p className="error">{err}</p> : null}
+          <div className="actions" style={{ flexDirection: "column", gap: 8 }}>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={busy}
+              onClick={() => void onInstallLocalModel()}
+            >
+              Instalar modelo
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={onSkipLocalModel}
+            >
+              Configuración avanzada
+            </button>
+            <button
+              type="button"
+              className="linkish"
+              disabled={busy}
+              onClick={() => setStep("optional_android")}
+            >
+              Continuar sin modelo
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "local_installing") {
+    return (
+      <div className="setup-center">
+        <div className="panel" style={{ width: "min(440px, 100%)" }}>
+          <h1>Descargando modelo</h1>
+          <p className="lead">
+            Esto puede tardar unos minutos la primera vez. No cierres la
+            ventana.
+          </p>
+          <p className="muted">
+            {recommendation?.displayName || "Qwen3 4B"}
+          </p>
         </div>
       </div>
     );

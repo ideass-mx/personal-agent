@@ -13,6 +13,7 @@ export type SettingsSectionId =
   | "profile"
   | "my-agent"
   | "memory"
+  | "intelligence"
   | "capabilities"
   | "connections"
   | "privacy"
