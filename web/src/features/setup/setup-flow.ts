@@ -59,9 +59,8 @@ export function isApplicationReadyForChat(
 }
 
 /**
- * PHASE 61.2.0 — no se permite omitir la instalación del modelo local
- * hacia el chat. «Configuración avanzada» puede ir a proveedores cloud
- * explícitos; nunca a conversation sin LLM.
+ * PHASE 61.2.0 / 62 — no se permite llegar al chat sin inteligencia.
+ * El usuario elige Local, Cloud o Mi proveedor; Local implica instalar modelo.
  */
 export function allowsSkipLocalModelToChat(): boolean {
   return false;
@@ -71,6 +70,9 @@ export function allowsSkipLocalModelToChat(): boolean {
  * Derive wizard step from setup status.
  * NEVER treat SQLite READY as done if llmConfigured is false
  * (stale state after uninstall/key purge).
+ *
+ * Sin LLM → elegir modo (Local / Cloud / BYOK). La instalación local
+ * solo ocurre si el usuario elige Local.
  */
 export function stepFromStatus(s: SetupStatusDto): OnboardingStep {
   if (isLlmConfigured(s) && (s.onboardingCompleted || s.state === "READY" || s.state === "VERIFIED")) {
@@ -84,7 +86,7 @@ export function stepFromStatus(s: SetupStatusDto): OnboardingStep {
       s.state === "LLM_CONNECTED" ||
       s.onboardingCompleted)
   ) {
-    return "hardware";
+    return "llm_intro";
   }
   if (s.state === "VERIFYING" || s.state === "VERIFICATION_ERROR") return "verifying";
   if (s.state === "LLM_CONNECTED" && isLlmConfigured(s)) return "verifying";
@@ -93,10 +95,10 @@ export function stepFromStatus(s: SetupStatusDto): OnboardingStep {
     s.state === "LLM_CONFIGURATION_ERROR" ||
     s.state === "ONBOARDING"
   ) {
-    return "hardware";
+    return "llm_intro";
   }
-  // Instalación lista ≠ producto listo: falta modelo local / LLM.
-  if (s.state === "AGENT_READY" || s.installationReady) return "hardware";
+  // Instalación lista ≠ producto listo: falta elegir / conectar inteligencia.
+  if (s.state === "AGENT_READY" || s.installationReady) return "llm_intro";
   return "preparing";
 }
 

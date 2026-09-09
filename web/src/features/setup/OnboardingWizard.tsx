@@ -227,9 +227,9 @@ export function OnboardingWizard({
           return;
         }
         if (!isLlmConfigured(s)) {
-          // Restaurar gate local: hardware → recomendación (o saltar descarga si ya hay modelo).
+          // Elegir modo de inteligencia (Local / Cloud / BYOK).
+          setLlmIntroPanel("modes");
           setStep(stepFromStatus(s));
-          await enterLocalModelGate();
           return;
         }
         if (sessionStorage.getItem("pa_host_bootstrap") === "1") {
@@ -303,8 +303,9 @@ export function OnboardingWizard({
       }
       setStatus(s);
       await loadProviders();
-      // Camino por defecto: modelo local (sin API key).
-      await enterLocalModelGate();
+      // Elegir cómo ejecutar la inteligencia (no forzar Local).
+      setLlmIntroPanel("modes");
+      setStep("llm_intro");
     } catch {
       setErr("Algo falló al preparar. Inténtalo de nuevo.");
       setStep("error");
@@ -382,7 +383,7 @@ export function OnboardingWizard({
   }
 
   function onSkipLocalModel() {
-    // Configuración avanzada: Local / Cloud / Mi proveedor — no chat sin LLM.
+    // Volver a elegir Local / Cloud / Mi proveedor.
     setLlmIntroPanel("modes");
     setStep("llm_intro");
     void loadProviders();
@@ -392,10 +393,11 @@ export function OnboardingWizard({
     const s = await refresh();
     if (s && isLlmConfigured(s)) return true;
     setErr(
-      "Tu agente necesita terminar la instalación. Instala Qwen3 4B para comenzar a conversar.",
+      "Tu agente necesita una inteligencia conectada. Elige Local, Cloud o tu propio proveedor.",
     );
-    setStep("local_recommend");
-    void enterLocalModelGate();
+    setLlmIntroPanel("modes");
+    setStep("llm_intro");
+    void loadProviders();
     return false;
   }
 
@@ -445,16 +447,7 @@ export function OnboardingWizard({
     if (!p || !isProviderSelectable(p)) return;
     setSelectedProvider(id);
     if (id === "local") {
-      setStep("local_recommend");
-      void (async () => {
-        try {
-          const rec = await fetchLocalRecommendation(base, token);
-          setRecommendation(rec.recommendation);
-          setHwSummary(rec.hardware);
-        } catch {
-          /* ignore */
-        }
-      })();
+      void enterLocalModelGate();
       return;
     }
     if (id === "personal-agent-cloud") {
@@ -825,7 +818,7 @@ export function OnboardingWizard({
               disabled={busy}
               onClick={onSkipLocalModel}
             >
-              Configuración avanzada
+              Elegir otra inteligencia
             </button>
           </div>
         </div>
@@ -981,13 +974,14 @@ export function OnboardingWizard({
             type="button"
             className="btn btn-ghost"
             disabled={busy}
-            onClick={() => setStep("local_recommend")}
+            onClick={() => setStep("welcome")}
           >
             ← Volver
           </button>
           <h1>¿Cómo quieres ejecutar la inteligencia?</h1>
           <p className="lead">
-            Elige Local, Personal Agent Cloud o tu propio proveedor.
+            Elige Local, Personal Agent Cloud o tu propio proveedor. Local
+            depende de los recursos de este equipo.
           </p>
           <div className="intel-choose" role="group" aria-label="Modos de inteligencia">
             <button

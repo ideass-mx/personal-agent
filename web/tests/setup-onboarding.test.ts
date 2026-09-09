@@ -47,11 +47,11 @@ function dto(partial: Partial<SetupStatusDto>): SetupStatusDto {
 }
 
 describe("setup-flow", () => {
-  it("AGENT_READY maps to hardware (local-first; no premature agent_ready)", () => {
-    assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "hardware");
+  it("AGENT_READY maps to llm_intro (choose intelligence mode)", () => {
+    assert.equal(stepFromStatus(dto({ state: "AGENT_READY" })), "llm_intro");
     assert.equal(
       stepFromStatus(dto({ state: "INSTALLED", installationReady: true })),
-      "hardware",
+      "llm_intro",
     );
   });
 
@@ -132,7 +132,7 @@ describe("setup-flow", () => {
           llmConfigured: false,
         }),
       ),
-      "hardware",
+      "llm_intro",
     );
     // H: both complete → chat
     assert.equal(
@@ -174,7 +174,7 @@ describe("setup-flow", () => {
     );
   });
 
-  it("READY without llmConfigured forces hardware (stale after uninstall)", () => {
+  it("READY without llmConfigured forces llm_intro (stale after uninstall)", () => {
     assert.equal(
       stepFromStatus(
         dto({
@@ -184,7 +184,7 @@ describe("setup-flow", () => {
           verified: true,
         }),
       ),
-      "hardware",
+      "llm_intro",
     );
   });
 
@@ -204,7 +204,7 @@ describe("setup-flow", () => {
   it("reload preserves mid-flow via status", () => {
     assert.equal(
       stepFromStatus(dto({ state: "LLM_REQUIRED" })),
-      "hardware",
+      "llm_intro",
     );
     assert.equal(
       stepFromStatus(dto({ state: "LLM_CONNECTED", llmConfigured: true })),
@@ -395,7 +395,7 @@ describe("setup API client", () => {
 });
 
 describe("onboarding intelligence UX (PHASE 62/63)", () => {
-  it("advanced config uses three modes, not a flat provider button list", () => {
+  it("initial LLM step is three modes; local install is a follow-up", () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(
       path.join(here, "../src/features/setup/OnboardingWizard.tsx"),
@@ -406,10 +406,13 @@ describe("onboarding intelligence UX (PHASE 62/63)", () => {
     assert.match(src, /🔑 Mi proveedor/);
     assert.match(src, /llmIntroPanel/);
     assert.match(src, /onChooseMode\("external"\)/);
-    // No flat map of every provider as primary CTA on the modes screen.
+    assert.match(src, /Elegir otra inteligencia/);
+    assert.doesNotMatch(src, /Configuración avanzada/);
+    // Entrada por defecto: llm_intro, no forzar gate local.
+    assert.match(src, /setStep\("llm_intro"\)/);
     assert.doesNotMatch(
       src,
-      /providerList\.map\(\(p\) =>[\s\S]*btn primary[\s\S]*Mi proveedor/,
+      /Camino por defecto: modelo local/,
     );
   });
 });
