@@ -75,11 +75,14 @@ function desktopBridge(): DesktopBridge | null {
 
 export function OnboardingWizard({
   onCompleted,
+  /** Cuando App ya pasó welcome/session, entrar directo a elegir inteligencia. */
+  initialStep = "llm_intro",
 }: {
   onCompleted?: () => void;
+  initialStep?: OnboardingStep;
 }) {
   const { session, setNav } = useApp();
-  const [step, setStep] = useState<OnboardingStep>("welcome");
+  const [step, setStep] = useState<OnboardingStep>(initialStep);
   const [, setStatus] = useState<SetupStatusDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -731,10 +734,18 @@ export function OnboardingWizard({
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={busy}
+            onClick={onSkipLocalModel}
+          >
+            ← Volver
+          </button>
           <h1>
             {step === "hardware"
               ? "Analizando tu computadora…"
-              : "Tu agente está listo para instalarse"}
+              : "Instalar modelo local"}
           </h1>
           {hwSummary ? (
             <p className="lead">
@@ -807,7 +818,7 @@ export function OnboardingWizard({
             <button
               type="button"
               className="btn primary"
-              disabled={busy}
+              disabled={busy || step === "hardware"}
               onClick={() => void onInstallLocalModel()}
             >
               {err ? "Reintentar" : "Instalar modelo"}

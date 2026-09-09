@@ -93,6 +93,7 @@ function Routed() {
   if (surface === "llm") {
     return (
       <OnboardingWizard
+        initialStep="llm_intro"
         onCompleted={() => {
           void (async () => {
             try {

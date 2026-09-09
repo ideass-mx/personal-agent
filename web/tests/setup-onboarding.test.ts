@@ -401,6 +401,7 @@ describe("onboarding intelligence UX (PHASE 62/63)", () => {
       path.join(here, "../src/features/setup/OnboardingWizard.tsx"),
       "utf8",
     );
+    const app = readFileSync(path.join(here, "../src/App.tsx"), "utf8");
     assert.match(src, /🔒 Local/);
     assert.match(src, /☁️ Personal Agent Cloud/);
     assert.match(src, /🔑 Mi proveedor/);
@@ -408,11 +409,9 @@ describe("onboarding intelligence UX (PHASE 62/63)", () => {
     assert.match(src, /onChooseMode\("external"\)/);
     assert.match(src, /Elegir otra inteligencia/);
     assert.doesNotMatch(src, /Configuración avanzada/);
-    // Entrada por defecto: llm_intro, no forzar gate local.
-    assert.match(src, /setStep\("llm_intro"\)/);
-    assert.doesNotMatch(
-      src,
-      /Camino por defecto: modelo local/,
-    );
+    assert.doesNotMatch(src, /Tu agente está listo para instalarse/);
+    assert.match(src, /initialStep = "llm_intro"/);
+    assert.match(app, /initialStep="llm_intro"/);
+    assert.doesNotMatch(src, /Camino por defecto: modelo local/);
   });
 });
