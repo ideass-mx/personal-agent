@@ -15,7 +15,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pa/experience": ["../gateway/src/experience/index.ts"],
+      "@pa/experience/*": ["../gateway/src/experience/*"]
+    }
   },
   "include": ["src"]
 }

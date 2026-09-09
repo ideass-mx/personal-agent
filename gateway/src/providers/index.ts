@@ -1,5 +1,7 @@
 export type { LLMProvider, LLMRequest, LLMEvent, LLMMessage } from "./types.ts";
+export type { LLMCapabilities } from "./types.ts";
 export { createAnthropicProvider } from "./anthropic.ts";
+export { createOpenAiCompatibleProvider } from "./openai-compatible.ts";
 export {
   listProviders,
   getProviderDescriptor,
@@ -11,3 +13,28 @@ export {
   type LlmProviderDescriptor,
   type LlmConnectivityResult,
 } from "./registry.ts";
+export {
+  createIntelligenceRouterProvider,
+  getIntelligenceConnection,
+  getIntelligenceStatusSnapshot,
+  listIntelligenceConnections,
+  readIntelligenceConfig,
+  writeIntelligenceConfig,
+  selectIntelligenceConnection,
+  upsertExternalConnection,
+  disconnectExternalProvider,
+  localAvailabilitySummary,
+  type IntelligenceMode,
+  type IntelligenceProviderId,
+  type LLMConnection,
+  type IntelligenceConnectionView,
+  type IntelligenceStatusSnapshot,
+} from "./intelligence.ts";
+export {
+  CloudAuthError,
+  createCloudAuthClient,
+  createPersonalAgentCloudProvider,
+  getCloudAuthClient,
+  resolvePersonalAgentCloudBaseUrl,
+  userMessageForCloudAuth,
+} from "./cloud-auth/index.ts";

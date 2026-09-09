@@ -1,53 +1,77 @@
 /**
- * Catálogo de proveedores LLM para setup / onboarding.
- * available=true solo si hay implementación end-to-end real.
+ * Catálogo de inteligencia para onboarding/settings.
+ * PHASE 62: local / personal-agent-cloud / external (sin modo automático).
  */
-import type { LLMProvider, LLMRequest } from "./types.ts";
-import { createAnthropicProvider } from "./anthropic.ts";
-import { hasProviderApiKeyConfigured } from "../setup/llm-key.ts";
-import { DEFAULT_AGENT_MODEL } from "../agents/definition.ts";
 import {
   createFakeLocalRuntime,
   createLocalModelManager,
   createLocalProvider,
-  DEFAULT_LOCAL_MODEL_ID,
   isLocalLlmConfigured,
 } from "../local-llm/index.ts";
+import {
+  getIntelligenceConnection,
+  listIntelligenceConnections,
+  localAvailabilitySummary,
+  modeForConnection,
+  readIntelligenceConfig,
+  type IntelligenceProviderId,
+} from "./intelligence.ts";
+import { createAnthropicProvider } from "./anthropic.ts";
+import { createOpenAiCompatibleProvider } from "./openai-compatible.ts";
+import {
+  createPersonalAgentCloudProvider,
+  getCloudAuthClient,
+  isCloudDevAuthEnabled,
+  resolvePersonalAgentCloudBaseUrl,
+} from "./cloud-auth/index.ts";
+import { ensureLocalIdentity } from "../identity/ensure-local.ts";
+import { getEffectiveProviderApiKey } from "../setup/llm-key.ts";
+import type { LLMProvider } from "./types.ts";
 
-export type LlmProviderId = "local" | "anthropic" | "openai" | "google";
+export type LlmProviderId = IntelligenceProviderId;
 
 export type LlmProviderDescriptor = {
   id: LlmProviderId;
+  mode: "local" | "personal-agent-cloud" | "external";
   name: string;
-  /** true solo con implementación real usable. */
   available: boolean;
 };
 
-/** Forma pública del diagnóstico de conectividad (sin apiKey ni muestra larga). */
 export type LlmConnectivityResult = {
   ok: true;
   provider: string;
   model: string;
-  credentialConfigured: true;
+  credentialConfigured: boolean;
   request: "success";
-  /** Truncado interno; no exponer en HTTP de producto. */
   sample?: string;
 };
 
 const CATALOG: readonly LlmProviderDescriptor[] = [
-  { id: "local", name: "Modelo local", available: true },
-  { id: "anthropic", name: "Anthropic", available: true },
-  { id: "openai", name: "OpenAI", available: false },
-  { id: "google", name: "Google", available: false },
+  { id: "local", mode: "local", name: "Modelo local", available: true },
+  {
+    id: "personal-agent-cloud",
+    mode: "personal-agent-cloud",
+    name: "Personal Agent Cloud",
+    available: true,
+  },
+  { id: "openai", mode: "external", name: "OpenAI", available: true },
+  { id: "anthropic", mode: "external", name: "Anthropic", available: true },
+  { id: "xai", mode: "external", name: "xAI / Grok", available: true },
+  { id: "openrouter", mode: "external", name: "OpenRouter", available: true },
+  { id: "groq", mode: "external", name: "Groq", available: true },
+  {
+    id: "openai-compatible",
+    mode: "external",
+    name: "Compatible con OpenAI",
+    available: true,
+  },
 ] as const;
 
 export function listProviders(): LlmProviderDescriptor[] {
   return CATALOG.map((p) => ({ ...p }));
 }
 
-export function getProviderDescriptor(
-  id: string,
-): LlmProviderDescriptor | null {
+export function getProviderDescriptor(id: string): LlmProviderDescriptor | null {
   const found = CATALOG.find((p) => p.id === id);
   return found ? { ...found } : null;
 }
@@ -56,112 +80,116 @@ export function isProviderAvailable(id: string): boolean {
   return getProviderDescriptor(id)?.available === true;
 }
 
-/**
- * Instancia el provider concreto si está disponible.
- * OpenAI/Google: no inventar implementaciones.
- */
-export function createLlmProvider(id: string): LLMProvider {
+export function createLlmProvider(id?: string): LLMProvider {
+  if (id === "local") {
+    const manager = createLocalModelManager();
+    return createLocalProvider({
+      manager,
+      runtime: createFakeLocalRuntime({ reply: "OK" }),
+    });
+  }
   if (id === "anthropic") {
     return createAnthropicProvider();
   }
-  if (id === "local") {
-    const manager = createLocalModelManager();
-    const runtime =
-      process.env.PERSONAL_AGENT_LOCAL_LLM_FAKE === "1" ||
-      process.env.NODE_ENV === "test"
-        ? createFakeLocalRuntime()
-        : createFakeLocalRuntime(); // boot path uses createDefaultLocalRuntime in index
-    return createLocalProvider({ manager, runtime });
-  }
-  throw new Error(`provider_unavailable:${id}`);
-}
-
-/** ¿Hay inteligencia lista? Local instalado O clave Anthropic — sin fallback automático. */
-export function isAnyLlmConfigured(): boolean {
-  try {
-    if (isLocalLlmConfigured(createLocalModelManager())) return true;
-  } catch {
-    /* ignore */
-  }
-  return hasProviderApiKeyConfigured("anthropic");
-}
-
-/** Verificación mínima real vía el contrato LLMProvider (mismo que usa Runtime). */
-export async function verifyProviderConnectivity(
-  providerId: string,
-): Promise<LlmConnectivityResult> {
-  if (!isProviderAvailable(providerId)) {
-    throw new Error("provider_unavailable");
-  }
-  if (providerId === "local") {
-    const manager = createLocalModelManager();
-    if (!isLocalLlmConfigured(manager)) {
-      throw new Error("llm_not_configured");
-    }
-    const runtime = createFakeLocalRuntime({
-      reply: "OK",
-    });
-    // Si hay URL real, createDefault se usa en arranque; verify usa fake solo
-    // cuando PERSONAL_AGENT_LOCAL_LLM_FAKE=1. Preferir runtime fake seguro
-    // para no cargar GGUF en verify HTTP.
-    const useFake =
-      process.env.PERSONAL_AGENT_LOCAL_LLM_FAKE === "1" ||
-      !process.env.PERSONAL_AGENT_LOCAL_LLM_URL;
-    const provider = createLocalProvider({
-      manager,
-      runtime: useFake
-        ? runtime
-        : createFakeLocalRuntime({ reply: "OK" }),
-    });
-    let text = "";
-    for await (const event of provider.stream({
-      model: DEFAULT_LOCAL_MODEL_ID,
-      messages: [
-        { role: "user", content: "Responde únicamente con la palabra OK." },
-      ],
-    })) {
-      if (event.type === "text_delta") text += event.text;
-    }
-    const sample = text.trim();
-    if (!sample) throw new Error("empty_llm_response");
-    console.log(
-      `[gateway] llm_connectivity provider=local model=${DEFAULT_LOCAL_MODEL_ID} request=success`,
-    );
+  if (id === "personal-agent-cloud") {
+    const base = resolvePersonalAgentCloudBaseUrl();
+    if (!base && !isCloudDevAuthEnabled()) throw new Error("cloud_unavailable");
     return {
-      ok: true,
-      provider: "local",
-      model: DEFAULT_LOCAL_MODEL_ID,
-      credentialConfigured: true,
-      request: "success",
-      sample: sample.slice(0, 32),
+      id: "personal-agent-cloud",
+      capabilities: {
+        streaming: true,
+        toolCalling: true,
+        vision: false,
+        structuredOutput: false,
+      },
+      async *stream(request) {
+        const { client, baseUrl } = await getCloudAuthClient();
+        const identity = ensureLocalIdentity();
+        const provider = createPersonalAgentCloudProvider({
+          baseUrl,
+          model: "pa-cloud-default",
+          auth: client,
+          extraHeaders: {
+            "X-Personal-Agent-User-Id": identity.user.id,
+            "X-Personal-Agent-Agent-Id": identity.agent.id,
+          },
+        });
+        for await (const ev of provider.stream(request)) {
+          yield ev;
+        }
+      },
     };
   }
-  if (!hasProviderApiKeyConfigured(providerId)) {
-    throw new Error("llm_not_configured");
+  if (
+    id === "openai" ||
+    id === "xai" ||
+    id === "openrouter" ||
+    id === "groq" ||
+    id === "openai-compatible"
+  ) {
+    const baseByProvider: Record<string, string> = {
+      openai: "https://api.openai.com/v1",
+      xai: "https://api.x.ai/v1",
+      openrouter: "https://openrouter.ai/api/v1",
+      groq: "https://api.groq.com/openai/v1",
+    };
+    const apiKey = getEffectiveProviderApiKey(id);
+    return createOpenAiCompatibleProvider({
+      providerId: id,
+      baseUrl: baseByProvider[id] || process.env.PERSONAL_AGENT_EXTERNAL_BASE_URL || "https://api.openai.com/v1",
+      model: "default",
+      apiKey,
+    });
   }
-  const model = DEFAULT_AGENT_MODEL;
-  const provider = createLlmProvider(providerId);
-  const request: LLMRequest = {
-    model,
-    messages: [
-      { role: "user", content: "Responde únicamente con la palabra OK." },
-    ],
-  };
+  throw new Error(`provider_unavailable:${id || "unknown"}`);
+}
+
+export function isAnyLlmConfigured(): boolean {
+  const cfg = readIntelligenceConfig();
+  const selected = cfg.connections.find((c) => c.id === cfg.selectedConnectionId);
+  if (!selected) return isLocalLlmConfigured(createLocalModelManager());
+  if (selected.provider === "local") return localAvailabilitySummary().installed;
+  if (selected.provider === "personal-agent-cloud") {
+    return (
+      Boolean(resolvePersonalAgentCloudBaseUrl()) || isCloudDevAuthEnabled()
+    );
+  }
+  return Boolean(getEffectiveProviderApiKey(selected.provider));
+}
+
+export async function verifyProviderConnectivity(
+  providerId?: string,
+): Promise<LlmConnectivityResult> {
+  const selected =
+    listIntelligenceConnections().find((c) => c.provider === providerId) ||
+    getIntelligenceConnection();
+  if (!selected) throw new Error("provider_unavailable");
+  const provider = createLlmProvider(selected.provider);
   let text = "";
-  for await (const event of provider.stream(request)) {
-    if (event.type === "text_delta") text += event.text;
+  for await (const ev of provider.stream({
+    model: selected.modelId,
+    messages: [{ role: "user", content: "Responde únicamente con la palabra OK." }],
+  })) {
+    if (ev.type === "text_delta") text += ev.text;
   }
   const sample = text.trim();
   if (!sample) throw new Error("empty_llm_response");
-  console.log(
-    `[gateway] llm_connectivity provider=${providerId} model=${model} credentialConfigured=true request=success`,
-  );
   return {
     ok: true,
-    provider: providerId,
-    model,
-    credentialConfigured: true,
+    provider: selected.provider,
+    model: selected.modelId,
+    credentialConfigured: selected.provider !== "local",
     request: "success",
     sample: sample.slice(0, 32),
   };
+}
+
+export function getActiveMode():
+  | "local"
+  | "personal-agent-cloud"
+  | "external"
+  | null {
+  const conn = getIntelligenceConnection();
+  if (!conn) return null;
+  return modeForConnection(conn);
 }

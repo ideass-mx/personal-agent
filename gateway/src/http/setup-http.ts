@@ -27,21 +27,44 @@ import {
   verifyProviderConnectivity,
   type LlmConnectivityResult,
 } from "../providers/registry.ts";
+import {
+  disconnectExternalProvider,
+  getIntelligenceConnection,
+  getIntelligenceStatusSnapshot,
+  listIntelligenceConnections,
+  localAvailabilitySummary,
+  selectIntelligenceConnection,
+  upsertExternalConnection,
+} from "../providers/intelligence.ts";
+import {
+  getCloudAuthClient,
+  isCloudDevAuthEnabled,
+  resolvePersonalAgentCloudBaseUrl,
+  userMessageForCloudAuth,
+  CloudAuthError,
+} from "../providers/cloud-auth/index.ts";
 import { DEFAULT_AGENT_MODEL } from "../agents/definition.ts";
 import {
   createLocalModelManager,
   isLocalLlmConfigured,
 } from "../local-llm/index.ts";
 
+function cloudReady(): boolean {
+  return Boolean(resolvePersonalAgentCloudBaseUrl()) || isCloudDevAuthEnabled();
+}
+
 function setupStatusPayload() {
   const record = getSetupState();
   const dto = toSetupStatusDto(record);
-  const providerId = (record.llmProvider || "local").toLowerCase();
+  const activeConn = getIntelligenceConnection();
+  const providerId = (activeConn?.provider || record.llmProvider || "local").toLowerCase();
   // Reflect real readiness — local model file OR cloud key.
   const keyOk =
     providerId === "local"
       ? isLocalLlmConfigured(createLocalModelManager())
-      : hasProviderApiKeyConfigured(providerId);
+      : providerId === "personal-agent-cloud"
+        ? cloudReady()
+        : hasProviderApiKeyConfigured(providerId);
   // Also accept: any LLM ready even if setup_state provider lags.
   const anyOk = keyOk || isAnyLlmConfigured();
   const staleReadyWithoutKey =
@@ -53,7 +76,8 @@ function setupStatusPayload() {
     ...dto,
     state: staleReadyWithoutKey ? SetupStates.LLM_REQUIRED : dto.state,
     llmConfigured: anyOk,
-    llmProvider: providerId,
+    llmProvider: activeConn?.provider || providerId,
+    intelligenceMode: activeConn?.mode,
     onboardingCompleted: Boolean(dto.onboardingCompleted && anyOk),
   };
 }
@@ -95,7 +119,60 @@ export function mountSetupHttp(
   app.get("/v1/setup/providers", (c) => {
     const denied = requireSetup(c);
     if (denied) return denied;
-    return c.json({ ok: true, providers: listProviders() });
+    const snap = getIntelligenceStatusSnapshot();
+    return c.json({
+      ok: true,
+      providers: listProviders(),
+      connections: snap.connections,
+      selected: snap.active,
+      local: snap.local,
+      cloud: snap.cloud,
+    });
+  });
+
+  /** Snapshot seguro para Intelligence Center + chat indicator. */
+  app.get("/v1/setup/intelligence", (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    return c.json({ ok: true, ...getIntelligenceStatusSnapshot() });
+  });
+
+  app.post("/v1/setup/intelligence/select", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    const body = (await c.req.json().catch(() => ({}))) as {
+      connectionId?: string;
+    };
+    const connectionId = String(body.connectionId || "").trim();
+    if (!connectionId) {
+      return c.json(
+        httpErrorBody("invalid_request", "Debes elegir un modo de inteligencia."),
+        400,
+      );
+    }
+    try {
+      const selected = selectIntelligenceConnection(connectionId);
+      let record = getSetupState();
+      if (
+        record.state === SetupStates.AGENT_READY ||
+        record.state === SetupStates.ONBOARDING ||
+        record.state === SetupStates.READY ||
+        record.state === SetupStates.VERIFIED
+      ) {
+        record = transitionSetupState(SetupStates.LLM_REQUIRED, {
+          llmProvider: selected.provider,
+        });
+      }
+      return c.json({
+        ...toSetupStatusDto(record),
+        selected,
+      });
+    } catch {
+      return c.json(
+        httpErrorBody("connection_not_found", "No encontramos esa conexión."),
+        404,
+      );
+    }
   });
 
   app.post("/v1/setup/transition", async (c) => {
@@ -154,6 +231,8 @@ export function mountSetupHttp(
       provider?: string;
       apiKey?: string;
       credential?: string;
+      modelId?: string;
+      baseUrl?: string;
     };
     const provider = String(body.provider || "anthropic").trim().toLowerCase();
     if (!isProviderAvailable(provider)) {
@@ -165,6 +244,75 @@ export function mountSetupHttp(
         400,
       );
     }
+    if (provider === "personal-agent-cloud") {
+      try {
+        if (!cloudReady()) {
+          return c.json(
+            httpErrorBody(
+              "CLOUD_AUTH_UNAVAILABLE",
+              userMessageForCloudAuth("CLOUD_AUTH_UNAVAILABLE"),
+            ),
+            400,
+          );
+        }
+        const cloud = listIntelligenceConnections().find(
+          (x) => x.provider === "personal-agent-cloud",
+        );
+        if (!cloud) throw new Error("cloud_connection_missing");
+        selectIntelligenceConnection(cloud.id);
+
+        const { client } = await getCloudAuthClient();
+        const status = await client.authenticate();
+        if (!status.connected && !status.usingDevToken) {
+          return c.json(
+            httpErrorBody(
+              status.errorCode || "CLOUD_AUTH_REQUIRED",
+              userMessageForCloudAuth(
+                status.errorCode || "CLOUD_AUTH_REQUIRED",
+              ),
+            ),
+            400,
+          );
+        }
+
+        let record = getSetupState();
+        if (
+          record.state === SetupStates.AGENT_READY ||
+          record.state === SetupStates.ONBOARDING ||
+          record.state === SetupStates.READY ||
+          record.state === SetupStates.VERIFIED
+        ) {
+          record = transitionSetupState(SetupStates.LLM_REQUIRED, {
+            llmProvider: "personal-agent-cloud",
+          });
+        }
+        if (record.state === SetupStates.LLM_REQUIRED) {
+          record = transitionSetupState(SetupStates.LLM_CONNECTED, {
+            llmProvider: "personal-agent-cloud",
+          });
+        }
+        return c.json({
+          ...toSetupStatusDto(getSetupState()),
+          llmConfigured: true,
+          cloudAuth: {
+            connected: true,
+            deviceLabel: status.deviceLabel,
+            sessionActive: status.sessionActive,
+            usingDevToken: status.usingDevToken,
+          },
+        });
+      } catch (err) {
+        const code =
+          err instanceof CloudAuthError
+            ? err.code
+            : "CLOUD_AUTH_UNAVAILABLE";
+        return c.json(
+          httpErrorBody(code, userMessageForCloudAuth(code)),
+          400,
+        );
+      }
+    }
+
     const apiKey = String(body.credential || body.apiKey || "").trim();
     if (apiKey.length < 16) {
       try {
@@ -196,7 +344,24 @@ export function mountSetupHttp(
       );
     }
     try {
-      writePersistedProviderApiKey(provider, apiKey);
+      const modelId = String(body.modelId || DEFAULT_AGENT_MODEL).trim();
+      if (
+        provider === "openai" ||
+        provider === "anthropic" ||
+        provider === "xai" ||
+        provider === "openrouter" ||
+        provider === "groq" ||
+        provider === "openai-compatible"
+      ) {
+        await upsertExternalConnection({
+          provider,
+          modelId,
+          apiKey,
+          baseUrl: body.baseUrl,
+        });
+      } else {
+        writePersistedProviderApiKey(provider, apiKey);
+      }
       let record = getSetupState();
       if (
         record.state === SetupStates.AGENT_READY ||
@@ -240,7 +405,8 @@ export function mountSetupHttp(
     const denied = requireSetup(c);
     if (denied) return denied;
     const record0 = getSetupState();
-    const providerId = record0.llmProvider || "local";
+    const providerId =
+      getIntelligenceConnection()?.provider || record0.llmProvider || "local";
     if (providerId === "local") {
       if (!isLocalLlmConfigured(createLocalModelManager())) {
         return c.json(
@@ -251,7 +417,18 @@ export function mountSetupHttp(
           400,
         );
       }
-    } else if (!hasProviderApiKeyConfigured(providerId)) {
+    } else if (providerId === "personal-agent-cloud" && !cloudReady()) {
+      return c.json(
+        httpErrorBody(
+          "CLOUD_AUTH_UNAVAILABLE",
+          userMessageForCloudAuth("CLOUD_AUTH_UNAVAILABLE"),
+        ),
+        400,
+      );
+    } else if (
+      providerId !== "personal-agent-cloud" &&
+      !hasProviderApiKeyConfigured(providerId)
+    ) {
       return c.json(
         httpErrorBody(
           "llm_not_configured",
@@ -301,6 +478,202 @@ export function mountSetupHttp(
         ),
         400,
       );
+    }
+  });
+
+  /** Public Cloud session status (no tokens). */
+  app.get("/v1/setup/cloud/status", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    if (!cloudReady()) {
+      return c.json({
+        ok: true,
+        connected: false,
+        deviceLabel: "Este equipo",
+        sessionActive: false,
+        usingDevToken: false,
+        errorCode: "CLOUD_AUTH_UNAVAILABLE" as const,
+      });
+    }
+    try {
+      const { client } = await getCloudAuthClient();
+      const status = await client.getPublicStatus();
+      return c.json({ ok: true, ...status });
+    } catch (err) {
+      const code =
+        err instanceof CloudAuthError ? err.code : "CLOUD_AUTH_UNKNOWN_ERROR";
+      return c.json({
+        ok: true,
+        connected: false,
+        deviceLabel: "Este equipo",
+        sessionActive: false,
+        usingDevToken: false,
+        errorCode: code,
+      });
+    }
+  });
+
+  /** Disconnect Cloud session (does not revoke device). */
+  app.post("/v1/setup/cloud/disconnect", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    try {
+      if (cloudReady()) {
+        const { client } = await getCloudAuthClient();
+        await client.disconnect();
+      }
+      return c.json({ ok: true, connected: false });
+    } catch {
+      return c.json(
+        httpErrorBody(
+          "CLOUD_AUTH_UNKNOWN_ERROR",
+          userMessageForCloudAuth("CLOUD_AUTH_UNKNOWN_ERROR"),
+        ),
+        400,
+      );
+    }
+  });
+
+  /** Reconnect Cloud (device auth handshake). */
+  app.post("/v1/setup/cloud/connect", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    if (!cloudReady()) {
+      return c.json(
+        httpErrorBody(
+          "CLOUD_AUTH_UNAVAILABLE",
+          userMessageForCloudAuth("CLOUD_AUTH_UNAVAILABLE"),
+        ),
+        400,
+      );
+    }
+    try {
+      const cloud = listIntelligenceConnections().find(
+        (x) => x.provider === "personal-agent-cloud",
+      );
+      if (cloud) selectIntelligenceConnection(cloud.id);
+      const { client } = await getCloudAuthClient();
+      const status = await client.authenticate();
+      return c.json({
+        ok: true,
+        connected: status.connected || status.usingDevToken,
+        deviceLabel: status.deviceLabel,
+        sessionActive: status.sessionActive,
+        usingDevToken: status.usingDevToken,
+      });
+    } catch (err) {
+      const code =
+        err instanceof CloudAuthError ? err.code : "CLOUD_AUTH_UNAVAILABLE";
+      return c.json(httpErrorBody(code, userMessageForCloudAuth(code)), 400);
+    }
+  });
+
+  /**
+   * Disconnect BYOK provider credential (not Cloud / Local).
+   * Never returns secrets.
+   */
+  app.post("/v1/setup/providers/:id/disconnect", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    const id = c.req.param("id").trim().toLowerCase();
+    if (id === "personal-agent-cloud") {
+      return c.json(
+        httpErrorBody(
+          "use_cloud_disconnect",
+          "Usa Desconectar de Personal Agent Cloud.",
+        ),
+        400,
+      );
+    }
+    if (id === "local") {
+      return c.json(
+        httpErrorBody(
+          "local_not_disconnectable",
+          "El modelo local no se desconecta así. Puedes cambiar de inteligencia.",
+        ),
+        400,
+      );
+    }
+    if (!isProviderAvailable(id)) {
+      return c.json(
+        httpErrorBody("provider_unsupported", "Ese proveedor no está disponible."),
+        400,
+      );
+    }
+    try {
+      const view = disconnectExternalProvider(id);
+      return c.json({
+        ok: true,
+        provider: id,
+        connection: view,
+        intelligence: getIntelligenceStatusSnapshot(),
+      });
+    } catch {
+      return c.json(
+        httpErrorBody(
+          "disconnect_failed",
+          "No pudimos desconectar este proveedor.",
+        ),
+        400,
+      );
+    }
+  });
+
+  /** Probar conexión del provider (sin devolver secretos). */
+  app.post("/v1/setup/providers/:id/test", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    const id = c.req.param("id").trim().toLowerCase();
+    if (!isProviderAvailable(id)) {
+      return c.json(
+        httpErrorBody("provider_unsupported", "Ese proveedor no está disponible."),
+        400,
+      );
+    }
+    try {
+      const result = await runVerify(id);
+      const message =
+        id === "xai"
+          ? "Conexión correcta. Grok está disponible."
+          : "La conexión funciona.";
+      return c.json({
+        ok: true,
+        message,
+        connectivity: connectivityPublicShape(result, id),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      let code = "PROVIDER_UNKNOWN_ERROR";
+      let human =
+        id === "xai"
+          ? "No pudimos conectar con xAI."
+          : "No pudimos validar la conexión. Comprueba tu conexión a Internet y vuelve a intentarlo.";
+      if (/auth|401|403|invalid_credential|missing_api_key/i.test(msg)) {
+        code = "PROVIDER_AUTH_FAILED";
+        human =
+          id === "xai"
+            ? "No pudimos conectar con xAI. Comprueba tu clave e inténtalo de nuevo."
+            : "La clave de acceso no es válida. Comprueba tu clave y vuelve a intentarlo.";
+      } else if (/rate|429/i.test(msg)) {
+        code = "PROVIDER_RATE_LIMITED";
+        human =
+          id === "xai"
+            ? "xAI está temporalmente limitado. Puedes intentarlo nuevamente más tarde."
+            : "El proveedor ha limitado temporalmente las solicitudes.";
+      } else if (/base_url|ssrf|unsafe|invalid/i.test(msg)) {
+        code = "PROVIDER_INVALID_REQUEST";
+        human = "La dirección del proveedor no es válida.";
+      } else if (/cloud|unavailable|network|5\d\d|provider_http_5/i.test(msg)) {
+        code = "PROVIDER_UNAVAILABLE";
+        human =
+          id === "xai"
+            ? "No pudimos conectar con xAI."
+            : "No pudimos conectar con este proveedor. Comprueba tu conexión a Internet y vuelve a intentarlo.";
+      } else if (!hasProviderApiKeyConfigured(id) && id !== "local" && id !== "personal-agent-cloud") {
+        code = "PROVIDER_NOT_CONFIGURED";
+        human = "Este proveedor aún no está conectado.";
+      }
+      return c.json(httpErrorBody(code, human), 400);
     }
   });
 }

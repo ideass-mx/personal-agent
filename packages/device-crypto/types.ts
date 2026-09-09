@@ -11,6 +11,12 @@ export const DEVICE_AUTH_PURPOSE = "DeviceAuth" as const;
 export const DEVICE_AUTH_PROTOCOL_VERSION = "1" as const;
 export const DEVICE_KEY_ALGORITHM = "Ed25519" as const;
 
+/** Domain separation for Personal Agent Cloud Auth (PHASE 62.1). */
+export const CLOUD_AUTH_DOMAIN = "PersonalAgent" as const;
+export const CLOUD_AUTH_PURPOSE = "CloudAuth" as const;
+export const CLOUD_AUTH_PROTOCOL_VERSION = "1" as const;
+export const CLOUD_AUTH_AUDIENCE = "personal-agent-cloud" as const;
+
 export type DeviceKeyAlgorithm = typeof DEVICE_KEY_ALGORITHM;
 
 export type DevicePublicKeyIdentity = {
@@ -50,6 +56,36 @@ export function buildDeviceAuthMessage(input: {
     DEVICE_AUTH_PROTOCOL_VERSION,
     input.deviceId,
     input.challengeHex.toLowerCase(),
+  ].join("\n");
+  return Buffer.from(body, "utf8");
+}
+
+/**
+ * Canonical bytes to sign / verify for Cloud Auth challenge-response.
+ *
+ * Format (UTF-8, LF-separated):
+ *   PersonalAgent
+ *   CloudAuth
+ *   1
+ *   personal-agent-cloud
+ *   {deviceId}
+ *   {challengeHex}
+ *   {timestampIso}
+ */
+export function buildCloudAuthMessage(input: {
+  deviceId: string;
+  challengeHex: string;
+  timestampIso: string;
+  audience?: string;
+}): Buffer {
+  const body = [
+    CLOUD_AUTH_DOMAIN,
+    CLOUD_AUTH_PURPOSE,
+    CLOUD_AUTH_PROTOCOL_VERSION,
+    input.audience || CLOUD_AUTH_AUDIENCE,
+    input.deviceId,
+    input.challengeHex.toLowerCase(),
+    input.timestampIso,
   ].join("\n");
   return Buffer.from(body, "utf8");
 }

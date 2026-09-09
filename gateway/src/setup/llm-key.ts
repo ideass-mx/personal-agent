@@ -1,7 +1,9 @@
 /**
  * Persistencia de claves LLM por provider (fuera de setup_state).
- * No logs del secreto. Preferir credentials/llm/{id}.api_key;
- * migra legacy credentials/anthropic.api_key.
+ * Fuente de verdad: Credential Store (ficheros credentials/llm/{id}.api_key).
+ *
+ * Variables de entorno SOLO con PERSONAL_AGENT_DEV_PROVIDER_ENV=1
+ * (desarrollo / tests / CI). Nunca sobrescriben silenciosamente en producción.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -86,7 +88,13 @@ export function writePersistedAnthropicApiKey(apiKey: string): void {
 }
 
 export function clearPersistedAnthropicApiKey(): void {
-  for (const file of [providerKeyFile("anthropic"), legacyAnthropicFile()]) {
+  clearPersistedProviderApiKey("anthropic");
+}
+
+export function clearPersistedProviderApiKey(providerId: string): void {
+  const files = [providerKeyFile(providerId)];
+  if (providerId === "anthropic") files.push(legacyAnthropicFile());
+  for (const file of files) {
     if (fs.existsSync(file)) {
       try {
         fs.unlinkSync(file);
@@ -104,18 +112,39 @@ function isPlaceholderKey(key: string): boolean {
   return false;
 }
 
-/** Env (Desktop inject) gana para Anthropic si no es placeholder; si no, fichero persistido. */
+/** DEV/TEST/CI only — never silent production fallback. */
+export function isDevProviderEnvEnabled(): boolean {
+  return process.env.PERSONAL_AGENT_DEV_PROVIDER_ENV === "1";
+}
+
+const PROVIDER_ENV_KEYS: Record<string, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  xai: "XAI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+  groq: "GROQ_API_KEY",
+};
+
+/**
+ * Credential Store primero.
+ * ENV / config.anthropicApiKey solo si PERSONAL_AGENT_DEV_PROVIDER_ENV=1.
+ */
 export function getEffectiveProviderApiKey(providerId: string): string {
-  if (providerId === "anthropic") {
-    const fromEnv = process.env.ANTHROPIC_API_KEY?.trim() || "";
+  const fromFile = readPersistedProviderApiKey(providerId);
+  if (fromFile && !isPlaceholderKey(fromFile)) return fromFile;
+
+  if (!isDevProviderEnvEnabled()) return "";
+
+  const envName = PROVIDER_ENV_KEYS[providerId];
+  if (envName) {
+    const fromEnv = process.env[envName]?.trim() || "";
     if (fromEnv && !isPlaceholderKey(fromEnv)) return fromEnv;
-    const fromFile = readPersistedProviderApiKey("anthropic");
-    if (fromFile) return fromFile;
+  }
+  if (providerId === "anthropic") {
     const fromConfig = config.anthropicApiKey || "";
     if (fromConfig && !isPlaceholderKey(fromConfig)) return fromConfig;
-    return fromEnv || fromConfig || "";
   }
-  return readPersistedProviderApiKey(providerId) || "";
+  return "";
 }
 
 /** @deprecated */

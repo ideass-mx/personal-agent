@@ -13,6 +13,7 @@ export type OnboardingStep =
   | "local_installing"
   | "llm_intro"
   | "llm_key"
+  | "cloud_connecting"
   | "verifying"
   | "optional_android"
   | "optional_remote"

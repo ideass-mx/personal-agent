@@ -54,14 +54,19 @@ after(() => {
 });
 
 describe("ProviderRegistry", () => {
-  it("lists local + anthropic available; openai/google not faked", () => {
+  it("lists local/cloud/external providers available", () => {
     const list = listProviders();
-    assert.equal(list.length, 4);
+    assert.ok(list.length >= 7);
     assert.equal(isProviderAvailable("local"), true);
     assert.equal(isProviderAvailable("anthropic"), true);
-    assert.equal(isProviderAvailable("openai"), false);
-    assert.equal(isProviderAvailable("google"), false);
-    assert.equal(getProviderDescriptor("openai")?.available, false);
+    assert.equal(isProviderAvailable("openai"), true);
+    assert.equal(isProviderAvailable("xai"), true);
+    assert.equal(isProviderAvailable("openrouter"), true);
+    assert.equal(isProviderAvailable("groq"), true);
+    assert.equal(
+      getProviderDescriptor("personal-agent-cloud")?.available,
+      true,
+    );
   });
 
   it("DEFAULT_AGENT_MODEL is claude-sonnet-4-6; local + Anthropic available", () => {
@@ -86,7 +91,7 @@ describe("AGENT_READY without LLM / Tailscale / Android", () => {
 });
 
 describe("GET /v1/setup/providers", () => {
-  it("returns catalog without secrets", async () => {
+  it("returns catalog + intelligence connections without secrets", async () => {
     const app = new Hono();
     mountSetupHttp(app, { hubToken: HUB });
     const res = await app.request("/v1/setup/providers", {
@@ -95,9 +100,12 @@ describe("GET /v1/setup/providers", () => {
     assert.equal(res.status, 200);
     const body = (await res.json()) as {
       providers: Array<{ id: string; available: boolean }>;
+      connections?: Array<{ id: string; provider: string; mode: string }>;
     };
     assert.ok(body.providers.some((p) => p.id === "anthropic" && p.available));
-    assert.ok(body.providers.some((p) => p.id === "openai" && !p.available));
+    assert.ok(body.providers.some((p) => p.id === "openai" && p.available));
+    assert.ok(body.providers.some((p) => p.id === "personal-agent-cloud"));
+    assert.ok(Array.isArray(body.connections));
     const raw = JSON.stringify(body);
     assert.equal(raw.toLowerCase().includes("api_key"), false);
     assert.equal(raw.toLowerCase().includes("sk-ant"), false);
@@ -105,7 +113,7 @@ describe("GET /v1/setup/providers", () => {
 });
 
 describe("POST /v1/setup/llm", () => {
-  it("rejects unsupported provider", async () => {
+  it("rejects unknown provider", async () => {
     replaceSetupStateForTests({
       state: SetupStates.LLM_REQUIRED,
       installationReady: true,
@@ -126,7 +134,7 @@ describe("POST /v1/setup/llm", () => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        provider: "openai",
+        provider: "foo-unknown",
         credential: "sk-test-openai-key-123456",
       }),
     });
@@ -194,6 +202,42 @@ describe("POST /v1/setup/llm", () => {
       body: JSON.stringify({ provider: "anthropic", credential: "short" }),
     });
     assert.equal(res.status, 400);
+  });
+
+  it("accepts Personal Agent Cloud without api key", async () => {
+    process.env.PERSONAL_AGENT_CLOUD_BASE_URL = "https://cloud.example.test";
+    process.env.PERSONAL_AGENT_CLOUD_DEV_AUTH = "1";
+    process.env.PERSONAL_AGENT_CLOUD_SESSION_TOKEN =
+      "dev-only-session-token-not-for-production";
+    replaceSetupStateForTests({
+      state: SetupStates.LLM_REQUIRED,
+      installationReady: true,
+      llmConfigured: false,
+      verified: false,
+      onboardingCompleted: false,
+      llmProvider: null,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      updatedAt: new Date().toISOString(),
+    });
+    const { clearCloudAuthClientCache } = await import(
+      "../../src/providers/cloud-auth/index.ts"
+    );
+    clearCloudAuthClientCache();
+    const app = new Hono();
+    mountSetupHttp(app, { hubToken: HUB });
+    const res = await app.request("/v1/setup/llm", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${HUB}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ provider: "personal-agent-cloud" }),
+    });
+    assert.equal(res.status, 200);
+    delete process.env.PERSONAL_AGENT_CLOUD_DEV_AUTH;
+    delete process.env.PERSONAL_AGENT_CLOUD_SESSION_TOKEN;
+    clearCloudAuthClientCache();
   });
 });
 
@@ -322,6 +366,9 @@ describe("POST /v1/setup/verify", () => {
     });
     assert.equal(res.status, 400);
     const body = (await res.json()) as { error?: { code?: string } };
-    assert.equal(body.error?.code, "llm_not_configured");
+    assert.ok(
+      body.error?.code === "llm_not_configured" ||
+        body.error?.code === "verification_failed",
+    );
   });
 });

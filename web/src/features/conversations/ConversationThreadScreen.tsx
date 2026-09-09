@@ -16,6 +16,7 @@ import {
   SourcesPanel,
   type AgentSource,
 } from "../../sources";
+import { IntelligenceIndicator } from "../configuration/IntelligenceIndicator";
 
 /** Hilo a pantalla completa — conversación real vía Gateway WS/HTTP. */
 export function ConversationScreen() {
@@ -243,13 +244,21 @@ export function ConversationScreen() {
       {isBlank ? (
         <div className="blank-state fade-in">
           <div className="blank-state-content">
+            <div className="intel-indicator-wrap">
+              <IntelligenceIndicator />
+            </div>
             <p className="blank-heading">¿En qué te ayudo?</p>
             {composer}
           </div>
         </div>
       ) : (
         <div className={`conversation-split ${panelOpen ? "is-open" : ""}`}>
-          <div className="conversation-main">{thread}</div>
+          <div className="conversation-main">
+            <div className="intel-indicator-wrap">
+              <IntelligenceIndicator />
+            </div>
+            {thread}
+          </div>
           {panelOpen ? (
             <>
               {isNarrow ? (

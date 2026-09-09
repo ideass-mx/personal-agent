@@ -7,7 +7,8 @@ export type NavId =
   | "automations"
   | "library"
   | "settings"
-  | "diagnostics";
+  | "diagnostics"
+  | "experience";
 
 export type SettingsSectionId =
   | "profile"
@@ -151,6 +152,7 @@ export type SetupStatusDto = {
   verified: boolean;
   onboardingCompleted: boolean;
   llmProvider: string | null;
+  intelligenceMode?: "local" | "personal-agent-cloud" | "external";
   lastError: { code: string; message: string } | null;
   updatedAt: string;
 };

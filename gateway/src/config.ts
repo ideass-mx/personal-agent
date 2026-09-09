@@ -26,7 +26,8 @@ function required(name: string): string {
 export type GatewayConfig = {
   /**
    * Clave Anthropic de entorno (opcional en boot).
-   * Efectiva en runtime: env → fichero persistido (setup) → este valor.
+   * No es fuente de verdad en runtime: ver getEffectiveProviderApiKey
+   * (Credential Store; ENV solo con PERSONAL_AGENT_DEV_PROVIDER_ENV=1).
    */
   readonly anthropicApiKey: string;
   readonly hubToken: string;

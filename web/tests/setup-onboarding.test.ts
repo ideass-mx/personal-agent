@@ -303,8 +303,8 @@ describe("setup API client", () => {
         { status: 200 },
       )) as typeof fetch;
     const list = await fetchSetupProviders("http://x", "t".repeat(32));
-    assert.equal(list.length, 2);
-    assert.equal(list[0].available, true);
+    assert.equal(list.providers.length, 2);
+    assert.equal(list.providers[0].available, true);
   });
 
   it("credential submission never echoes secret in typed result", async () => {

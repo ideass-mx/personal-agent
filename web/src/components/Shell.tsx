@@ -121,6 +121,13 @@ export function Shell({ children }: { children: ReactNode }) {
               onClick={() => setNav("library")}
               icon={<IconBook />}
             />
+            <NavBtn
+              active={isActive("experience")}
+              title="Experiencia"
+              collapsed={sidebarCollapsed}
+              onClick={() => setNav("experience")}
+              icon={<IconZap />}
+            />
           </nav>
 
           <div className="nav-section">

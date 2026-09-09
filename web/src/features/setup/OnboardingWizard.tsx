@@ -66,6 +66,8 @@ export function OnboardingWizard({
   const [apiKey, setApiKey] = useState("");
   const [providers, setProviders] = useState<SetupProviderDto[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<string>("local");
+  const [providerModel, setProviderModel] = useState<string>("gpt-4.1-mini");
+  const [providerBaseUrl, setProviderBaseUrl] = useState<string>("");
   const [pairingQr, setPairingQr] = useState<string | null>(null);
   const [remoteMsg, setRemoteMsg] = useState<string | null>(null);
   const [recommendation, setRecommendation] =
@@ -74,11 +76,23 @@ export function OnboardingWizard({
     memoryGb: number;
     cpuCores: number;
   } | null>(null);
+  const [cloudPhase, setCloudPhase] = useState(0);
   const [installUi, setInstallUi] = useState<InstallUiState>({
     phase: "preparing",
     displayName: "Qwen3 4B",
   });
   const [showInstallDetails, setShowInstallDetails] = useState(false);
+
+  useEffect(() => {
+    if (step !== "cloud_connecting") return;
+    setCloudPhase(0);
+    const t1 = window.setTimeout(() => setCloudPhase(1), 400);
+    const t2 = window.setTimeout(() => setCloudPhase(2), 900);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [step]);
 
   const base = session ? resolveHttpBase(session) : "";
   const token = session?.token || "";
@@ -147,15 +161,30 @@ export function OnboardingWizard({
   async function loadProviders() {
     if (!session) return;
     try {
-      const list = await fetchSetupProviders(base, token);
-      setProviders(list);
-      const first = list.find(isProviderSelectable);
+      const data = await fetchSetupProviders(base, token);
+      setProviders(data.providers);
+      if (data.selected) {
+        setSelectedProvider(data.selected.provider);
+        if (data.selected.modelId) setProviderModel(data.selected.modelId);
+        if (data.selected.baseUrl) setProviderBaseUrl(data.selected.baseUrl);
+      }
+      const first = data.providers.find(isProviderSelectable);
       if (first) setSelectedProvider(first.id);
     } catch {
       setProviders([
+        { id: "local", name: "Local", mode: "local", available: true },
+        {
+          id: "personal-agent-cloud",
+          name: "Personal Agent Cloud",
+          mode: "personal-agent-cloud",
+          available: true,
+        },
         { id: "anthropic", name: "Anthropic", available: true },
-        { id: "openai", name: "OpenAI", available: false },
-        { id: "google", name: "Google", available: false },
+        { id: "openai", name: "OpenAI", available: true },
+        { id: "xai", name: "xAI / Grok", available: true },
+        { id: "openrouter", name: "OpenRouter", available: true },
+        { id: "groq", name: "Groq", available: true },
+        { id: "openai-compatible", name: "Compatible con OpenAI", available: true },
       ]);
     }
   }
@@ -368,6 +397,34 @@ export function OnboardingWizard({
       })();
       return;
     }
+    if (id === "personal-agent-cloud") {
+      setStep("cloud_connecting");
+      setCloudPhase(0);
+      setBusy(true);
+      setErr(null);
+      void (async () => {
+        try {
+          setCloudPhase(1);
+          const s = await configureSetupLlm(base, token, {
+            provider: "personal-agent-cloud",
+          });
+          setStatus(s);
+          setCloudPhase(3);
+          setStep("verifying");
+          await onVerify();
+        } catch (ex) {
+          setErr(
+            ex instanceof Error
+              ? ex.message
+              : "No pudimos conectar este dispositivo con Personal Agent Cloud. Vuelve a intentarlo.",
+          );
+          setStep("llm_intro");
+        } finally {
+          setBusy(false);
+        }
+      })();
+      return;
+    }
     setStep("llm_key");
   }
 
@@ -380,6 +437,8 @@ export function OnboardingWizard({
       const s = await configureSetupLlm(base, token, {
         provider: selectedProvider,
         credential,
+        modelId: providerModel.trim(),
+        baseUrl: providerBaseUrl.trim() || undefined,
       });
       setStatus(s);
       setApiKey("");
@@ -519,9 +578,19 @@ export function OnboardingWizard({
     providers.length > 0
       ? providers
       : [
+          { id: "local", name: "Local", mode: "local", available: true },
+          {
+            id: "personal-agent-cloud",
+            name: "Personal Agent Cloud",
+            mode: "personal-agent-cloud",
+            available: true,
+          },
           { id: "anthropic", name: "Anthropic", available: true },
-          { id: "openai", name: "OpenAI", available: false },
-          { id: "google", name: "Google", available: false },
+          { id: "openai", name: "OpenAI", available: true },
+          { id: "xai", name: "xAI / Grok", available: true },
+          { id: "openrouter", name: "OpenRouter", available: true },
+          { id: "groq", name: "Groq", available: true },
+          { id: "openai-compatible", name: "Compatible con OpenAI", available: true },
         ];
 
   if (step === "welcome") {
@@ -781,11 +850,17 @@ export function OnboardingWizard({
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
-          <h1>¿Qué IA quieres usar con tu agente?</h1>
-          <p className="lead">Elige un servicio disponible.</p>
+          <h1>¿Cómo quieres ejecutar la inteligencia?</h1>
+          <p className="lead">Puedes elegir Local, Personal Agent Cloud o tu propio proveedor.</p>
           <div className="actions" style={{ flexDirection: "column", gap: 8 }}>
             {providerList.map((p) => {
               const selectable = isProviderSelectable(p);
+              const suffix =
+                p.id === "local"
+                  ? " — Ejecutar en este equipo"
+                  : p.id === "personal-agent-cloud"
+                    ? " — Sin API key"
+                    : " — Mi proveedor";
               return (
                 <button
                   key={p.id}
@@ -795,6 +870,7 @@ export function OnboardingWizard({
                   onClick={() => onChooseProvider(p.id)}
                 >
                   {p.name}
+                  {selectable ? suffix : ""}
                   {!selectable
                     ? ` — ${providerComingSoonLabel(p)}`
                     : " — Disponible"}
@@ -802,20 +878,6 @@ export function OnboardingWizard({
               );
             })}
           </div>
-          <p className="muted" style={{ marginTop: 16 }}>
-            ¿No tienes una cuenta?{" "}
-            <button
-              type="button"
-              className="linkish"
-              onClick={() =>
-                setErr(
-                  "Para que tu agente pueda pensar y responder necesitamos conectarlo con un servicio de inteligencia artificial. Anthropic es la opción recomendada por ahora.",
-                )
-              }
-            >
-              Ayúdame a elegir
-            </button>
-          </p>
           {err ? <p className="muted">{err}</p> : null}
         </div>
       </div>
@@ -834,6 +896,28 @@ export function OnboardingWizard({
             volveremos a mostrar.
           </p>
           <form onSubmit={(e) => void onSaveKey(e)}>
+            <label className="field">
+              Modelo
+              <input
+                type="text"
+                value={providerModel}
+                onChange={(e) => setProviderModel(e.target.value)}
+                autoComplete="off"
+                required
+              />
+            </label>
+            {selectedProvider === "openai-compatible" ? (
+              <label className="field">
+                Base URL
+                <input
+                  type="url"
+                  value={providerBaseUrl}
+                  onChange={(e) => setProviderBaseUrl(e.target.value)}
+                  autoComplete="off"
+                  required
+                />
+              </label>
+            ) : null}
             <label className="field">
               Clave de {label}
               <input
@@ -856,6 +940,23 @@ export function OnboardingWizard({
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "cloud_connecting") {
+    return (
+      <div className="setup-center">
+        <div className="panel" style={{ width: "min(440px, 100%)" }}>
+          <h1>Personal Agent Cloud</h1>
+          <p className="lead">Conectando tu dispositivo…</p>
+          <ul className="status-list">
+            <li>{cloudPhase >= 1 ? "✓" : "…"} Dispositivo identificado</li>
+            <li>{cloudPhase >= 2 ? "✓" : "…"} Conexión segura</li>
+            <li>{cloudPhase >= 3 ? "✓" : "…"} Sesión creada</li>
+          </ul>
+          {err ? <p className="error">{err}</p> : null}
         </div>
       </div>
     );

@@ -54,15 +54,14 @@ async function main(): Promise<void> {
   const {
     createLocalModelManager,
     createDefaultLocalRuntime,
-    createFakeLocalRuntime,
-    createLocalProvider,
-    resolveLlmSelection,
-    DEFAULT_LOCAL_MODEL_ID,
     writeLlmPreference,
     defaultLocalPreference,
     readLlmPreference,
   } = await import("./local-llm/index.ts");
-  const { createAnthropicProvider } = await import("./providers/anthropic.ts");
+  const {
+    createIntelligenceRouterProvider,
+    getIntelligenceConnection,
+  } = await import("./providers/intelligence.ts");
 
   const capabilityExecutor = createCapabilityExecutor({
     index: capabilityIndex,
@@ -86,39 +85,20 @@ async function main(): Promise<void> {
     /* ignore */
   }
 
-  const selection = resolveLlmSelection(localModelManager);
-  let llm;
-  let localRuntime: Awaited<
-    ReturnType<typeof createDefaultLocalRuntime>
-  > | null = null;
-  if (selection.provider === "local") {
-    localRuntime =
-      process.env.PERSONAL_AGENT_LOCAL_LLM_FAKE === "1"
-        ? createFakeLocalRuntime()
-        : await createDefaultLocalRuntime({ diagnostics });
-    llm = createLocalProvider({
-      manager: localModelManager,
-      runtime: localRuntime,
-      diagnostics,
-    });
-    process.stderr.write(
-      `[gateway] LLM provider=local model=${selection.modelId} ready=${selection.ready}\n`,
-    );
-  } else {
-    llm = createAnthropicProvider({ diagnostics });
-    process.stderr.write(
-      `[gateway] LLM provider=anthropic ready=${selection.ready}\n`,
-    );
-  }
+  const localRuntime = await createDefaultLocalRuntime({ diagnostics });
+  const llm = createIntelligenceRouterProvider({
+    localManager: localModelManager,
+    localRuntime,
+    diagnostics,
+  });
+  const selectedConnection = getIntelligenceConnection();
+  process.stderr.write(
+    `[gateway] LLM mode=${selectedConnection?.mode || "local"} provider=${selectedConnection?.provider || "local"} model=${selectedConnection?.modelId || "qwen3-4b"}\n`,
+  );
 
   const activeDef = agents.getActiveDefinition();
-  const runtimeAgent =
-    selection.provider === "local"
-      ? { ...activeDef, model: DEFAULT_LOCAL_MODEL_ID }
-      : activeDef;
-
   const agentRuntime = agents.createRuntime({
-    agent: runtimeAgent,
+    agent: activeDef,
     memory: createSqliteTurnMemory(),
     llm,
     tools: boundTools,
@@ -183,7 +163,7 @@ async function main(): Promise<void> {
       /* ignore */
     }
     try {
-      await localRuntime?.shutdown();
+      await localRuntime.shutdown();
     } catch {
       /* ignore */
     }

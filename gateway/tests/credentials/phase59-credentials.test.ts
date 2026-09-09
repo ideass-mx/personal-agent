@@ -259,7 +259,7 @@ describe("PHASE 59 redaction", () => {
   it("Authorization Bearer / apiKey / password / secrets", () => {
     assert.match(
       redactString("Authorization: Bearer tokensecret"),
-      /Bearer \[redacted\]/,
+      /Bearer \[REDACTED\]/,
     );
     assert.equal(
       (redactSecrets({
@@ -270,14 +270,14 @@ describe("PHASE 59 redaction", () => {
         refreshToken: "r",
         ok: "visible",
       }) as Record<string, string>).apiKey,
-      "[redacted]",
+      "[REDACTED]",
     );
     const obj = redactSecrets({
       authorization: "Bearer x",
       nested: { token: "t", name: "ok" },
     }) as { authorization: string; nested: { token: string; name: string } };
-    assert.equal(obj.authorization, "[redacted]");
-    assert.equal(obj.nested.token, "[redacted]");
+    assert.equal(obj.authorization, "[REDACTED]");
+    assert.equal(obj.nested.token, "[REDACTED]");
     assert.equal(obj.nested.name, "ok");
   });
 });

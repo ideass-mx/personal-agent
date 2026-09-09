@@ -43,6 +43,16 @@ export type LLMEvent =
   | { type: "tool_call"; id: string; name: string; input: unknown }
   | { type: "done" };
 
+export interface LLMCapabilities {
+  streaming: boolean;
+  toolCalling: boolean;
+  vision: boolean;
+  structuredOutput: boolean;
+  maxContext?: number;
+}
+
 export interface LLMProvider {
+  id?: string;
+  capabilities?: LLMCapabilities;
   stream(request: LLMRequest): AsyncIterable<LLMEvent>;
 }

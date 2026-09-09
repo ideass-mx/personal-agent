@@ -4,6 +4,7 @@ import { AutomationsScreen } from "./features/automations/AutomationsScreen";
 import { ConversationScreen } from "./features/conversations/ConversationThreadScreen";
 import { ConversationsListScreen } from "./features/conversations/ConversationsListScreen";
 import { DiagnosticsScreen } from "./features/diagnostics/DiagnosticsScreen";
+import { ExperienceLabScreen } from "./experience/ExperienceLabScreen";
 import { LibraryScreen } from "./features/library/LibraryScreen";
 import { ProjectsScreen } from "./features/projects/ProjectsScreen";
 import { SettingsScreen } from "./features/configuration/SettingsScreen";
@@ -114,7 +115,10 @@ function Routed() {
 
   const hostUnreachable = Boolean(healthError) || wsStatus === "error";
   const showNotReadyGate =
-    hostUnreachable && nav !== "diagnostics" && nav !== "settings";
+    hostUnreachable &&
+    nav !== "diagnostics" &&
+    nav !== "settings" &&
+    nav !== "experience";
 
   if (wsStatus === "connecting" && !health && !healthError) {
     return (
@@ -152,6 +156,8 @@ function Routed() {
               <DiagnosticsScreen />
             </div>
           );
+        case "experience":
+          return <ExperienceLabScreen />;
         default:
           return <ConversationScreen />;
       }

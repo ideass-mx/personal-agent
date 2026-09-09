@@ -23,8 +23,11 @@ export {
   writePersistedAnthropicApiKey,
   readPersistedProviderApiKey,
   writePersistedProviderApiKey,
+  clearPersistedProviderApiKey,
+  clearPersistedAnthropicApiKey,
   getEffectiveAnthropicApiKey,
   getEffectiveProviderApiKey,
   hasAnthropicApiKeyConfigured,
   hasProviderApiKeyConfigured,
+  isDevProviderEnvEnabled,
 } from "./llm-key.ts";
