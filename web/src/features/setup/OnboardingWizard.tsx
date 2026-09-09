@@ -30,6 +30,11 @@ import {
   providerShortBlurb,
 } from "../configuration/ProviderIcon";
 import {
+  byokModelOptions,
+  defaultByokModelId,
+  isPrimaryByokProvider,
+} from "../configuration/byokProviders";
+import {
   formatElapsed,
   formatEta,
   formatSpeed,
@@ -41,25 +46,6 @@ import {
   shouldShowDeterminateBar,
   type InstallUiState,
 } from "../../lib/installProgressUi";
-
-function defaultByokModel(provider: string): string {
-  switch (provider) {
-    case "openai":
-      return "gpt-4.1-mini";
-    case "anthropic":
-      return "claude-sonnet-4-6";
-    case "xai":
-      return "grok-4.6";
-    case "openrouter":
-      return "openai/gpt-4.1-mini";
-    case "groq":
-      return "llama-3.3-70b-versatile";
-    case "openai-compatible":
-      return "gpt-4.1-mini";
-    default:
-      return "gpt-4.1-mini";
-  }
-}
 
 type DesktopBridge = {
   getTailscaleStatus?: () => Promise<{
@@ -212,8 +198,6 @@ export function OnboardingWizard({
         { id: "openai", name: "OpenAI", available: true },
         { id: "xai", name: "xAI / Grok", available: true },
         { id: "openrouter", name: "OpenRouter", available: true },
-        { id: "groq", name: "Groq", available: true },
-        { id: "openai-compatible", name: "Compatible con OpenAI", available: true },
       ]);
     }
   }
@@ -443,12 +427,6 @@ export function OnboardingWizard({
             { id: "openai", name: "OpenAI", available: true },
             { id: "xai", name: "xAI / Grok", available: true },
             { id: "openrouter", name: "OpenRouter", available: true },
-            { id: "groq", name: "Groq", available: true },
-            {
-              id: "openai-compatible",
-              name: "Compatible con OpenAI",
-              available: true,
-            },
           ];
     const p = list.find((x) => x.id === id);
     if (!p || !isProviderSelectable(p)) return;
@@ -486,8 +464,8 @@ export function OnboardingWizard({
       })();
       return;
     }
-    setProviderModel(defaultByokModel(id));
-    if (id !== "openai-compatible") setProviderBaseUrl("");
+    setProviderModel(defaultByokModelId(id));
+    setProviderBaseUrl("");
     setStep("llm_key");
   }
 
@@ -652,8 +630,6 @@ export function OnboardingWizard({
           { id: "openai", name: "OpenAI", available: true },
           { id: "xai", name: "xAI / Grok", available: true },
           { id: "openrouter", name: "OpenRouter", available: true },
-          { id: "groq", name: "Groq", available: true },
-          { id: "openai-compatible", name: "Compatible con OpenAI", available: true },
         ];
 
   if (step === "welcome") {
@@ -922,15 +898,14 @@ export function OnboardingWizard({
     const cloudP = providerList.find((p) => p.id === "personal-agent-cloud");
     const byokList = providerList.filter(
       (p) =>
-        p.id !== "local" &&
-        p.id !== "personal-agent-cloud" &&
+        isPrimaryByokProvider(p.id) &&
         (p.mode === "external" || !p.mode),
     );
 
     if (llmIntroPanel === "byok") {
       return (
         <div className="setup-center">
-          <div className="panel setup-panel-compact" style={{ width: "min(420px, 100%)" }}>
+          <div className="panel setup-panel-compact" style={{ width: "min(460px, 100%)" }}>
             <button
               type="button"
               className="btn btn-ghost"
@@ -943,7 +918,7 @@ export function OnboardingWizard({
             <p className="lead setup-lead-compact">
               La clave se guarda solo en este equipo.
             </p>
-            <ul className="provider-pick-list" role="list">
+            <ul className="provider-card-grid" role="list">
               {byokList.map((p) => {
                 const selectable = isProviderSelectable(p);
                 const title = providerCardTitle(p.id, p.name);
@@ -951,21 +926,20 @@ export function OnboardingWizard({
                   <li key={p.id} role="listitem">
                     <button
                       type="button"
-                      className="provider-pick-row"
+                      className="provider-feature-card"
                       disabled={!selectable || busy}
                       onClick={() => onChooseProvider(p.id)}
                       aria-label={`Conectar ${title}`}
+                      data-provider={p.id}
                     >
-                      <ProviderIcon provider={p.id} size={34} />
-                      <span className="provider-pick-text">
-                        <strong>{title}</strong>
-                        <span className="muted">
-                          {selectable
-                            ? providerShortBlurb(p.id)
-                            : providerComingSoonLabel(p)}
-                        </span>
+                      <ProviderIcon provider={p.id} size={48} />
+                      <strong>{title}</strong>
+                      <span className="muted">
+                        {selectable
+                          ? providerShortBlurb(p.id)
+                          : providerComingSoonLabel(p)}
                       </span>
-                      <span className="provider-pick-cta">
+                      <span className="provider-feature-cta">
                         {selectable ? "Conectar" : "Pronto"}
                       </span>
                     </button>
@@ -1032,7 +1006,7 @@ export function OnboardingWizard({
             >
               <strong>🔑 Mi proveedor</strong>
               <span className="muted">
-                OpenAI, Anthropic, xAI / Grok y otros con tu propia cuenta.
+                OpenAI, Anthropic, xAI / Grok u OpenRouter con tu cuenta.
               </span>
             </button>
           </div>
@@ -1045,6 +1019,7 @@ export function OnboardingWizard({
   if (step === "llm_key") {
     const label =
       providerList.find((p) => p.id === selectedProvider)?.name || "IA";
+    const modelOpts = byokModelOptions(selectedProvider);
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
@@ -1061,32 +1036,10 @@ export function OnboardingWizard({
           </button>
           <h1>Tu clave de acceso</h1>
           <p className="lead">
-            Pégala aquí. La guardamos de forma segura en tu equipo; no la
-            volveremos a mostrar.
+            La clave autentica tu cuenta de {label}. El modelo es el que usará
+            el agente (puedes cambiarlo después en Inteligencia).
           </p>
           <form onSubmit={(e) => void onSaveKey(e)}>
-            <label className="field">
-              Modelo
-              <input
-                type="text"
-                value={providerModel}
-                onChange={(e) => setProviderModel(e.target.value)}
-                autoComplete="off"
-                required
-              />
-            </label>
-            {selectedProvider === "openai-compatible" ? (
-              <label className="field">
-                Base URL
-                <input
-                  type="url"
-                  value={providerBaseUrl}
-                  onChange={(e) => setProviderBaseUrl(e.target.value)}
-                  autoComplete="off"
-                  required
-                />
-              </label>
-            ) : null}
             <label className="field">
               Clave de {label}
               <input
@@ -1096,8 +1049,26 @@ export function OnboardingWizard({
                 autoComplete="off"
                 required
                 minLength={16}
+                placeholder="Pega tu API key"
               />
             </label>
+            <label className="field">
+              Modelo
+              <select
+                value={providerModel}
+                onChange={(e) => setProviderModel(e.target.value)}
+                aria-label="Modelo del agente"
+              >
+                {modelOpts.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="muted" style={{ marginTop: -8, fontSize: 13 }}>
+              Por defecto usamos el modelo recomendado para {label}.
+            </p>
             {err ? <p className="error">{err}</p> : null}
             <div className="actions">
               <button

@@ -1357,6 +1357,7 @@ tr:last-child td {
 
 .field input,
 .field textarea,
+.field select,
 .search-bar input {
   width: 100%;
   border: 1px solid var(--line);
@@ -1369,6 +1370,7 @@ tr:last-child td {
 
 .field input:focus,
 .field textarea:focus,
+.field select:focus,
 .search-bar input:focus {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   box-shadow: 0 0 0 3px var(--accent-soft);
@@ -2553,6 +2555,94 @@ button.linkish {
   flex-direction: column;
   gap: 8px;
 }
+.provider-card-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.provider-feature-card {
+  width: 100%;
+  min-height: 148px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--fg, #fff) 5%, transparent),
+      transparent 55%
+    );
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    background 0.15s ease;
+}
+.provider-feature-card:hover:not(:disabled),
+.provider-feature-card:focus-visible {
+  border-color: color-mix(in srgb, var(--fg, #eee) 40%, var(--line));
+  transform: translateY(-1px);
+  outline: none;
+}
+.provider-feature-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.provider-feature-card.is-static {
+  cursor: default;
+  transform: none;
+}
+.provider-feature-card strong {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+.provider-feature-card > .muted {
+  font-size: 0.82rem;
+  line-height: 1.25;
+  flex: 1;
+}
+.provider-feature-cta {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: color-mix(in srgb, #8b9cff 90%, #fff);
+}
+.provider-feature-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  width: 100%;
+}
+.provider-feature-actions .btn {
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+.provider-feature-card[data-provider="openai"] {
+  border-color: color-mix(in srgb, #6ee7b7 28%, var(--line));
+}
+.provider-feature-card[data-provider="anthropic"] {
+  border-color: color-mix(in srgb, #e7c4a8 28%, var(--line));
+}
+.provider-feature-card[data-provider="xai"] {
+  border-color: color-mix(in srgb, #f5f5f5 18%, var(--line));
+}
+.provider-feature-card[data-provider="openrouter"] {
+  border-color: color-mix(in srgb, #a5b4fc 28%, var(--line));
+}
+
 .provider-pick-row {
   width: 100%;
   display: grid;
@@ -2583,7 +2673,7 @@ button.linkish {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 12px;
   flex-shrink: 0;
 }
 .provider-icon svg {
@@ -2637,6 +2727,12 @@ button.linkish {
   padding: 6px 10px;
   font-size: 0.8rem;
 }
+
+@media (max-width: 420px) {
+  .provider-card-grid {
+    grid-template-columns: 1fr;
+  }
+}
 .intel-form {
   display: flex;
   flex-direction: column;
@@ -2649,7 +2745,8 @@ button.linkish {
   gap: 6px;
   font-size: 14px;
 }
-.intel-form input {
+.intel-form input,
+.intel-form select {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;

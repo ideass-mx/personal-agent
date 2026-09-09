@@ -23,6 +23,11 @@ import {
   providerCardTitle,
 } from "./intelligenceLabels";
 import { ProviderIcon, providerShortBlurb } from "./ProviderIcon";
+import {
+  PRIMARY_BYOK_PROVIDERS,
+  byokModelOptions,
+  defaultByokModelId,
+} from "./byokProviders";
 
 type Panel =
   | "overview"
@@ -33,30 +38,10 @@ type Panel =
   | "byok_form"
   | "cloud_connecting";
 
-const BYOK_PROVIDERS = [
-  "openai",
-  "anthropic",
-  "xai",
-  "openrouter",
-  "groq",
-  "openai-compatible",
-] as const;
+const BYOK_PROVIDERS = PRIMARY_BYOK_PROVIDERS;
 
 function defaultModel(provider: string): string {
-  switch (provider) {
-    case "openai":
-      return "gpt-4.1-mini";
-    case "anthropic":
-      return "claude-sonnet-4-6";
-    case "xai":
-      return "grok-4.6";
-    case "openrouter":
-      return "openai/gpt-4.1-mini";
-    case "groq":
-      return "llama-3.3-70b-versatile";
-    default:
-      return "default";
-  }
+  return defaultByokModelId(provider);
 }
 
 export function IntelligenceCenter() {
@@ -591,7 +576,7 @@ export function IntelligenceCenter() {
             ← Volver
           </button>
           <h3>Conecta tu proveedor de IA</h3>
-          <ul className="provider-pick-list">
+          <ul className="provider-card-grid">
             {BYOK_PROVIDERS.map((id) => {
               const conn = external.find((c) => c.provider === id);
               const configured = Boolean(conn?.credentialConfigured);
@@ -599,27 +584,26 @@ export function IntelligenceCenter() {
               return (
                 <li key={id}>
                   <div
-                    className={`provider-pick-row is-static${configured ? " is-configured" : ""}`}
+                    className={`provider-feature-card is-static${configured ? " is-configured" : ""}`}
+                    data-provider={id}
                   >
-                    <ProviderIcon provider={id} size={34} />
-                    <span className="provider-pick-text">
-                      <strong>{name}</strong>
-                      <span className="muted">
-                        {configured
-                          ? [
-                              "Conectado",
-                              humanModelLabel(
-                                id,
-                                conn?.modelId || defaultModel(id),
-                              ),
-                              conn?.credentialLabel,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")
-                          : providerShortBlurb(id)}
-                      </span>
+                    <ProviderIcon provider={id} size={44} />
+                    <strong>{name}</strong>
+                    <span className="muted">
+                      {configured
+                        ? [
+                            "Conectado",
+                            humanModelLabel(
+                              id,
+                              conn?.modelId || defaultModel(id),
+                            ),
+                            conn?.credentialLabel,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : providerShortBlurb(id)}
                     </span>
-                    <div className="provider-pick-actions">
+                    <div className="provider-feature-actions">
                       {configured ? (
                         <>
                           <button
@@ -697,14 +681,9 @@ export function IntelligenceCenter() {
             ← Volver
           </button>
           <h3>{providerCardTitle(byokProvider)}</h3>
-          {byokProvider === "openai-compatible" ? (
-            <p className="muted">
-              Conecta un servicio compatible con la API de OpenAI.
-            </p>
-          ) : null}
-          {byokProvider === "xai" ? (
-            <p className="muted">Usa tu propia cuenta de xAI.</p>
-          ) : null}
+          <p className="muted">
+            La API key autentica tu cuenta. El modelo es el que usará el agente.
+          </p>
           <form onSubmit={(e) => void onSaveByok(e)} className="intel-form">
             <label>
               API key
@@ -716,42 +695,31 @@ export function IntelligenceCenter() {
                 required
                 minLength={16}
                 aria-describedby="intel-key-hint"
+                placeholder="Pega tu API key"
               />
             </label>
             <p id="intel-key-hint" className="muted">
-              Tu clave se almacena de forma segura en este dispositivo.
+              Se guarda de forma segura en este dispositivo; no la volveremos a
+              mostrar.
             </p>
             <label>
               Modelo
-              {byokProvider === "xai" ? (
-                <select
-                  value={modelId}
-                  onChange={(e) => setModelId(e.target.value)}
-                  aria-label="Modelo Grok"
-                >
-                  <option value="grok-4.6">Grok 4.6</option>
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={modelId}
-                  onChange={(e) => setModelId(e.target.value)}
-                  required
-                />
-              )}
+              <select
+                value={
+                  byokModelOptions(byokProvider).some((o) => o.id === modelId)
+                    ? modelId
+                    : defaultByokModelId(byokProvider)
+                }
+                onChange={(e) => setModelId(e.target.value)}
+                aria-label="Modelo del agente"
+              >
+                {byokModelOptions(byokProvider).map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </label>
-            {byokProvider === "openai-compatible" ? (
-              <label>
-                Endpoint
-                <input
-                  type="url"
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                  placeholder="https://…"
-                  required
-                />
-              </label>
-            ) : null}
             <button
               type="submit"
               className="btn primary"

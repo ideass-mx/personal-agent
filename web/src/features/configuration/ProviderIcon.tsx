@@ -111,11 +111,9 @@ export function ProviderIcon({ provider, size = 36 }: Props) {
 }
 
 export function providerShortBlurb(provider: string): string {
-  if (provider === "xai") return "Grok con tu cuenta";
-  if (provider === "openai-compatible") return "API compatible";
-  if (provider === "openrouter") return "Varios modelos";
-  if (provider === "groq") return "Inferencia rápida";
-  if (provider === "anthropic") return "Claude";
-  if (provider === "openai") return "GPT";
+  if (provider === "xai") return "Grok con tu cuenta xAI";
+  if (provider === "openrouter") return "Acceso a muchos modelos";
+  if (provider === "anthropic") return "Claude para razonar";
+  if (provider === "openai") return "Modelos GPT";
   return "Tu cuenta";
 }

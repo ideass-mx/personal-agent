@@ -412,8 +412,11 @@ describe("onboarding intelligence UX (PHASE 62/63)", () => {
     assert.doesNotMatch(src, /Tu agente está listo para instalarse/);
     assert.match(src, /initialStep = "llm_intro"/);
     assert.match(app, /initialStep="llm_intro"/);
-    assert.match(src, /provider-pick-list/);
+    assert.match(src, /provider-card-grid/);
     assert.match(src, /ProviderIcon/);
+    assert.match(src, /isPrimaryByokProvider/);
     assert.doesNotMatch(src, /intel-provider-card/);
+    assert.doesNotMatch(src, /id: "groq"/);
+    assert.doesNotMatch(src, /openai-compatible/);
   });
 });
