@@ -72,14 +72,28 @@ export async function fetchLocalModels(
 export async function fetchLocalLlmStatus(
   base: string,
   token: string,
-): Promise<{ ready: boolean; model: { id: string; displayName: string; state: string } }> {
+): Promise<{
+  ready: boolean;
+  model: {
+    id: string;
+    displayName: string;
+    state: string;
+    /** 0–100 mientras descarga / valida. */
+    progress?: number;
+  };
+}> {
   const res = await fetch(`${base}/v1/local-llm/status`, {
     headers: authHeaders(token),
   });
   if (!res.ok) throw new Error(`local_status_${res.status}`);
   return (await res.json()) as {
     ready: boolean;
-    model: { id: string; displayName: string; state: string };
+    model: {
+      id: string;
+      displayName: string;
+      state: string;
+      progress?: number;
+    };
   };
 }
 

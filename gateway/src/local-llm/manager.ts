@@ -60,6 +60,8 @@ function writeState(paths: ModelStoragePaths, state: StateFile): void {
 
 export type LocalModelManager = {
   listStatus(): LocalModelStatus[];
+  /** Progreso de instalación en curso (null si no hay descarga activa). */
+  getInstallProgress(): LocalModelStatus | null;
   getActive(): { modelId: string; variantId: string; path: string } | null;
   isInstalled(modelId: string, variantId?: string): boolean;
   getModelPath(modelId: string, variantId?: string): string | null;
@@ -83,8 +85,20 @@ export function createLocalModelManager(
   storage: ModelStoragePaths = resolveModelStorage(),
 ): LocalModelManager {
   const paths = ensureModelStorageDirs(storage);
+  /** Estado efímero de descarga/validación (no se persiste). */
+  let inFlight: LocalModelStatus | null = null;
+
+  function getInstallProgress(): LocalModelStatus | null {
+    return inFlight;
+  }
 
   function listStatus(): LocalModelStatus[] {
+    if (
+      inFlight &&
+      (inFlight.state === "downloading" || inFlight.state === "validating")
+    ) {
+      return [inFlight];
+    }
     const state = readState(paths);
     const entry = getLocalModelEntry(DEFAULT_LOCAL_MODEL_ID)!;
     const variantId = entry.defaultVariantId;
@@ -214,59 +228,103 @@ export function createLocalModelManager(
     const filename = filenameFromUrl(variant.downloadUrl);
     const dest = modelFilePath(modelId, vid, filename, paths);
 
-    if (opts?.sourceFile) {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.copyFileSync(opts.sourceFile, dest);
-    } else {
-      await downloadModelFile({
-        url: variant.downloadUrl,
-        destPath: dest,
-        expectedBytes: variant.expectedBytes,
-        signal: opts?.signal,
-        fetchImpl: opts?.fetchImpl,
-        onProgress: (p) => {
-          if (p.ratio !== undefined) opts?.onProgress?.(p.ratio);
-        },
-      });
-    }
-
-    if (!opts?.skipHash) {
-      await validateModelFile({
-        filePath: dest,
-        expectedBytes: variant.expectedBytes,
-        sha256: variant.sha256,
-      });
-    } else {
-      // Tests: only check file exists + optional GGUF magic if large enough
-      if (!fs.existsSync(dest)) {
-        throw new LocalModelError(
-          "MODEL_VALIDATION_FAILED",
-          userMessageForCode("MODEL_VALIDATION_FAILED"),
-        );
-      }
-    }
-
-    const state = readState(paths);
-    state.installed = state.installed.filter(
-      (i) => !(i.modelId === modelId && i.variantId === vid),
-    );
-    state.installed.push({
+    inFlight = {
       modelId,
       variantId: vid,
-      path: dest,
-      sha256: variant.sha256,
-      installedAt: new Date().toISOString(),
-    });
-    state.active = { modelId, variantId: vid };
-    writeState(paths, state);
-
-    return {
-      modelId,
-      variantId: vid,
-      state: "active",
+      state: "downloading",
       displayName: entry.displayName,
-      path: dest,
+      progress: 0,
     };
+
+    try {
+      if (opts?.sourceFile) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(opts.sourceFile, dest);
+        inFlight = { ...inFlight, progress: 1 };
+      } else {
+        await downloadModelFile({
+          url: variant.downloadUrl,
+          destPath: dest,
+          expectedBytes: variant.expectedBytes,
+          signal: opts?.signal,
+          fetchImpl: opts?.fetchImpl,
+          onProgress: (p) => {
+            if (p.ratio === undefined) return;
+            inFlight = {
+              modelId,
+              variantId: vid,
+              state: "downloading",
+              displayName: entry.displayName,
+              progress: p.ratio,
+            };
+            opts?.onProgress?.(p.ratio);
+          },
+        });
+      }
+
+      inFlight = {
+        modelId,
+        variantId: vid,
+        state: "validating",
+        displayName: entry.displayName,
+        progress: 1,
+      };
+
+      if (!opts?.skipHash) {
+        await validateModelFile({
+          filePath: dest,
+          expectedBytes: variant.expectedBytes,
+          sha256: variant.sha256,
+        });
+      } else {
+        // Tests: only check file exists + optional GGUF magic if large enough
+        if (!fs.existsSync(dest)) {
+          throw new LocalModelError(
+            "MODEL_VALIDATION_FAILED",
+            userMessageForCode("MODEL_VALIDATION_FAILED"),
+          );
+        }
+      }
+
+      const state = readState(paths);
+      state.installed = state.installed.filter(
+        (i) => !(i.modelId === modelId && i.variantId === vid),
+      );
+      state.installed.push({
+        modelId,
+        variantId: vid,
+        path: dest,
+        sha256: variant.sha256,
+        installedAt: new Date().toISOString(),
+      });
+      state.active = { modelId, variantId: vid };
+      writeState(paths, state);
+
+      inFlight = null;
+      return {
+        modelId,
+        variantId: vid,
+        state: "active",
+        displayName: entry.displayName,
+        path: dest,
+      };
+    } catch (err) {
+      const code =
+        err instanceof LocalModelError ? err.code : "MODEL_DOWNLOAD_FAILED";
+      const message =
+        err instanceof LocalModelError
+          ? err.userMessage
+          : userMessageForCode("MODEL_DOWNLOAD_FAILED");
+      inFlight = {
+        modelId,
+        variantId: vid,
+        state: "failed",
+        displayName: entry.displayName,
+        errorCode: code,
+        errorMessage: message,
+      };
+      throw err;
+    }
   }
 
   function remove(modelId: string, variantId?: string): void {
@@ -299,6 +357,7 @@ export function createLocalModelManager(
 
   return {
     listStatus,
+    getInstallProgress,
     getActive,
     isInstalled,
     getModelPath,

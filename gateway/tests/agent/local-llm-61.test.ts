@@ -92,6 +92,26 @@ describe("PHASE 61 LocalModelManager", () => {
     assert.equal(manager.isInstalled(DEFAULT_LOCAL_MODEL_ID), true);
     assert.ok(manager.getActive());
   });
+
+  it("reporta progreso durante descarga HTTPS", async () => {
+    const manager = createLocalModelManager();
+    const payload = Buffer.concat([Buffer.from("GGUF"), Buffer.alloc(200_000)]);
+    const ratios: number[] = [];
+    const status = await manager.install(DEFAULT_LOCAL_MODEL_ID, undefined, {
+      skipHash: true,
+      onProgress: (r) => ratios.push(r),
+      fetchImpl: async () =>
+        new Response(payload, {
+          status: 200,
+          headers: { "content-length": String(payload.byteLength) },
+        }),
+    });
+    assert.equal(status.state, "active");
+    assert.ok(ratios.length >= 1);
+    assert.ok(ratios[0]! > 0);
+    assert.ok(ratios[ratios.length - 1]! <= 1);
+    assert.equal(manager.getInstallProgress(), null);
+  });
 });
 
 describe("PHASE 61 LocalProvider", () => {

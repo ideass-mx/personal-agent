@@ -56,9 +56,19 @@ export {
 } from "./runtime-manifest.ts";
 export {
   createLocalRuntimeManager,
+  getLocalLlmHealthTimeoutMs,
   type LocalRuntimeManager,
   type RuntimeHealth,
+  type EnsureReadyOptions,
 } from "./runtime-manager.ts";
+export {
+  sanitizeRuntimeLog,
+  sanitizeRuntimeMetadata,
+  classifyRuntimeFailure,
+  formatTraceConsole,
+  type RuntimeStartupTrace,
+  type RuntimeFailureCase,
+} from "./runtime-diagnostics.ts";
 export {
   createManagedLlamaServerRuntime,
   createManagedLlamaServerRuntimeWithManager,

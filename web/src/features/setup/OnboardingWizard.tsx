@@ -9,6 +9,7 @@ import {
   type SetupProviderDto,
 } from "../../api/setup";
 import {
+  fetchLocalLlmStatus,
   fetchLocalRecommendation,
   installLocalModel,
   type LocalRecommendationDto,
@@ -60,9 +61,41 @@ export function OnboardingWizard({
     memoryGb: number;
     cpuCores: number;
   } | null>(null);
+  const [installProgress, setInstallProgress] = useState<number | null>(null);
+  const [installPhase, setInstallPhase] = useState<
+    "preparing" | "downloading" | "validating"
+  >("preparing");
 
   const base = session ? resolveHttpBase(session) : "";
   const token = session?.token || "";
+
+  useEffect(() => {
+    if (step !== "local_installing" || !base) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const s = await fetchLocalLlmStatus(base, token);
+        if (cancelled) return;
+        if (s.model.state === "validating") {
+          setInstallPhase("validating");
+          setInstallProgress(100);
+        } else if (s.model.state === "downloading") {
+          setInstallPhase("downloading");
+          if (typeof s.model.progress === "number") {
+            setInstallProgress(s.model.progress);
+          }
+        }
+      } catch {
+        /* polling best-effort */
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 400);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [step, base, token]);
 
   async function refresh() {
     if (!session) return null;
@@ -150,6 +183,8 @@ export function OnboardingWizard({
   async function onInstallLocalModel() {
     setBusy(true);
     setErr(null);
+    setInstallProgress(null);
+    setInstallPhase("preparing");
     setStep("local_installing");
     try {
       await installLocalModel(base, token, {
@@ -176,6 +211,8 @@ export function OnboardingWizard({
       setStep("local_recommend");
     } finally {
       setBusy(false);
+      setInstallProgress(null);
+      setInstallPhase("preparing");
     }
   }
 
@@ -493,6 +530,13 @@ export function OnboardingWizard({
   }
 
   if (step === "local_installing") {
+    const hasPct = typeof installProgress === "number";
+    const phaseLabel =
+      installPhase === "validating"
+        ? "Comprobando el archivo…"
+        : installPhase === "downloading"
+          ? "Descargando…"
+          : "Preparando la instalación…";
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
@@ -504,6 +548,29 @@ export function OnboardingWizard({
           <p className="muted">
             {recommendation?.displayName || "Qwen3 4B"}
           </p>
+          <div className="setup-progress" aria-live="polite">
+            <div className="setup-progress-label">
+              <span>{phaseLabel}</span>
+              <span className="muted">
+                {hasPct ? `${installProgress}%` : "…"}
+              </span>
+            </div>
+            <div
+              className="progress-track"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={hasPct ? installProgress : undefined}
+              aria-label="Progreso de descarga del modelo"
+            >
+              <div
+                className={
+                  hasPct ? "progress-fill" : "progress-fill indeterminate"
+                }
+                style={hasPct ? { width: `${installProgress}%` } : undefined}
+              />
+            </div>
+          </div>
         </div>
       </div>
     );

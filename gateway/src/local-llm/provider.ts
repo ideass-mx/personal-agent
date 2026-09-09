@@ -118,7 +118,10 @@ export function createLocalProvider(input: {
       }
 
       try {
-        await input.runtime.ensureReady(active.path);
+        await input.runtime.ensureReady(active.path, {
+          diagnosticId: request.diagnosticId,
+          executionId: request.diagnosticId,
+        });
       } catch (err) {
         throw mapLocalError(err, request.diagnosticId, model);
       }

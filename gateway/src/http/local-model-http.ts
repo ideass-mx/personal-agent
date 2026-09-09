@@ -110,19 +110,36 @@ export function mountLocalModelHttp(
     const denied = requireSetup(c);
     if (denied) return denied;
     const active = manager.getActive();
+    const inflight = manager.getInstallProgress();
     const entry = listLocalModelCatalog().find(
-      (e) => e.id === (active?.modelId || DEFAULT_LOCAL_MODEL_ID),
+      (e) =>
+        e.id ===
+        (inflight?.modelId || active?.modelId || DEFAULT_LOCAL_MODEL_ID),
     );
     const rtManager = createLocalRuntimeManager();
     const manifest = resolveRuntimeManifest();
+    let modelState: string = active ? "ready" : "not_installed";
+    let progressPct: number | undefined;
+    if (
+      inflight &&
+      (inflight.state === "downloading" ||
+        inflight.state === "validating" ||
+        inflight.state === "failed")
+    ) {
+      modelState = inflight.state;
+      if (typeof inflight.progress === "number") {
+        progressPct = Math.round(Math.min(1, Math.max(0, inflight.progress)) * 100);
+      }
+    }
     return c.json({
       ok: true,
       provider: "local",
       ready: Boolean(active) && rtManager.isInstalled(),
       model: {
-        id: active?.modelId || DEFAULT_LOCAL_MODEL_ID,
+        id: inflight?.modelId || active?.modelId || DEFAULT_LOCAL_MODEL_ID,
         displayName: entry?.displayName ?? "Qwen3 4B",
-        state: active ? "ready" : "not_installed",
+        state: modelState,
+        ...(progressPct !== undefined ? { progress: progressPct } : {}),
       },
       runtime: {
         id: manifest?.runtimeId ?? "llama-server",

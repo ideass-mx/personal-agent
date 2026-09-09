@@ -95,7 +95,7 @@ async function main(): Promise<void> {
     localRuntime =
       process.env.PERSONAL_AGENT_LOCAL_LLM_FAKE === "1"
         ? createFakeLocalRuntime()
-        : await createDefaultLocalRuntime();
+        : await createDefaultLocalRuntime({ diagnostics });
     llm = createLocalProvider({
       manager: localModelManager,
       runtime: localRuntime,

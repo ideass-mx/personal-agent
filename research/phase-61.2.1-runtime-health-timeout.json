@@ -1,0 +1,67 @@
+{
+  "phase": "61.2.1",
+  "startedAt": "2026-09-09T05:11:24.828Z",
+  "lookupDiagnosticId": "PA-64B2B87C3FE8",
+  "historicalLookup": {
+    "diagnosticId": "PA-64B2B87C3FE8",
+    "found": false,
+    "eventCount": 0,
+    "events": [],
+    "note": "No hay bitácora local para este diagnosticId en este host."
+  },
+  "environment": {
+    "os": "linux",
+    "arch": "x64",
+    "node": "v22.22.0",
+    "dataRoot": "/home/tony/dev/ideass/personal-agent/gateway",
+    "live": false
+  },
+  "health": {
+    "endpoint": "GET http://127.0.0.1:{port}/health",
+    "perAttemptTimeoutMs": 2000,
+    "pollIntervalMs": 400,
+    "success": "res.ok (HTTP 2xx)",
+    "configuredTimeoutMs": 120000,
+    "envOverride": null
+  },
+  "expectedArgs": [
+    "-m",
+    "<modelPath>",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "<ephemeral>",
+    "--ctx-size",
+    "4096",
+    "-np",
+    "1"
+  ],
+  "runtime": {
+    "manifest": {
+      "runtimeId": "llama-server",
+      "version": "b10537",
+      "platform": "linux",
+      "architecture": "x64",
+      "binaryName": "llama-server"
+    }
+  },
+  "model": {
+    "id": "qwen3-4b",
+    "active": null,
+    "catalogVariant": {
+      "id": "q4_k_m",
+      "quantization": "Q4_K_M",
+      "expectedBytes": 2497280736,
+      "sha256": "2fde00ce69dd4899c70d020845e2638353015bba0fdf161b3eb965f2bca4464e"
+    }
+  },
+  "processCounts": {
+    "before": 0,
+    "during": null,
+    "after": null
+  },
+  "timeline": [],
+  "classification": null,
+  "inference": null,
+  "conclusion": "LIVE no habilitado (PERSONAL_AGENT_LOCAL_LLM_LIVE≠1). Instrumentación y artefactos listos; reproducción real pendiente en el host con modelo/runtime."
+}

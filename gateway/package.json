@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"tests/**/*.test.ts\"",
     "research:agent:live": "LOG_LEVEL=silent tsx scripts/research-agent-live.ts",
-    "research:agent:live-tools": "LOG_LEVEL=silent tsx scripts/research-agent-live-tools.ts"
+    "research:agent:live-tools": "LOG_LEVEL=silent tsx scripts/research-agent-live-tools.ts",
+    "research:diagnose:61.2.1": "LOG_LEVEL=silent tsx scripts/research-diagnose-61.2.1.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.56.0",

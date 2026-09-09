@@ -49,8 +49,14 @@ export function createManagedLlamaServerRuntime(options?: {
   manager?: LocalRuntimeManager;
   fetchImpl?: typeof fetch;
   modelName?: string;
+  diagnostics?: { record: (input: import("../diagnostics/types.ts").DiagnosticEventInput) => unknown };
 }): LocalLLMRuntime {
-  const manager = options?.manager ?? createLocalRuntimeManager();
+  const manager =
+    options?.manager ??
+    createLocalRuntimeManager({
+      diagnostics: options?.diagnostics,
+      fetchImpl: options?.fetchImpl,
+    });
   const fetchImpl = options?.fetchImpl ?? fetch;
   const modelName = options?.modelName ?? "local";
   const enqueue = createSerialQueue();
@@ -64,7 +70,10 @@ export function createManagedLlamaServerRuntime(options?: {
       const h = await manager.health();
       return { ok: h.ok, detail: h.detail };
     },
-    async ensureReady(modelPath: string) {
+    async ensureReady(
+      modelPath: string,
+      opts?: { diagnosticId?: string; executionId?: string },
+    ) {
       lastModelPath = modelPath;
       if (!manager.isInstalled()) {
         // Intentar instalar runtime (requiere red la primera vez).
@@ -79,7 +88,7 @@ export function createManagedLlamaServerRuntime(options?: {
           );
         }
       }
-      await manager.ensureReady(modelPath);
+      await manager.ensureReady(modelPath, opts);
     },
     async *generate(
       request: LocalGenerationRequest,

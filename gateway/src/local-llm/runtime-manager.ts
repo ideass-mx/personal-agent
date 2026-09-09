@@ -1,5 +1,6 @@
 /**
  * LocalRuntimeManager — dueño único del proceso llama-server (PHASE 61.1).
+ * Observabilidad de arranque: PHASE 61.2.1 (sin cambiar timeouts/arquitectura).
  * AgentRuntime / Web no conocen procesos ni puertos.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -21,12 +22,26 @@ import {
   type RuntimeStoragePaths,
 } from "./runtime-storage.ts";
 import type { LocalRuntimeState } from "./types.ts";
+import type { DiagnosticEventInput } from "../diagnostics/types.ts";
+import {
+  freeMemMb,
+  memMb,
+  RuntimeStartupTracer,
+  sanitizeSpawnArgs,
+  type RuntimeStartupTrace,
+} from "./runtime-diagnostics.ts";
 
 export type RuntimeHealth = {
   ok: boolean;
   detail?: string;
   port?: number;
   pid?: number;
+};
+
+export type EnsureReadyOptions = {
+  diagnosticId?: string;
+  executionId?: string;
+  signal?: AbortSignal;
 };
 
 export type LocalRuntimeManager = {
@@ -40,13 +55,18 @@ export type LocalRuntimeManager = {
     skipHash?: boolean;
   }): Promise<void>;
   /** Lazy start: arranca proceso + carga modelo + espera health. */
-  ensureReady(modelPath: string): Promise<{ baseUrl: string }>;
+  ensureReady(
+    modelPath: string,
+    opts?: EnsureReadyOptions,
+  ): Promise<{ baseUrl: string }>;
   markBusy(): void;
   markIdle(): void;
   stop(): Promise<void>;
   /** Base URL OpenAI-compatible (…/v1) cuando READY/BUSY/IDLE. */
   baseUrl(): string | null;
   getManifest(): RuntimeManifest | null;
+  /** Último trace de arranque (PHASE 61.2.1). */
+  getLastStartupTrace(): RuntimeStartupTrace | null;
 };
 
 type LockPayload = {
@@ -56,6 +76,12 @@ type LockPayload = {
   startedAt: string;
 };
 
+export function getLocalLlmHealthTimeoutMs(): number {
+  const raw = process.env.LOCAL_LLM_HEALTH_TIMEOUT_MS?.trim();
+  if (raw && Number.isFinite(Number(raw))) return Math.max(5_000, Number(raw));
+  return 120_000;
+}
+
 function idleTimeoutMs(): number {
   const raw = process.env.LOCAL_LLM_IDLE_TIMEOUT_MS?.trim();
   if (raw && Number.isFinite(Number(raw))) return Math.max(10_000, Number(raw));
@@ -63,9 +89,7 @@ function idleTimeoutMs(): number {
 }
 
 function healthTimeoutMs(): number {
-  const raw = process.env.LOCAL_LLM_HEALTH_TIMEOUT_MS?.trim();
-  if (raw && Number.isFinite(Number(raw))) return Math.max(5_000, Number(raw));
-  return 120_000;
+  return getLocalLlmHealthTimeoutMs();
 }
 
 async function findFreePort(): Promise<number> {
@@ -138,6 +162,8 @@ export type CreateLocalRuntimeManagerOptions = {
   fetchImpl?: typeof fetch;
   /** Puerto fijo (tests). */
   port?: number;
+  /** Bitácora opcional (PHASE 61.2.1). */
+  diagnostics?: { record: (input: DiagnosticEventInput) => unknown };
 };
 
 export function createLocalRuntimeManager(
@@ -157,10 +183,31 @@ export function createLocalRuntimeManager(
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
   let startChain: Promise<{ baseUrl: string }> | null = null;
   let crashRestarts = 0;
+  let lastTrace: RuntimeStartupTrace | null = null;
+  let activeTracer: RuntimeStartupTracer | null = null;
 
   function paths(): RuntimeStoragePaths | null {
     if (!manifest) return null;
     return resolveRuntimeStorage(manifest);
+  }
+
+  function recordDiag(
+    tracer: RuntimeStartupTracer | null,
+    input: Omit<DiagnosticEventInput, "diagnosticId"> & {
+      diagnosticId?: string;
+    },
+  ): void {
+    const diagnosticId =
+      input.diagnosticId ||
+      tracer?.trace.diagnosticId ||
+      "PA-UNKNOWN";
+    options.diagnostics?.record({
+      ...input,
+      diagnosticId,
+      requestId: tracer?.trace.executionId || diagnosticId,
+      component: input.component ?? "LLM_PROVIDER",
+      stage: input.stage ?? "LLM_REQUEST",
+    });
   }
 
   function clearIdle(): void {
@@ -182,25 +229,61 @@ export function createLocalRuntimeManager(
   async function pollHealth(
     p: number,
     signal?: AbortSignal,
+    tracer?: RuntimeStartupTracer | null,
   ): Promise<RuntimeHealth> {
     const started = Date.now();
     const deadline = started + healthTimeoutMs();
+    let attempt = 0;
     while (Date.now() < deadline) {
       if (signal?.aborted) {
         return { ok: false, detail: "aborted" };
       }
       if (child && child.exitCode !== null) {
+        tracer?.push("health_attempt", "process_exited", {
+          attempt: attempt + 1,
+          exitCode: child.exitCode,
+        });
+        if (tracer) tracer.trace.healthAttempts = attempt + 1;
         return { ok: false, detail: "process_exited" };
       }
+      attempt += 1;
+      if (tracer) tracer.trace.healthAttempts = attempt;
       try {
         const res = await fetchImpl(`http://127.0.0.1:${p}/health`, {
           signal: AbortSignal.timeout(2000),
         });
+        if (tracer) {
+          tracer.trace.healthLastStatus = res.status;
+          tracer.trace.healthLastError = null;
+          tracer.push("health_attempt", `http_${res.status}`, {
+            attempt,
+            httpStatus: res.status,
+            ok: res.ok,
+          });
+        }
         if (res.ok) {
+          tracer?.push("health_success", "ok", {
+            attempt,
+            httpStatus: res.status,
+            tMs: Date.now() - (tracer?.t0 ?? Date.now()),
+          });
           return { ok: true, detail: "ok", port: p, pid: child?.pid };
         }
-      } catch {
-        /* retry */
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const code =
+          err && typeof err === "object" && "code" in err
+            ? String((err as { code?: unknown }).code ?? "")
+            : "";
+        const detail = code || msg.slice(0, 120);
+        if (tracer) {
+          tracer.trace.healthLastError = detail;
+          tracer.push("health_attempt", detail, {
+            attempt,
+            error: detail,
+            code: code || undefined,
+          });
+        }
       }
       await sleep(400, signal);
     }
@@ -233,17 +316,58 @@ export function createLocalRuntimeManager(
     modelPathLoaded = null;
     state = "STOPPED";
     startChain = null;
+    activeTracer = null;
   }
 
-  async function startProcess(modelPath: string): Promise<{ baseUrl: string }> {
+  async function startProcess(
+    modelPath: string,
+    ensureOpts?: EnsureReadyOptions,
+  ): Promise<{ baseUrl: string }> {
+    const tracer = new RuntimeStartupTracer({
+      diagnosticId: ensureOpts?.diagnosticId ?? null,
+      executionId: ensureOpts?.executionId ?? null,
+      healthTimeoutMs: healthTimeoutMs(),
+    });
+    activeTracer = tracer;
+    tracer.trace.ramBeforeMb = freeMemMb();
+    tracer.push("runtime_starting", undefined, {
+      modelPath,
+      healthTimeoutMs: healthTimeoutMs(),
+    });
+    recordDiag(tracer, {
+      level: "INFO",
+      event: "runtime_starting",
+      metadata: { healthTimeoutMs: healthTimeoutMs() },
+    });
+
     if (!manifest) {
+      tracer.push("runtime_failed", "RUNTIME_NOT_INSTALLED");
+      lastTrace = tracer.finish("RUNTIME_NOT_INSTALLED");
       throw new LocalModelError(
         "RUNTIME_NOT_INSTALLED",
         userMessageForCode("RUNTIME_NOT_INSTALLED"),
       );
     }
     const storage = validateInstalledRuntime(manifest);
+    tracer.trace.binaryPath = storage.binaryPath;
+    tracer.trace.binaryExists = fs.existsSync(storage.binaryPath);
+    tracer.trace.modelPath = modelPath;
+    tracer.trace.modelExists = fs.existsSync(modelPath);
+    if (tracer.trace.modelExists) {
+      try {
+        tracer.trace.modelBytes = fs.statSync(modelPath).size;
+      } catch {
+        tracer.trace.modelBytes = null;
+      }
+    }
+    tracer.push("model_check", undefined, {
+      exists: tracer.trace.modelExists,
+      bytes: tracer.trace.modelBytes,
+    });
+
     if (!fs.existsSync(modelPath)) {
+      tracer.push("runtime_failed", "MODEL_NOT_INSTALLED");
+      lastTrace = tracer.finish("MODEL_NOT_INSTALLED");
       throw new LocalModelError(
         "MODEL_NOT_INSTALLED",
         userMessageForCode("MODEL_NOT_INSTALLED"),
@@ -253,6 +377,10 @@ export function createLocalRuntimeManager(
     // Ownership: si hay lock de otro proceso vivo, fallar (no matar ajenos).
     const existing = readLock(storage.lockFile);
     if (existing && existing.pid !== process.pid && isPidAlive(existing.pid)) {
+      tracer.push("runtime_failed", "RUNTIME_START_FAILED", {
+        reason: "lock_held",
+      });
+      lastTrace = tracer.finish("RUNTIME_START_FAILED");
       throw new LocalModelError(
         "RUNTIME_START_FAILED",
         userMessageForCode("RUNTIME_START_FAILED"),
@@ -262,6 +390,8 @@ export function createLocalRuntimeManager(
     state = "STARTING";
     const listenPort = options.port ?? (await findFreePort());
     port = listenPort;
+    tracer.trace.port = listenPort;
+    tracer.push("port_check", "allocated", { port: listenPort });
 
     const args = [
       "-m",
@@ -275,6 +405,22 @@ export function createLocalRuntimeManager(
       "-np",
       "1",
     ];
+    tracer.trace.args = sanitizeSpawnArgs(args);
+    tracer.trace.host = "127.0.0.1";
+
+    tracer.push("spawn_requested", storage.binaryPath, {
+      args: tracer.trace.args,
+      cwd: path.dirname(storage.binaryPath),
+    });
+    recordDiag(tracer, {
+      level: "INFO",
+      event: "spawn_requested",
+      metadata: {
+        binaryExists: tracer.trace.binaryExists,
+        port: listenPort,
+        argCount: args.length,
+      },
+    });
 
     try {
       child = spawnFn(storage.binaryPath, args, {
@@ -285,6 +431,13 @@ export function createLocalRuntimeManager(
       }) as unknown as ChildProcessWithoutNullStreams;
     } catch (err) {
       state = "FAILED";
+      tracer.push("runtime_failed", "RUNTIME_START_FAILED");
+      lastTrace = tracer.finish("RUNTIME_START_FAILED");
+      recordDiag(tracer, {
+        level: "ERROR",
+        event: "runtime_failed",
+        errorCode: "RUNTIME_START_FAILED",
+      });
       throw new LocalModelError(
         "RUNTIME_START_FAILED",
         userMessageForCode("RUNTIME_START_FAILED"),
@@ -292,7 +445,28 @@ export function createLocalRuntimeManager(
       );
     }
 
+    tracer.trace.childPid = child.pid ?? null;
+    tracer.push("process_spawned", undefined, {
+      pid: child.pid ?? null,
+      port: listenPort,
+    });
+    recordDiag(tracer, {
+      level: "INFO",
+      event: "process_spawned",
+      metadata: { pid: child.pid ?? null, port: listenPort },
+    });
+
     child.on("exit", (code, signal) => {
+      const exitCode = code;
+      const exitSignal = signal;
+      if (activeTracer) {
+        activeTracer.trace.exitCode = exitCode;
+        activeTracer.trace.exitSignal = exitSignal;
+        activeTracer.push("process_exit", undefined, {
+          exitCode,
+          exitSignal,
+        });
+      }
       if (state === "STOPPING" || state === "STOPPED") return;
       state = "CRASHED";
       child = null;
@@ -301,11 +475,21 @@ export function createLocalRuntimeManager(
       process.stderr.write(
         `[gateway] local-llm runtime crashed code=${code} signal=${signal}\n`,
       );
+      recordDiag(activeTracer, {
+        level: "ERROR",
+        event: "runtime_failed",
+        errorCode: "RUNTIME_CRASHED",
+        metadata: { exitCode: code, exitSignal: signal },
+      });
     });
 
-    // No loguear stdout/stderr del modelo (puede contener prompts).
-    child.stdout?.on("data", () => {});
-    child.stderr?.on("data", () => {});
+    // Captura sanitizada para diagnóstico (no prompts de inferencia en startup).
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      activeTracer?.appendStdout(chunk);
+    });
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      activeTracer?.appendStderr(chunk);
+    });
 
     writeLock(storage.lockFile, {
       pid: process.pid,
@@ -314,8 +498,47 @@ export function createLocalRuntimeManager(
       startedAt: new Date().toISOString(),
     });
 
-    const health = await pollHealth(listenPort);
+    const health = await pollHealth(
+      listenPort,
+      ensureOpts?.signal,
+      tracer,
+    );
     if (!health.ok) {
+      const alive =
+        child !== null &&
+        child.exitCode === null &&
+        typeof child.pid === "number"
+          ? isPidAlive(child.pid)
+          : false;
+      tracer.trace.processAliveAtTimeout = alive;
+      tracer.trace.failedAtMs = Date.now() - tracer.t0;
+      tracer.trace.ramAfterMb = freeMemMb();
+      tracer.push("runtime_failed", "RUNTIME_HEALTH_TIMEOUT", {
+        detail: health.detail,
+        alive,
+        healthAttempts: tracer.trace.healthAttempts,
+        rssMb: memMb(),
+        freeMemMb: tracer.trace.ramAfterMb,
+      });
+      recordDiag(tracer, {
+        level: "ERROR",
+        event: "RUNTIME_HEALTH_TIMEOUT",
+        errorCode: "RUNTIME_HEALTH_TIMEOUT",
+        durationMs: tracer.trace.failedAtMs,
+        metadata: {
+          detail: health.detail,
+          alive,
+          pid: tracer.trace.childPid,
+          port: listenPort,
+          healthAttempts: tracer.trace.healthAttempts,
+          healthLastStatus: tracer.trace.healthLastStatus,
+          healthLastError: tracer.trace.healthLastError,
+          exitCode: tracer.trace.exitCode,
+          stdoutChars: tracer.trace.stdoutSummary.length,
+          stderrChars: tracer.trace.stderrSummary.length,
+        },
+      });
+      lastTrace = tracer.finish("RUNTIME_HEALTH_TIMEOUT");
       await stopInternal("health_timeout");
       state = "FAILED";
       throw new LocalModelError(
@@ -327,6 +550,21 @@ export function createLocalRuntimeManager(
     modelPathLoaded = modelPath;
     state = "READY";
     crashRestarts = 0;
+    tracer.trace.readyAtMs = Date.now() - tracer.t0;
+    tracer.trace.ramAfterMb = freeMemMb();
+    tracer.push("runtime_ready", undefined, {
+      readyAtMs: tracer.trace.readyAtMs,
+      pid: child?.pid ?? null,
+      port: listenPort,
+    });
+    recordDiag(tracer, {
+      level: "INFO",
+      event: "runtime_ready",
+      durationMs: tracer.trace.readyAtMs,
+      metadata: { pid: child?.pid ?? null, port: listenPort },
+    });
+    lastTrace = tracer.finish(null);
+    activeTracer = null;
     scheduleIdleStop();
     return { baseUrl: `http://127.0.0.1:${listenPort}/v1` };
   }
@@ -337,7 +575,25 @@ export function createLocalRuntimeManager(
       if (!port || (state !== "READY" && state !== "BUSY" && state !== "IDLE")) {
         return { ok: false, detail: state };
       }
-      return pollHealth(port);
+      // Poll corto de verificación (mismo endpoint; no es el wait de arranque).
+      try {
+        const res = await fetchImpl(`http://127.0.0.1:${port}/health`, {
+          signal: AbortSignal.timeout(2000),
+        });
+        return {
+          ok: res.ok,
+          detail: res.ok ? "ok" : `http_${res.status}`,
+          port,
+          pid: child?.pid,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          detail: err instanceof Error ? err.message : "unreachable",
+          port,
+          pid: child?.pid,
+        };
+      }
     },
     isInstalled() {
       if (!manifest) return false;
@@ -358,7 +614,7 @@ export function createLocalRuntimeManager(
         skipHash: opts?.skipHash,
       });
     },
-    async ensureReady(modelPath) {
+    async ensureReady(modelPath, ensureOpts) {
       if (
         (state === "READY" || state === "IDLE" || state === "BUSY") &&
         modelPathLoaded === modelPath &&
@@ -387,7 +643,7 @@ export function createLocalRuntimeManager(
       }
 
       if (!startChain) {
-        startChain = startProcess(modelPath).finally(() => {
+        startChain = startProcess(modelPath, ensureOpts).finally(() => {
           startChain = null;
         });
       }
@@ -413,6 +669,9 @@ export function createLocalRuntimeManager(
     },
     getManifest() {
       return manifest ? { ...manifest } : null;
+    },
+    getLastStartupTrace() {
+      return lastTrace ? { ...lastTrace, events: [...lastTrace.events] } : null;
     },
   };
 }

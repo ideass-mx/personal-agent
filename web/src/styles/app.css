@@ -1959,6 +1959,32 @@ tr:last-child td {
   background: var(--shell-bg);
 }
 
+.setup-progress {
+  margin: 20px 0 4px;
+}
+
+.setup-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 13.5px;
+}
+
+.progress-fill.indeterminate {
+  width: 36%;
+  animation: setup-progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes setup-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 .status-list {
   list-style: none;
   padding: 0;

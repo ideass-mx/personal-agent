@@ -12,7 +12,10 @@ import type {
 export type LocalLLMRuntime = {
   state(): LocalRuntimeState;
   health(): Promise<{ ok: boolean; detail?: string }>;
-  ensureReady(modelPath: string): Promise<void>;
+  ensureReady(
+    modelPath: string,
+    opts?: { diagnosticId?: string; executionId?: string },
+  ): Promise<void>;
   generate(
     request: LocalGenerationRequest,
   ): AsyncIterable<LocalGenerationEvent>;
@@ -224,7 +227,11 @@ export function createFakeLocalRuntime(options?: {
  * 4. node-llama-cpp (experimental, opcional)
  * 5. unavailable stub
  */
-export async function createDefaultLocalRuntime(): Promise<LocalLLMRuntime> {
+export async function createDefaultLocalRuntime(options?: {
+  diagnostics?: {
+    record: (input: import("../diagnostics/types.ts").DiagnosticEventInput) => unknown;
+  };
+}): Promise<LocalLLMRuntime> {
   if (process.env.PERSONAL_AGENT_LOCAL_LLM_FAKE === "1") {
     return createFakeLocalRuntime();
   }
@@ -241,7 +248,9 @@ export async function createDefaultLocalRuntime(): Promise<LocalLLMRuntime> {
     );
     const { resolveRuntimeManifest } = await import("./runtime-manifest.ts");
     if (resolveRuntimeManifest()) {
-      return createManagedLlamaServerRuntime();
+      return createManagedLlamaServerRuntime({
+        diagnostics: options?.diagnostics,
+      });
     }
   } catch (err) {
     process.stderr.write(

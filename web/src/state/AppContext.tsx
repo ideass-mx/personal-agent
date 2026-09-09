@@ -486,7 +486,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       { id: uid(), role: "user", text },
     ]);
     setBusy(true);
-    setToolBanner("Preparando acción…");
     try {
       socketRef.current.sendUserMessage(
         text,
