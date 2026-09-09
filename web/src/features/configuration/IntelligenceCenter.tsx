@@ -22,6 +22,7 @@ import {
   modeTitle,
   providerCardTitle,
 } from "./intelligenceLabels";
+import { ProviderIcon, providerShortBlurb } from "./ProviderIcon";
 
 type Panel =
   | "overview"
@@ -590,99 +591,99 @@ export function IntelligenceCenter() {
             ← Volver
           </button>
           <h3>Conecta tu proveedor de IA</h3>
-          <div className="intel-provider-grid">
+          <ul className="provider-pick-list">
             {BYOK_PROVIDERS.map((id) => {
               const conn = external.find((c) => c.provider === id);
               const configured = Boolean(conn?.credentialConfigured);
               const name = providerCardTitle(id, conn?.displayName);
               return (
-                <div key={id} className="intel-provider-card">
-                  <strong>{name}</strong>
-                  <p className="muted">
-                    {id === "xai"
-                      ? "Modelos de Grok mediante tu propia cuenta."
-                      : id === "openai-compatible"
-                        ? "Conecta un servicio compatible con la API de OpenAI."
-                        : "Usa tu propia cuenta."}
-                  </p>
-                  <p className="muted">
-                    {configured ? "● Conectado" : "No conectado"}
-                  </p>
-                  {configured ? (
-                    <p className="muted">
-                      {humanModelLabel(
-                        id,
-                        conn?.modelId || defaultModel(id),
-                      )}
-                    </p>
-                  ) : null}
-                  {configured && conn?.credentialLabel ? (
-                    <p className="muted">{conn.credentialLabel}</p>
-                  ) : null}
-                  <div className="row-actions">
-                    {configured ? (
-                      <>
+                <li key={id}>
+                  <div
+                    className={`provider-pick-row is-static${configured ? " is-configured" : ""}`}
+                  >
+                    <ProviderIcon provider={id} size={34} />
+                    <span className="provider-pick-text">
+                      <strong>{name}</strong>
+                      <span className="muted">
+                        {configured
+                          ? [
+                              "Conectado",
+                              humanModelLabel(
+                                id,
+                                conn?.modelId || defaultModel(id),
+                              ),
+                              conn?.credentialLabel,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : providerShortBlurb(id)}
+                      </span>
+                    </span>
+                    <div className="provider-pick-actions">
+                      {configured ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn primary"
+                            disabled={busy}
+                            onClick={() => {
+                              if (conn) void activateConnection(conn);
+                            }}
+                          >
+                            Usar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={busy}
+                            onClick={() => {
+                              setByokProvider(id);
+                              setModelId(conn?.modelId || defaultModel(id));
+                              setBaseUrl(conn?.baseUrl || "");
+                              setApiKey("");
+                              setPanel("byok_form");
+                            }}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={busy}
+                            onClick={() => void onTest(id)}
+                          >
+                            Probar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            disabled={busy}
+                            onClick={() => setConfirmDisconnect(id)}
+                          >
+                            Desconectar
+                          </button>
+                        </>
+                      ) : (
                         <button
                           type="button"
                           className="btn primary"
-                          disabled={busy}
-                          onClick={() => {
-                            if (conn) void activateConnection(conn);
-                          }}
-                        >
-                          Usar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={busy}
                           onClick={() => {
                             setByokProvider(id);
-                            setModelId(conn?.modelId || defaultModel(id));
-                            setBaseUrl(conn?.baseUrl || "");
+                            setModelId(defaultModel(id));
+                            setBaseUrl("");
                             setApiKey("");
                             setPanel("byok_form");
                           }}
                         >
-                          Editar
+                          Conectar
                         </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={busy}
-                          onClick={() => void onTest(id)}
-                        >
-                          Probar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={busy}
-                          onClick={() => setConfirmDisconnect(id)}
-                        >
-                          Desconectar
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn primary"
-                        onClick={() => {
-                          setByokProvider(id);
-                          setModelId(defaultModel(id));
-                          setBaseUrl("");
-                          setApiKey("");
-                          setPanel("byok_form");
-                        }}
-                      >
-                        Conectar
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </div>
       ) : null}
 

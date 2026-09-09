@@ -2522,16 +2522,120 @@ button.linkish {
 .intel-provider-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 .intel-provider-card {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
 }
 .intel-provider-card strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.setup-panel-compact h1.setup-h-compact,
+.setup-h-compact {
+  font-size: 1.35rem;
+  margin: 8px 0 4px;
+  line-height: 1.25;
+}
+.setup-lead-compact {
+  margin: 0 0 14px !important;
+  font-size: 0.92rem;
+}
+
+.provider-pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.provider-pick-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.provider-pick-row:hover:not(:disabled),
+.provider-pick-row:focus-visible {
+  border-color: color-mix(in srgb, var(--fg, #eee) 35%, var(--line));
+  background: color-mix(in srgb, var(--fg, #fff) 4%, transparent);
+  outline: none;
+}
+.provider-pick-row:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.provider-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.provider-icon svg {
+  width: 58%;
+  height: 58%;
+  display: block;
+}
+.provider-pick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.provider-pick-text strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.provider-pick-text .muted {
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+.provider-pick-cta {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: color-mix(in srgb, #8b9cff 85%, #fff);
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #6b7cff 18%, transparent);
+}
+.provider-pick-row:disabled .provider-pick-cta {
+  color: var(--muted);
+  background: transparent;
+}
+
+.provider-pick-row.is-static {
+  cursor: default;
+}
+.provider-pick-row.is-configured {
+  align-items: center;
+}
+.provider-pick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: 160px;
+}
+.provider-pick-actions .btn {
+  padding: 6px 10px;
+  font-size: 0.8rem;
 }
 .intel-form {
   display: flex;

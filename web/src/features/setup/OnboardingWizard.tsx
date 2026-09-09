@@ -26,6 +26,10 @@ import {
 } from "./setup-flow";
 import { providerCardTitle } from "../configuration/intelligenceLabels";
 import {
+  ProviderIcon,
+  providerShortBlurb,
+} from "../configuration/ProviderIcon";
+import {
   formatElapsed,
   formatEta,
   formatSpeed,
@@ -926,7 +930,7 @@ export function OnboardingWizard({
     if (llmIntroPanel === "byok") {
       return (
         <div className="setup-center">
-          <div className="panel" style={{ width: "min(440px, 100%)" }}>
+          <div className="panel setup-panel-compact" style={{ width: "min(420px, 100%)" }}>
             <button
               type="button"
               className="btn btn-ghost"
@@ -935,43 +939,40 @@ export function OnboardingWizard({
             >
               ← Volver
             </button>
-            <h1>Conecta tu proveedor de IA</h1>
-            <p className="lead">
-              Usa tu propia cuenta. La clave se guarda solo en este equipo.
+            <h1 className="setup-h-compact">Conecta tu proveedor</h1>
+            <p className="lead setup-lead-compact">
+              La clave se guarda solo en este equipo.
             </p>
-            <div className="intel-provider-grid" role="list">
+            <ul className="provider-pick-list" role="list">
               {byokList.map((p) => {
                 const selectable = isProviderSelectable(p);
                 const title = providerCardTitle(p.id, p.name);
                 return (
-                  <div key={p.id} className="intel-provider-card" role="listitem">
-                    <strong>{title}</strong>
-                    <p className="muted">
-                      {p.id === "xai"
-                        ? "Modelos de Grok mediante tu propia cuenta."
-                        : p.id === "openai-compatible"
-                          ? "Conecta un servicio compatible con la API de OpenAI."
-                          : "Usa tu propia cuenta."}
-                    </p>
-                    <p className="muted">
-                      {selectable
-                        ? "Disponible"
-                        : providerComingSoonLabel(p)}
-                    </p>
-                    <div className="row-actions">
-                      <button
-                        type="button"
-                        className="btn primary"
-                        disabled={!selectable || busy}
-                        onClick={() => onChooseProvider(p.id)}
-                      >
-                        Conectar
-                      </button>
-                    </div>
-                  </div>
+                  <li key={p.id} role="listitem">
+                    <button
+                      type="button"
+                      className="provider-pick-row"
+                      disabled={!selectable || busy}
+                      onClick={() => onChooseProvider(p.id)}
+                      aria-label={`Conectar ${title}`}
+                    >
+                      <ProviderIcon provider={p.id} size={34} />
+                      <span className="provider-pick-text">
+                        <strong>{title}</strong>
+                        <span className="muted">
+                          {selectable
+                            ? providerShortBlurb(p.id)
+                            : providerComingSoonLabel(p)}
+                        </span>
+                      </span>
+                      <span className="provider-pick-cta">
+                        {selectable ? "Conectar" : "Pronto"}
+                      </span>
+                    </button>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
             {err ? <p className="error">{err}</p> : null}
           </div>
         </div>
