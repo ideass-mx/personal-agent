@@ -113,18 +113,27 @@ export function mountSetupHttp(
         400,
       );
     }
+    const target = body.state as SetupState;
+    // AGENT_READY / Gateway running ≠ producto listo: READY exige LLM real.
+    if (
+      (target === SetupStates.READY || target === SetupStates.VERIFIED) &&
+      !isAnyLlmConfigured()
+    ) {
+      return c.json(
+        httpErrorBody(
+          "llm_required",
+          "Instala el modelo local (o configura un proveedor) antes de continuar.",
+        ),
+        400,
+      );
+    }
     try {
-      const record = transitionSetupState(body.state as SetupState, {
+      transitionSetupState(target, {
         llmProvider: body.llmProvider,
         lastErrorCode: body.errorCode ?? null,
         lastErrorMessage: body.errorMessage ?? null,
       });
-      return c.json({
-        ...toSetupStatusDto(record),
-        llmConfigured: hasProviderApiKeyConfigured(
-          record.llmProvider || "anthropic",
-        ),
-      });
+      return c.json(setupStatusPayload());
     } catch (err) {
       const message = err instanceof Error ? err.message : "transition_failed";
       if (message.includes("transición ilegal")) {

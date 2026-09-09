@@ -2,8 +2,12 @@
  * Web setup / onboarding — Fase 5–6 helpers + API client.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import {
+  allowsSkipLocalModelToChat,
   isApplicationReadyForChat,
   isLlmConfigured,
   isProviderSelectable,
@@ -241,6 +245,47 @@ describe("setup-flow", () => {
 
   it("USER_PLAN_LABEL is Plan Personal", () => {
     assert.equal(USER_PLAN_LABEL, "Plan Personal");
+  });
+
+  it("PHASE 61.2.0: sin modelo local no hay chat / AGENT_READY de producto", () => {
+    assert.equal(
+      isApplicationReadyForChat(
+        dto({ state: "AGENT_READY", llmConfigured: false }),
+      ),
+      false,
+    );
+    assert.equal(
+      isApplicationReadyForChat(
+        dto({
+          state: "READY",
+          onboardingCompleted: true,
+          llmConfigured: false,
+        }),
+      ),
+      false,
+    );
+    assert.equal(
+      isApplicationReadyForChat(
+        dto({
+          state: "READY",
+          onboardingCompleted: true,
+          llmConfigured: true,
+        }),
+      ),
+      true,
+    );
+  });
+
+  it("PHASE 61.2.0: no se permite omitir modelo hacia el chat", () => {
+    assert.equal(allowsSkipLocalModelToChat(), false);
+    const wizardPath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../src/features/setup/OnboardingWizard.tsx",
+    );
+    const wizard = readFileSync(wizardPath, "utf8");
+    assert.doesNotMatch(wizard, /Continuar sin modelo/);
+    assert.match(wizard, /Instalar modelo/);
+    assert.match(wizard, /ensureLlmOrBlockInstall/);
   });
 });
 

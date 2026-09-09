@@ -193,8 +193,16 @@ export function createLocalRuntimeManager(
 
   function recordDiag(
     tracer: RuntimeStartupTracer | null,
-    input: Omit<DiagnosticEventInput, "diagnosticId"> & {
+    input: {
       diagnosticId?: string;
+      level: DiagnosticEventInput["level"];
+      event: string;
+      errorCode?: string | null;
+      message?: string | null;
+      durationMs?: number | null;
+      metadata?: Record<string, unknown> | null;
+      component?: DiagnosticEventInput["component"];
+      stage?: DiagnosticEventInput["stage"];
     },
   ): void {
     const diagnosticId =
@@ -202,11 +210,16 @@ export function createLocalRuntimeManager(
       tracer?.trace.diagnosticId ||
       "PA-UNKNOWN";
     options.diagnostics?.record({
-      ...input,
       diagnosticId,
       requestId: tracer?.trace.executionId || diagnosticId,
       component: input.component ?? "LLM_PROVIDER",
       stage: input.stage ?? "LLM_REQUEST",
+      level: input.level,
+      event: input.event,
+      errorCode: input.errorCode,
+      message: input.message,
+      durationMs: input.durationMs,
+      metadata: input.metadata,
     });
   }
 

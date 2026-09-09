@@ -229,6 +229,13 @@ export function SettingsScreen() {
                     : "Preparando…"}
               </span>
             </div>
+            {!localStatus?.ready ? (
+              <p className="muted" style={{ marginTop: 8 }}>
+                El modelo local es necesario para conversar. Completa la
+                instalación desde el onboarding al reiniciar si aún no está
+                disponible.
+              </p>
+            ) : null}
             <p className="muted" style={{ marginTop: 12 }}>
               Motor de inferencia local administrado por Personal Agent (sin
               Ollama ni claves en la nube). Los proveedores externos son

@@ -49,11 +49,21 @@ export function isLlmConfigured(s: Pick<SetupStatusDto, "llmConfigured">): boole
 /**
  * Application ready for chat requires LLM configured.
  * Profile is gated separately in App.tsx.
+ * Con provider=local esto implica Qwen3 4B instalado (isLocalLlmConfigured).
  */
 export function isApplicationReadyForChat(
   s: Pick<SetupStatusDto, "llmConfigured" | "onboardingCompleted" | "state">,
 ): boolean {
   return isLlmConfigured(s);
+}
+
+/**
+ * PHASE 61.2.0 — no se permite omitir la instalación del modelo local
+ * hacia el chat. «Configuración avanzada» puede ir a proveedores cloud
+ * explícitos; nunca a conversation sin LLM.
+ */
+export function allowsSkipLocalModelToChat(): boolean {
+  return false;
 }
 
 /**

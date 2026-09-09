@@ -18,6 +18,7 @@ import { resolveHttpBase } from "../../api/http";
 import { useApp } from "../../state/AppContext";
 import type { SetupStatusDto } from "../../types";
 import {
+  isLlmConfigured,
   isProviderSelectable,
   providerComingSoonLabel,
   stepFromStatus,
@@ -128,12 +129,17 @@ export function OnboardingWizard({
         if (!s) return;
         await loadProviders();
         // Solo "done" si hay credencial LLM real — no confiar solo en state READY.
-        if (s.llmConfigured && (s.onboardingCompleted || s.state === "READY" || s.state === "VERIFIED")) {
+        if (
+          isLlmConfigured(s) &&
+          (s.onboardingCompleted || s.state === "READY" || s.state === "VERIFIED")
+        ) {
           setStep("done");
           return;
         }
-        if (!s.llmConfigured) {
+        if (!isLlmConfigured(s)) {
+          // Restaurar gate local: hardware → recomendación (o saltar descarga si ya hay modelo).
           setStep(stepFromStatus(s));
+          await enterLocalModelGate();
           return;
         }
         if (sessionStorage.getItem("pa_host_bootstrap") === "1") {
@@ -146,6 +152,51 @@ export function OnboardingWizard({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.token]);
+
+  /** Detecta modelo ya instalado o muestra recomendación Qwen3 4B. */
+  async function enterLocalModelGate() {
+    setErr(null);
+    try {
+      const local = await fetchLocalLlmStatus(base, token);
+      if (local.ready || local.model.state === "ready") {
+        // Modelo + runtime ya disponibles: no volver a descargar.
+        try {
+          await transitionSetup(base, token, "LLM_REQUIRED", {
+            llmProvider: "local",
+          });
+          await transitionSetup(base, token, "LLM_CONNECTED", {
+            llmProvider: "local",
+          });
+          try {
+            await verifySetup(base, token);
+          } catch {
+            /* verify best-effort */
+          }
+          const ready = await transitionSetup(base, token, "READY", {
+            llmProvider: "local",
+          });
+          setStatus(ready);
+          if (isLlmConfigured(ready)) {
+            setStep("optional_android");
+            return;
+          }
+        } catch {
+          /* caer a recomendación */
+        }
+      }
+    } catch {
+      /* sin status local → recomendación */
+    }
+    setStep("hardware");
+    try {
+      const rec = await fetchLocalRecommendation(base, token);
+      setRecommendation(rec.recommendation);
+      setHwSummary(rec.hardware);
+      setStep("local_recommend");
+    } catch {
+      setStep("local_recommend");
+    }
+  }
 
   async function onBegin() {
     setBusy(true);
@@ -163,15 +214,7 @@ export function OnboardingWizard({
       setStatus(s);
       await loadProviders();
       // Camino por defecto: modelo local (sin API key).
-      setStep("hardware");
-      try {
-        const rec = await fetchLocalRecommendation(base, token);
-        setRecommendation(rec.recommendation);
-        setHwSummary(rec.hardware);
-        setStep("local_recommend");
-      } catch {
-        setStep("local_recommend");
-      }
+      await enterLocalModelGate();
     } catch {
       setErr("Algo falló al preparar. Inténtalo de nuevo.");
       setStep("error");
@@ -195,19 +238,47 @@ export function OnboardingWizard({
       try {
         await verifySetup(base, token);
       } catch {
-        /* runtime puede no estar; el modelo ya está instalado */
+        /* runtime puede fallar (p.ej. RUNTIME_HEALTH_TIMEOUT); el modelo ya está */
       }
       const ready = await transitionSetup(base, token, "READY", {
         llmProvider: "local",
       });
       setStatus(ready);
+      if (!isLlmConfigured(ready)) {
+        setErr(
+          "El modelo se instaló pero el agente aún no está listo. Reintenta o revisa el estado del motor local.",
+        );
+        setStep("local_recommend");
+        return;
+      }
       setStep("optional_android");
     } catch (ex) {
-      setErr(
+      const msg =
         ex instanceof Error
           ? ex.message
-          : "No pudimos descargar el modelo. Puedes reintentarlo después.",
-      );
+          : "No pudimos descargar el modelo. Comprueba tu conexión a Internet y vuelve a intentarlo.";
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes("verific") ||
+        lower.includes("inválid") ||
+        lower.includes("invalid") ||
+        lower.includes("validation")
+      ) {
+        setErr(
+          "No pudimos verificar el modelo. La descarga puede estar incompleta o dañada.",
+        );
+      } else if (
+        lower.includes("descarg") ||
+        lower.includes("download") ||
+        lower.includes("network") ||
+        lower.includes("conexión")
+      ) {
+        setErr(
+          "No pudimos descargar el modelo. Comprueba tu conexión a Internet y vuelve a intentarlo.",
+        );
+      } else {
+        setErr(msg);
+      }
       setStep("local_recommend");
     } finally {
       setBusy(false);
@@ -217,7 +288,19 @@ export function OnboardingWizard({
   }
 
   function onSkipLocalModel() {
+    // Solo configuración avanzada (proveedor cloud explícito) — no chat sin LLM.
     setStep("llm_intro");
+  }
+
+  async function ensureLlmOrBlockInstall(): Promise<boolean> {
+    const s = await refresh();
+    if (s && isLlmConfigured(s)) return true;
+    setErr(
+      "Tu agente necesita terminar la instalación. Instala Qwen3 4B para comenzar a conversar.",
+    );
+    setStep("local_recommend");
+    void enterLocalModelGate();
+    return false;
   }
 
   async function onContinueToLlm() {
@@ -318,7 +401,10 @@ export function OnboardingWizard({
 
   function onSkipAndroid() {
     setPairingQr(null);
-    setStep("optional_remote");
+    void (async () => {
+      if (!(await ensureLlmOrBlockInstall())) return;
+      setStep("optional_remote");
+    })();
   }
 
   async function onRemoteConfigure() {
@@ -372,12 +458,18 @@ export function OnboardingWizard({
   }
 
   function onSkipRemote() {
-    setStep("done");
+    void (async () => {
+      if (!(await ensureLlmOrBlockInstall())) return;
+      setStep("done");
+    })();
   }
 
   function onTalk() {
-    onCompleted?.();
-    setNav("conversation");
+    void (async () => {
+      if (!(await ensureLlmOrBlockInstall())) return;
+      onCompleted?.();
+      setNav("conversation");
+    })();
   }
 
   const providerList =
@@ -474,7 +566,7 @@ export function OnboardingWizard({
           <h1>
             {step === "hardware"
               ? "Analizando tu computadora…"
-              : "Tu computadora está lista"}
+              : "Tu agente está listo para instalarse"}
           </h1>
           {hwSummary ? (
             <p className="lead">
@@ -487,15 +579,21 @@ export function OnboardingWizard({
           {rec ? (
             <>
               <p>
-                <strong>Modelo recomendado</strong>
-                <br />
-                {rec.displayName}
-                {rec.tierLabel ? ` · ${rec.tierLabel}` : ""}
+                <strong>
+                  Recomendamos {rec.displayName}
+                  {rec.tierLabel ? ` · ${rec.tierLabel}` : ""}
+                </strong>
               </p>
-              <p className="muted">{rec.reason}</p>
+              <p className="muted">
+                {rec.reason ||
+                  "Es un modelo local que permite utilizar Personal Agent sin configurar una API externa."}
+              </p>
             </>
           ) : (
-            <p className="muted">Preparando recomendación…</p>
+            <p className="muted">
+              Recomendamos Qwen3 4B para tu computadora. Es un modelo local que
+              permite utilizar Personal Agent sin configurar una API externa.
+            </p>
           )}
           {err ? <p className="error">{err}</p> : null}
           <div className="actions" style={{ flexDirection: "column", gap: 8 }}>
@@ -515,14 +613,6 @@ export function OnboardingWizard({
             >
               Configuración avanzada
             </button>
-            <button
-              type="button"
-              className="linkish"
-              disabled={busy}
-              onClick={() => setStep("optional_android")}
-            >
-              Continuar sin modelo
-            </button>
           </div>
         </div>
       </div>
@@ -535,12 +625,12 @@ export function OnboardingWizard({
       installPhase === "validating"
         ? "Comprobando el archivo…"
         : installPhase === "downloading"
-          ? "Descargando…"
+          ? "Descargando modelo…"
           : "Preparando la instalación…";
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
-          <h1>Descargando modelo</h1>
+          <h1>Instalando tu agente</h1>
           <p className="lead">
             Esto puede tardar unos minutos la primera vez. No cierres la
             ventana.
@@ -791,14 +881,11 @@ export function OnboardingWizard({
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
-          <h1>Tu agente ya está listo para trabajar contigo</h1>
-          <p className="lead">
-            Puedes empezar a hablar con él ahora. Teléfono y acceso remoto
-            siguen disponibles más adelante si los necesitas.
-          </p>
+          <h1>Tu agente está listo</h1>
+          <p className="lead">Todo está preparado.</p>
           <div className="actions">
             <button type="button" className="btn primary" onClick={onTalk}>
-              Hablar con mi agente
+              Comenzar
             </button>
           </div>
         </div>

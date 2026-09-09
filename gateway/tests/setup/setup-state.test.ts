@@ -306,6 +306,11 @@ describe("GET /v1/setup/status", () => {
       },
       body: JSON.stringify({ state: SetupStates.READY }),
     });
-    assert.equal(bad.status, 409);
+    // PHASE 61.2.0: READY sin LLM → llm_required (antes solo illegal_transition 409).
+    assert.ok(bad.status === 400 || bad.status === 409);
+    const badBody = (await bad.json()) as { error?: { code?: string } };
+    if (bad.status === 400) {
+      assert.equal(badBody.error?.code, "llm_required");
+    }
   });
 });

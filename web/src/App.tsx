@@ -93,8 +93,20 @@ function Routed() {
     return (
       <OnboardingWizard
         onCompleted={() => {
-          setSetupDone(true);
-          setNav("conversation");
+          void (async () => {
+            try {
+              const base = resolveHttpBase(session);
+              const st = await fetchSetupStatus(base, session.token);
+              if (!st.llmConfigured) {
+                setSetupDone(false);
+                return;
+              }
+              setSetupDone(true);
+              setNav("conversation");
+            } catch {
+              setSetupDone(false);
+            }
+          })();
         }}
       />
     );
