@@ -1,0 +1,70 @@
+{
+  "phase": "61.2.2",
+  "timestamp": "2026-09-09T06:07:49.590Z",
+  "platform": "linux",
+  "arch": "x64",
+  "dataRoot": "/home/tony/dev/ideass/personal-agent/gateway",
+  "live": false,
+  "modelId": "qwen3-4b",
+  "modelSize": 2497280736,
+  "quantization": "Q4_K_M",
+  "flowDocumented": {
+    "variant": "B-ish",
+    "steps": [
+      "preparing",
+      "installing_runtime (si falta binario)",
+      "downloading GGUF",
+      "verifying SHA-256",
+      "setup READY"
+    ],
+    "note": "POST /v1/local-llm/install NO arranca llama-server ni hace health; eso ocurre en el primer chat (ensureReady).",
+    "uiProblem": "Antes: await install() + poll que solo veía downloading tras runtime; runtime install dejaba la UI en «Preparando…» indefinido."
+  },
+  "runtimeAlreadyInstalled": false,
+  "modelAlreadyInstalled": false,
+  "cancelSupported": false,
+  "resumeSupported": false,
+  "simulation": true,
+  "finalStatus": "complete",
+  "timeline": [
+    {
+      "at": "2026-09-09T06:07:49.590Z",
+      "tMs": 0,
+      "event": "model_install_started"
+    },
+    {
+      "at": "2026-09-09T06:07:49.591Z",
+      "tMs": 1,
+      "event": "runtime_install_started"
+    },
+    {
+      "at": "2026-09-09T06:07:49.641Z",
+      "tMs": 51,
+      "event": "model_download_started"
+    },
+    {
+      "at": "2026-09-09T06:07:49.641Z",
+      "tMs": 51,
+      "event": "model_download_progress"
+    },
+    {
+      "at": "2026-09-09T06:07:49.722Z",
+      "tMs": 132,
+      "event": "model_verification_started"
+    },
+    {
+      "at": "2026-09-09T06:07:49.753Z",
+      "tMs": 163,
+      "event": "model_install_completed"
+    }
+  ],
+  "stageDurationsMs": {
+    "preparing": 1,
+    "installing_runtime": 50,
+    "downloading": 81,
+    "verifying": 31,
+    "complete": 0
+  },
+  "totalDuration": 163,
+  "conclusion": "LIVE=0: instrumentación OK. Ejecutar con PERSONAL_AGENT_LOCAL_LLM_LIVE=1 en el host real para medir bottleneck."
+}

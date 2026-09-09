@@ -1,0 +1,28 @@
+{
+  "phase": "61.2.3",
+  "title": "Windows Local LLM Runtime Packaging & Preflight",
+  "rootCause": {
+    "ntstatus": "0xC0000135",
+    "meaning": "STATUS_DLL_NOT_FOUND",
+    "missingImports": [
+      "VCRUNTIME140.dll",
+      "VCRUNTIME140_1.dll",
+      "MSVCP140.dll"
+    ],
+    "artifact": "llama-b10537-bin-win-cpu-x64.zip",
+    "evidence": "Static PE import table; ggml zip does not ship VC140 CRT"
+  },
+  "fix": {
+    "strategy": "A_app_local_sidecars",
+    "assets": "gateway/assets/local-llm/win-x64-vc140/",
+    "preflight": "llama-server --version (no GGUF, no /health)",
+    "markerField": "preflightOk",
+    "spawnEnv": "PATH=runtimeDir+existing; cwd=runtimeDir"
+  },
+  "windowsCleanInstall": "PENDING_HOST_VALIDATION",
+  "tests": {
+    "gateway_61.2.3": "PASS",
+    "gateway_61.1_61.2.1": "PASS",
+    "web_install_progress_ui": "PASS"
+  }
+}

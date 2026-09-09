@@ -20,6 +20,15 @@ import {
   type LocalModelManager,
 } from "../local-llm/index.ts";
 import {
+  beginModelInstall,
+  clearModelInstallProgress,
+  completeModelInstall,
+  failModelInstall,
+  getModelInstallSnapshot,
+  setModelInstallPhase,
+  updateModelDownloadProgress,
+} from "../local-llm/install-progress.ts";
+import {
   getSetupState,
   transitionSetupState,
 } from "../setup/setup-store.ts";
@@ -111,16 +120,37 @@ export function mountLocalModelHttp(
     if (denied) return denied;
     const active = manager.getActive();
     const inflight = manager.getInstallProgress();
+    const install = getModelInstallSnapshot();
     const entry = listLocalModelCatalog().find(
       (e) =>
         e.id ===
-        (inflight?.modelId || active?.modelId || DEFAULT_LOCAL_MODEL_ID),
+        (install?.modelId ||
+          inflight?.modelId ||
+          active?.modelId ||
+          DEFAULT_LOCAL_MODEL_ID),
     );
     const rtManager = createLocalRuntimeManager();
     const manifest = resolveRuntimeManifest();
     let modelState: string = active ? "ready" : "not_installed";
     let progressPct: number | undefined;
-    if (
+    if (install && install.phase !== "complete") {
+      modelState =
+        install.phase === "verifying"
+          ? "validating"
+          : install.phase === "downloading"
+            ? "downloading"
+            : install.phase === "failed"
+              ? "failed"
+              : install.phase === "installing_runtime" ||
+                  install.phase === "validating_runtime" ||
+                  install.phase === "starting_model" ||
+                  install.phase === "preparing"
+                ? "downloading"
+                : modelState;
+      if (typeof install.progress === "number") {
+        progressPct = install.progress;
+      }
+    } else if (
       inflight &&
       (inflight.state === "downloading" ||
         inflight.state === "validating" ||
@@ -136,11 +166,30 @@ export function mountLocalModelHttp(
       provider: "local",
       ready: Boolean(active) && rtManager.isInstalled(),
       model: {
-        id: inflight?.modelId || active?.modelId || DEFAULT_LOCAL_MODEL_ID,
+        id:
+          install?.modelId ||
+          inflight?.modelId ||
+          active?.modelId ||
+          DEFAULT_LOCAL_MODEL_ID,
         displayName: entry?.displayName ?? "Qwen3 4B",
         state: modelState,
         ...(progressPct !== undefined ? { progress: progressPct } : {}),
       },
+      install: install
+        ? {
+            phase: install.phase,
+            displayName: install.displayName,
+            progress: install.progress,
+            bytesReceived: install.bytesReceived,
+            bytesTotal: install.bytesTotal,
+            bytesPerSecond: install.bytesPerSecond,
+            etaSeconds: install.etaSeconds,
+            elapsedMs: install.elapsedMs,
+            errorCode: install.errorCode,
+            errorMessage: install.errorMessage,
+            stageDurationsMs: install.stageDurationsMs,
+          }
+        : null,
       runtime: {
         id: manifest?.runtimeId ?? "llama-server",
         version: manifest?.version ?? null,
@@ -208,22 +257,53 @@ export function mountLocalModelHttp(
     };
     const modelId = body.modelId || DEFAULT_LOCAL_MODEL_ID;
     const variantId = body.variantId || DEFAULT_LOCAL_VARIANT_ID;
+    const entry = listLocalModelCatalog().find((e) => e.id === modelId);
+    const displayName = entry?.displayName ?? "Qwen3 4B";
+    beginModelInstall({ modelId, displayName });
     try {
-      // Runtime oficial (llama-server) antes o junto al modelo.
-      try {
-        const rtManager = createLocalRuntimeManager();
-        if (!rtManager.isInstalled()) {
-          await rtManager.install({
-            skipHash: process.env.PERSONAL_AGENT_LOCAL_LLM_SKIP_HASH === "1",
-          });
-        }
-      } catch {
-        /* runtime puede instalarse después; el modelo sigue siendo útil */
-      }
+      // 1) Modelo: descarga + SHA-256 (sin arrancar el motor).
+      setModelInstallPhase("downloading");
       const status = await manager.install(modelId, variantId, {
-        // En tests se usa skipHash vía env
+        skipHash: process.env.PERSONAL_AGENT_LOCAL_LLM_SKIP_HASH === "1",
+        onDetail: (p) => {
+          if (p.phase === "validating") {
+            setModelInstallPhase("verifying");
+            return;
+          }
+          setModelInstallPhase("downloading");
+          updateModelDownloadProgress({
+            bytesReceived: p.bytesReceived ?? 0,
+            bytesTotal: p.bytesTotal,
+            ratio: p.ratio,
+          });
+        },
+      });
+
+      // 2) Runtime: extract + sidecars + preflight `--version` (no GGUF).
+      const rtManager = createLocalRuntimeManager();
+      setModelInstallPhase("installing_runtime");
+      await rtManager.install({
         skipHash: process.env.PERSONAL_AGENT_LOCAL_LLM_SKIP_HASH === "1",
       });
+      setModelInstallPhase("validating_runtime");
+      if (!rtManager.isInstalled()) {
+        throw new LocalModelError(
+          "RUNTIME_VALIDATION_FAILED",
+          "El modelo se descargó correctamente, pero el motor local no pudo iniciarse.",
+        );
+      }
+
+      // 3) Arranque real con el GGUF + /health (diagnóstico separado del preflight).
+      const active = manager.getActive();
+      if (!active?.path) {
+        throw new LocalModelError(
+          "MODEL_NOT_INSTALLED",
+          "El archivo del modelo no está disponible tras la descarga.",
+        );
+      }
+      setModelInstallPhase("starting_model");
+      await rtManager.ensureReady(active.path);
+
       writeLlmPreference(defaultLocalPreference());
       try {
         let record = getSetupState();
@@ -253,6 +333,8 @@ export function mountLocalModelHttp(
       } catch {
         /* setup transitions best-effort */
       }
+      completeModelInstall();
+      const snap = getModelInstallSnapshot();
       return c.json({
         ok: true,
         model: {
@@ -260,11 +342,55 @@ export function mountLocalModelHttp(
           displayName: status.displayName,
           state: status.state,
         },
+        install: snap
+          ? {
+              phase: snap.phase,
+              elapsedMs: snap.elapsedMs,
+              stageDurationsMs: snap.stageDurationsMs,
+            }
+          : null,
       });
     } catch (err) {
       if (err instanceof LocalModelError) {
-        return c.json(httpErrorBody(err.code, err.userMessage), 400);
+        failModelInstall(err.code, err.userMessage);
+        const technical =
+          err.code === "RUNTIME_DEPENDENCY_MISSING"
+            ? "Código técnico: 0xC0000135 (STATUS_DLL_NOT_FOUND)"
+            : err.cause &&
+                typeof err.cause === "object" &&
+                err.cause !== null &&
+                "diagnostics" in err.cause
+              ? String(
+                  (err.cause as { diagnostics?: string }).diagnostics ?? "",
+                )
+              : undefined;
+        return c.json(
+          {
+            error: {
+              code: err.code,
+              message:
+                err.code === "RUNTIME_DEPENDENCY_MISSING" ||
+                err.code === "RUNTIME_VALIDATION_FAILED" ||
+                err.code === "RUNTIME_START_FAILED" ||
+                err.code === "RUNTIME_NOT_INSTALLED"
+                  ? "El modelo se descargó correctamente, pero el motor local no pudo iniciarse."
+                  : err.userMessage,
+              title: err.code.startsWith("RUNTIME_")
+                ? "No pudimos preparar el motor local"
+                : undefined,
+              technical: technical || undefined,
+              modelOk:
+                err.code.startsWith("RUNTIME_") ||
+                err.code === "MODEL_LOAD_FAILED",
+            },
+          },
+          400,
+        );
       }
+      failModelInstall(
+        "MODEL_DOWNLOAD_FAILED",
+        "No pudimos descargar el modelo.",
+      );
       return c.json(
         httpErrorBody(
           "MODEL_DOWNLOAD_FAILED",
@@ -272,6 +398,9 @@ export function mountLocalModelHttp(
         ),
         400,
       );
+    } finally {
+      // Mantener snapshot unos segundos para el último poll; limpiar lazy.
+      setTimeout(() => clearModelInstallProgress(), 15_000);
     }
   });
 

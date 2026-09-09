@@ -81,6 +81,18 @@ export async function fetchLocalLlmStatus(
     /** 0–100 mientras descarga / valida. */
     progress?: number;
   };
+  install?: {
+    phase: string;
+    displayName: string;
+    progress?: number;
+    bytesReceived?: number;
+    bytesTotal?: number;
+    bytesPerSecond?: number;
+    etaSeconds?: number;
+    elapsedMs?: number;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  } | null;
 }> {
   const res = await fetch(`${base}/v1/local-llm/status`, {
     headers: authHeaders(token),
@@ -94,6 +106,18 @@ export async function fetchLocalLlmStatus(
       state: string;
       progress?: number;
     };
+    install?: {
+      phase: string;
+      displayName: string;
+      progress?: number;
+      bytesReceived?: number;
+      bytesTotal?: number;
+      bytesPerSecond?: number;
+      etaSeconds?: number;
+      elapsedMs?: number;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    } | null;
   };
 }
 
@@ -110,10 +134,26 @@ export async function installLocalModel(
   const json = (await res.json()) as {
     ok?: boolean;
     model?: { id: string; displayName: string; state: string };
-    error?: { code: string; message: string };
+    error?: {
+      code: string;
+      message: string;
+      title?: string;
+      technical?: string;
+      modelOk?: boolean;
+    };
   };
   if (!res.ok) {
-    throw new Error(json.error?.message || `install_${res.status}`);
+    const err = new Error(json.error?.message || `install_${res.status}`) as Error & {
+      code?: string;
+      title?: string;
+      technical?: string;
+      modelOk?: boolean;
+    };
+    err.code = json.error?.code;
+    err.title = json.error?.title;
+    err.technical = json.error?.technical;
+    err.modelOk = json.error?.modelOk;
+    throw err;
   }
   return { ok: true, model: json.model };
 }

@@ -57,6 +57,7 @@ async function installFakeBinary(manifest: RuntimeManifest): Promise<string> {
       runtimeId: manifest.runtimeId,
       version: manifest.version,
       sha256: manifest.sha256,
+      preflightOk: true,
     }),
   );
   return storage.binaryPath;

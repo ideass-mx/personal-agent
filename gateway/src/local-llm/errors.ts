@@ -13,6 +13,7 @@ export type LocalModelErrorCode =
   | "MODEL_INSUFFICIENT_STORAGE"
   | "RUNTIME_NOT_INSTALLED"
   | "RUNTIME_VALIDATION_FAILED"
+  | "RUNTIME_DEPENDENCY_MISSING"
   | "RUNTIME_START_FAILED"
   | "RUNTIME_HEALTH_TIMEOUT"
   | "RUNTIME_CRASHED"
@@ -51,6 +52,8 @@ export function userMessageForCode(code: LocalModelErrorCode): string {
       return "El motor del modelo local no está disponible en este equipo.";
     case "RUNTIME_VALIDATION_FAILED":
       return "El motor local no es válido. Intenta reinstalarlo.";
+    case "RUNTIME_DEPENDENCY_MISSING":
+      return "No pudimos preparar el motor local. Falta un componente del sistema necesario para ejecutarlo.";
     case "RUNTIME_START_FAILED":
       return "No pudimos iniciar el motor del modelo local.";
     case "RUNTIME_HEALTH_TIMEOUT":

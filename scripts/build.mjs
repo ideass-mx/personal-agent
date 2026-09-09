@@ -5,7 +5,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(path.join(repoRoot, "gateway/package.json"));
@@ -46,6 +46,26 @@ export async function build() {
     outfile: nodeOut,
     external: ["winax"],
   });
+
+  // PHASE 61.2.3 — sidecars VC++ para llama-server win-x64
+  const vcSrc = path.join(
+    repoRoot,
+    "gateway",
+    "assets",
+    "local-llm",
+    "win-x64-vc140",
+  );
+  if (existsSync(vcSrc)) {
+    const vcDest = path.join(
+      dist,
+      "gateway",
+      "assets",
+      "local-llm",
+      "win-x64-vc140",
+    );
+    mkdirSync(path.dirname(vcDest), { recursive: true });
+    cpSync(vcSrc, vcDest, { recursive: true });
+  }
 
   // Legacy aliases = thin shims (una implementación, varios entrypoints).
   writeFileSync(

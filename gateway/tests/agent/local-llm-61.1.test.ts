@@ -124,6 +124,7 @@ describe("PHASE 61.1 LocalRuntimeManager lifecycle (fake spawn)", () => {
         runtimeId: manifest.runtimeId,
         version: manifest.version,
         sha256: manifest.sha256,
+        preflightOk: true,
       }),
     );
 
@@ -214,6 +215,7 @@ describe("PHASE 61.1 managed runtime serial generate (mock HTTP)", () => {
         runtimeId: manifest.runtimeId,
         version: manifest.version,
         sha256: manifest.sha256,
+        preflightOk: true,
       }),
     );
 

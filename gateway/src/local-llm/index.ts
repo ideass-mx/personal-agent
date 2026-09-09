@@ -62,13 +62,23 @@ export {
   type EnsureReadyOptions,
 } from "./runtime-manager.ts";
 export {
+  classifyRuntimeFailure,
   sanitizeRuntimeLog,
   sanitizeRuntimeMetadata,
-  classifyRuntimeFailure,
-  formatTraceConsole,
   type RuntimeStartupTrace,
-  type RuntimeFailureCase,
 } from "./runtime-diagnostics.ts";
+export {
+  beginModelInstall,
+  clearModelInstallProgress,
+  completeModelInstall,
+  failModelInstall,
+  formatInstallDurationSummary,
+  getModelInstallSnapshot,
+  setModelInstallPhase,
+  updateModelDownloadProgress,
+  type ModelInstallPhase,
+  type ModelInstallSnapshot,
+} from "./install-progress.ts";
 export {
   createManagedLlamaServerRuntime,
   createManagedLlamaServerRuntimeWithManager,
@@ -77,3 +87,15 @@ export {
   installLlamaServerRuntime,
   validateInstalledRuntime,
 } from "./runtime-installer.ts";
+export {
+  runRuntimePreflight,
+  assertRuntimePreflight,
+  isDllNotFoundExit,
+  WIN_STATUS_DLL_NOT_FOUND,
+  type RuntimePreflightResult,
+} from "./runtime-preflight.ts";
+export {
+  ensureWindowsVc140Sidecars,
+  WIN_VC140_SIDE_BY_SIDE_DLLS,
+  listMissingWindowsVc140Sidecars,
+} from "./runtime-sidecars.ts";

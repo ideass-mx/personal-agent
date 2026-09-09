@@ -20,6 +20,7 @@
     "research:eval:agent-search": "npm run research:eval:agent-search --prefix node --",
     "research:agent:live": "npm run research:agent:live --prefix gateway",
     "research:diagnose:61.2.1": "npm run research:diagnose:61.2.1 --prefix gateway",
+    "research:diagnose:61.2.2": "npm run research:diagnose:61.2.2 --prefix gateway",
     "test": "npm test --prefix packages/workspace-http && npm test --prefix gateway && npm test --prefix node && npm run test:packaging",
     "typecheck": "npm run typecheck --prefix packages/workspace-http && npm run typecheck --prefix gateway && npm run typecheck --prefix node",
     "build": "node scripts/build.mjs",

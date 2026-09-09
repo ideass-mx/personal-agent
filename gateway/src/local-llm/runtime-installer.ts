@@ -13,6 +13,8 @@ import {
   type RuntimeStoragePaths,
 } from "./runtime-storage.ts";
 import { sha256File } from "./validator.ts";
+import { ensureWindowsVc140Sidecars } from "./runtime-sidecars.ts";
+import { assertRuntimePreflight } from "./runtime-preflight.ts";
 
 async function downloadArchive(
   url: string,
@@ -149,6 +151,7 @@ export type InstallRuntimeResult = {
 
 /**
  * Instala runtime si falta. Valida SHA-256 antes de extraer/ejecutar.
+ * Windows: sidecars VC++ + preflight `llama-server --version` antes de marcar OK.
  */
 export async function installLlamaServerRuntime(input: {
   manifest: RuntimeManifest;
@@ -157,10 +160,23 @@ export async function installLlamaServerRuntime(input: {
   /** Tests: archivo local ya descargado. */
   sourceArchive?: string;
   skipHash?: boolean;
+  /** Tests: saltar preflight ejecutable. */
+  skipPreflight?: boolean;
 }): Promise<InstallRuntimeResult> {
   const paths = resolveRuntimeStorage(input.manifest);
   ensureRuntimeDirs(paths);
+
   if (isRuntimeBinaryPresent(paths)) {
+    // Reparación: sidecars + preflight aunque el zip ya estuviera extraído.
+    if (process.platform === "win32") {
+      ensureWindowsVc140Sidecars(paths.installRoot);
+    }
+    if (!input.skipPreflight) {
+      const pf = assertRuntimePreflight(paths);
+      writeRuntimeMarker(paths, input.manifest, pf);
+    } else {
+      writeRuntimeMarker(paths, input.manifest, { ok: true });
+    }
     return { paths, manifest: input.manifest };
   }
 
@@ -218,24 +234,65 @@ export async function installLlamaServerRuntime(input: {
     /* Windows ignore */
   }
 
-  // Marker de instalación
+  if (process.platform === "win32") {
+    const side = ensureWindowsVc140Sidecars(paths.installRoot);
+    if (side.missingAssets.length > 0) {
+      throw new LocalModelError(
+        "RUNTIME_DEPENDENCY_MISSING",
+        userMessageForCode("RUNTIME_DEPENDENCY_MISSING"),
+      );
+    }
+  }
+
+  let preflightOk = true;
+  let preflightMeta: Record<string, unknown> = {};
+  if (!input.skipPreflight) {
+    const pf = assertRuntimePreflight(paths);
+    preflightOk = pf.ok;
+    preflightMeta = {
+      exitCode: pf.exitCode ?? null,
+      durationMs: pf.durationMs,
+      diagnostics: pf.diagnostics ?? null,
+    };
+  }
+
+  writeRuntimeMarker(paths, input.manifest, {
+    ok: preflightOk,
+    ...preflightMeta,
+  });
+
+  return { paths, manifest: input.manifest };
+}
+
+function writeRuntimeMarker(
+  paths: RuntimeStoragePaths,
+  manifest: RuntimeManifest,
+  preflight?: { ok?: boolean; exitCode?: number | null; durationMs?: number; diagnostics?: string | null },
+): void {
   const marker = {
-    runtimeId: input.manifest.runtimeId,
-    version: input.manifest.version,
-    sha256: input.manifest.sha256,
+    runtimeId: manifest.runtimeId,
+    version: manifest.version,
+    sha256: manifest.sha256,
     installedAt: new Date().toISOString(),
     binaryPath: paths.binaryPath,
+    preflightOk: preflight?.ok !== false,
+    preflight: preflight
+      ? {
+          ok: preflight.ok !== false,
+          exitCode: preflight.exitCode ?? null,
+          durationMs: preflight.durationMs ?? null,
+          diagnostics: preflight.diagnostics ?? null,
+        }
+      : null,
   };
   fs.writeFileSync(
     path.join(paths.installRoot, "runtime.json"),
     JSON.stringify(marker, null, 2),
     "utf8",
   );
-
-  return { paths, manifest: input.manifest };
 }
 
-/** Verifica marker + binario (no re-hash del zip). */
+/** Verifica marker + binario (no re-hash del zip). En Windows exige preflightOk. */
 export function validateInstalledRuntime(
   manifest: RuntimeManifest,
 ): RuntimeStoragePaths {
@@ -257,6 +314,7 @@ export function validateInstalledRuntime(
     const raw = JSON.parse(fs.readFileSync(markerPath, "utf8")) as {
       sha256?: string;
       version?: string;
+      preflightOk?: boolean;
     };
     if (
       raw.sha256?.toLowerCase() !== manifest.sha256.toLowerCase() ||
@@ -265,6 +323,18 @@ export function validateInstalledRuntime(
       throw new LocalModelError(
         "RUNTIME_VALIDATION_FAILED",
         userMessageForCode("RUNTIME_VALIDATION_FAILED"),
+      );
+    }
+    if (raw.preflightOk !== true) {
+      throw new LocalModelError(
+        process.platform === "win32"
+          ? "RUNTIME_DEPENDENCY_MISSING"
+          : "RUNTIME_VALIDATION_FAILED",
+        userMessageForCode(
+          process.platform === "win32"
+            ? "RUNTIME_DEPENDENCY_MISSING"
+            : "RUNTIME_VALIDATION_FAILED",
+        ),
       );
     }
   } catch (err) {

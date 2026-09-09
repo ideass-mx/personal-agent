@@ -24,6 +24,18 @@ import {
   stepFromStatus,
   type OnboardingStep,
 } from "./setup-flow";
+import {
+  formatElapsed,
+  formatEta,
+  formatSpeed,
+  installPhaseLead,
+  installPhaseTitle,
+  installProgressDetail,
+  installFailureTitle,
+  mapInstallApiPhase,
+  shouldShowDeterminateBar,
+  type InstallUiState,
+} from "../../lib/installProgressUi";
 
 type DesktopBridge = {
   getTailscaleStatus?: () => Promise<{
@@ -62,10 +74,11 @@ export function OnboardingWizard({
     memoryGb: number;
     cpuCores: number;
   } | null>(null);
-  const [installProgress, setInstallProgress] = useState<number | null>(null);
-  const [installPhase, setInstallPhase] = useState<
-    "preparing" | "downloading" | "validating"
-  >("preparing");
+  const [installUi, setInstallUi] = useState<InstallUiState>({
+    phase: "preparing",
+    displayName: "Qwen3 4B",
+  });
+  const [showInstallDetails, setShowInstallDetails] = useState(false);
 
   const base = session ? resolveHttpBase(session) : "";
   const token = session?.token || "";
@@ -77,14 +90,40 @@ export function OnboardingWizard({
       try {
         const s = await fetchLocalLlmStatus(base, token);
         if (cancelled) return;
+        const inst = s.install;
+        if (inst) {
+          setInstallUi({
+            phase: mapInstallApiPhase(inst.phase),
+            displayName:
+              inst.displayName ||
+              s.model.displayName ||
+              recommendation?.displayName ||
+              "Qwen3 4B",
+            progress: inst.progress,
+            bytesReceived: inst.bytesReceived,
+            bytesTotal: inst.bytesTotal,
+            bytesPerSecond: inst.bytesPerSecond,
+            etaSeconds: inst.etaSeconds,
+            elapsedMs: inst.elapsedMs,
+            errorMessage: inst.errorMessage,
+          });
+          return;
+        }
+        // Fallback legacy: model.state + progress
         if (s.model.state === "validating") {
-          setInstallPhase("validating");
-          setInstallProgress(100);
+          setInstallUi((prev) => ({
+            ...prev,
+            phase: "verifying",
+            progress: 100,
+            displayName: s.model.displayName || prev.displayName,
+          }));
         } else if (s.model.state === "downloading") {
-          setInstallPhase("downloading");
-          if (typeof s.model.progress === "number") {
-            setInstallProgress(s.model.progress);
-          }
+          setInstallUi((prev) => ({
+            ...prev,
+            phase: "downloading",
+            progress: s.model.progress,
+            displayName: s.model.displayName || prev.displayName,
+          }));
         }
       } catch {
         /* polling best-effort */
@@ -96,7 +135,7 @@ export function OnboardingWizard({
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [step, base, token]);
+  }, [step, base, token, recommendation?.displayName]);
 
   async function refresh() {
     if (!session) return null;
@@ -226,8 +265,11 @@ export function OnboardingWizard({
   async function onInstallLocalModel() {
     setBusy(true);
     setErr(null);
-    setInstallProgress(null);
-    setInstallPhase("preparing");
+    setShowInstallDetails(false);
+    setInstallUi({
+      phase: "preparing",
+      displayName: recommendation?.displayName || "Qwen3 4B",
+    });
     setStep("local_installing");
     try {
       await installLocalModel(base, token, {
@@ -238,7 +280,7 @@ export function OnboardingWizard({
       try {
         await verifySetup(base, token);
       } catch {
-        /* runtime puede fallar (p.ej. RUNTIME_HEALTH_TIMEOUT); el modelo ya está */
+        /* verify es best-effort; install ya validó runtime+health */
       }
       const ready = await transitionSetup(base, token, "READY", {
         llmProvider: "local",
@@ -251,39 +293,40 @@ export function OnboardingWizard({
         setStep("local_recommend");
         return;
       }
+      setInstallUi((prev) => ({ ...prev, phase: "complete" }));
       setStep("optional_android");
     } catch (ex) {
-      const msg =
-        ex instanceof Error
-          ? ex.message
-          : "No pudimos descargar el modelo. Comprueba tu conexión a Internet y vuelve a intentarlo.";
-      const lower = msg.toLowerCase();
-      if (
-        lower.includes("verific") ||
-        lower.includes("inválid") ||
-        lower.includes("invalid") ||
-        lower.includes("validation")
-      ) {
-        setErr(
-          "No pudimos verificar el modelo. La descarga puede estar incompleta o dañada.",
-        );
-      } else if (
-        lower.includes("descarg") ||
-        lower.includes("download") ||
-        lower.includes("network") ||
-        lower.includes("conexión")
-      ) {
-        setErr(
-          "No pudimos descargar el modelo. Comprueba tu conexión a Internet y vuelve a intentarlo.",
-        );
-      } else {
-        setErr(msg);
-      }
+      const rich = ex as Error & {
+        code?: string;
+        title?: string;
+        technical?: string;
+        modelOk?: boolean;
+      };
+      const code = rich.code || "";
+      const isRuntime =
+        code.startsWith("RUNTIME_") ||
+        Boolean(rich.title?.includes("motor")) ||
+        Boolean(rich.modelOk);
+      const msg = rich.message || "No pudimos completar la instalación.";
+      setErr(
+        isRuntime
+          ? "El modelo se descargó correctamente, pero el motor local no pudo iniciarse."
+          : msg,
+      );
+      setInstallUi((prev) => ({
+        ...prev,
+        phase: "failed",
+        errorMessage: isRuntime
+          ? "El modelo se descargó correctamente, pero el motor local no pudo iniciarse."
+          : msg,
+        errorCode: code || null,
+        errorTitle: rich.title || (isRuntime ? "No pudimos preparar el motor local" : null),
+        errorTechnical: rich.technical || null,
+        modelOk: isRuntime || rich.modelOk === true,
+      }));
       setStep("local_recommend");
     } finally {
       setBusy(false);
-      setInstallProgress(null);
-      setInstallPhase("preparing");
     }
   }
 
@@ -595,7 +638,46 @@ export function OnboardingWizard({
               permite utilizar Personal Agent sin configurar una API externa.
             </p>
           )}
-          {err ? <p className="error">{err}</p> : null}
+          {err ? (
+            <div style={{ marginTop: 12 }}>
+              <p className="error" style={{ fontWeight: 600 }}>
+                {installFailureTitle(installUi)}
+              </p>
+              <p className="error">{err}</p>
+              {installUi.modelOk ? (
+                <ul className="muted" style={{ marginTop: 8, paddingLeft: 18 }}>
+                  <li>Modelo · {installUi.displayName} descargado</li>
+                  <li>Modelo · Integridad verificada</li>
+                  <li>Motor local · No pudo iniciarse</li>
+                </ul>
+              ) : null}
+              {installUi.errorTechnical ? (
+                <p style={{ marginTop: 8 }}>
+                  <button
+                    type="button"
+                    className="linkish"
+                    onClick={() => setShowInstallDetails((v) => !v)}
+                  >
+                    {showInstallDetails ? "Ocultar detalles" : "Ver detalles"}
+                  </button>
+                </p>
+              ) : null}
+              {showInstallDetails && installUi.errorTechnical ? (
+                <pre
+                  className="muted"
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {installUi.errorTechnical}
+                  {installUi.errorCode ? `\nCódigo: ${installUi.errorCode}` : ""}
+                </pre>
+              ) : null}
+            </div>
+          ) : null}
           <div className="actions" style={{ flexDirection: "column", gap: 8 }}>
             <button
               type="button"
@@ -603,7 +685,7 @@ export function OnboardingWizard({
               disabled={busy}
               onClick={() => void onInstallLocalModel()}
             >
-              Instalar modelo
+              {err ? "Reintentar" : "Instalar modelo"}
             </button>
             <button
               type="button"
@@ -620,29 +702,40 @@ export function OnboardingWizard({
   }
 
   if (step === "local_installing") {
-    const hasPct = typeof installProgress === "number";
-    const phaseLabel =
-      installPhase === "validating"
-        ? "Comprobando el archivo…"
-        : installPhase === "downloading"
-          ? "Descargando modelo…"
-          : "Preparando la instalación…";
+    const phase = installUi.phase;
+    const title = installPhaseTitle(phase);
+    const lead = installPhaseLead(phase, installUi.displayName);
+    const detail = installProgressDetail(installUi);
+    const determinate = shouldShowDeterminateBar(installUi);
+    const speed =
+      phase === "downloading" && installUi.bytesPerSecond
+        ? formatSpeed(installUi.bytesPerSecond)
+        : "";
+    const eta =
+      phase === "downloading" && installUi.etaSeconds
+        ? formatEta(installUi.etaSeconds)
+        : "";
+    const elapsed =
+      typeof installUi.elapsedMs === "number" && installUi.elapsedMs > 1500
+        ? formatElapsed(installUi.elapsedMs)
+        : "";
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
-          <h1>Instalando tu agente</h1>
-          <p className="lead">
-            Esto puede tardar unos minutos la primera vez. No cierres la
-            ventana.
-          </p>
-          <p className="muted">
-            {recommendation?.displayName || "Qwen3 4B"}
-          </p>
+          <h1>{title}</h1>
+          <p className="lead">{lead}</p>
+          {phase === "downloading" ? (
+            <p className="muted">{installUi.displayName}</p>
+          ) : null}
           <div className="setup-progress" aria-live="polite">
             <div className="setup-progress-label">
-              <span>{phaseLabel}</span>
+              <span>{detail || (determinate ? "" : "…")}</span>
               <span className="muted">
-                {hasPct ? `${installProgress}%` : "…"}
+                {determinate && typeof installUi.progress === "number"
+                  ? `${installUi.progress}%`
+                  : elapsed
+                    ? elapsed
+                    : ""}
               </span>
             </div>
             <div
@@ -650,16 +743,34 @@ export function OnboardingWizard({
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={hasPct ? installProgress : undefined}
-              aria-label="Progreso de descarga del modelo"
+              aria-valuenow={
+                determinate && typeof installUi.progress === "number"
+                  ? installUi.progress
+                  : undefined
+              }
+              aria-label="Progreso de instalación"
             >
               <div
                 className={
-                  hasPct ? "progress-fill" : "progress-fill indeterminate"
+                  determinate ? "progress-fill" : "progress-fill indeterminate"
                 }
-                style={hasPct ? { width: `${installProgress}%` } : undefined}
+                style={
+                  determinate && typeof installUi.progress === "number"
+                    ? { width: `${installUi.progress}%` }
+                    : undefined
+                }
               />
             </div>
+            {speed || eta ? (
+              <p className="muted" style={{ marginTop: 8, fontSize: 13 }}>
+                {[speed, eta].filter(Boolean).join(" · ")}
+              </p>
+            ) : null}
+            {elapsed && determinate ? (
+              <p className="muted" style={{ marginTop: 4, fontSize: 13 }}>
+                Tiempo transcurrido: {elapsed}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

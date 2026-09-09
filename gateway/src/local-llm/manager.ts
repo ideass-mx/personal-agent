@@ -73,6 +73,12 @@ export type LocalModelManager = {
       signal?: AbortSignal;
       fetchImpl?: typeof fetch;
       onProgress?: (ratio: number) => void;
+      onDetail?: (p: {
+        phase: "downloading" | "validating";
+        ratio?: number;
+        bytesReceived?: number;
+        bytesTotal?: number;
+      }) => void;
       /** Skip network; point to existing file (tests). */
       sourceFile?: string;
       skipHash?: boolean;
@@ -197,6 +203,12 @@ export function createLocalModelManager(
       signal?: AbortSignal;
       fetchImpl?: typeof fetch;
       onProgress?: (ratio: number) => void;
+      onDetail?: (p: {
+        phase: "downloading" | "validating";
+        ratio?: number;
+        bytesReceived?: number;
+        bytesTotal?: number;
+      }) => void;
       sourceFile?: string;
       skipHash?: boolean;
     },
@@ -249,7 +261,6 @@ export function createLocalModelManager(
           signal: opts?.signal,
           fetchImpl: opts?.fetchImpl,
           onProgress: (p) => {
-            if (p.ratio === undefined) return;
             inFlight = {
               modelId,
               variantId: vid,
@@ -257,7 +268,13 @@ export function createLocalModelManager(
               displayName: entry.displayName,
               progress: p.ratio,
             };
-            opts?.onProgress?.(p.ratio);
+            if (p.ratio !== undefined) opts?.onProgress?.(p.ratio);
+            opts?.onDetail?.({
+              phase: "downloading",
+              ratio: p.ratio,
+              bytesReceived: p.bytesReceived,
+              bytesTotal: p.bytesTotal,
+            });
           },
         });
       }
@@ -269,6 +286,7 @@ export function createLocalModelManager(
         displayName: entry.displayName,
         progress: 1,
       };
+      opts?.onDetail?.({ phase: "validating", ratio: 1 });
 
       if (!opts?.skipHash) {
         await validateModelFile({

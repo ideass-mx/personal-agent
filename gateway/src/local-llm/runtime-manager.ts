@@ -30,6 +30,7 @@ import {
   sanitizeSpawnArgs,
   type RuntimeStartupTrace,
 } from "./runtime-diagnostics.ts";
+import { isDllNotFoundExit } from "./runtime-preflight.ts";
 
 export type RuntimeHealth = {
   ok: boolean;
@@ -436,11 +437,15 @@ export function createLocalRuntimeManager(
     });
 
     try {
+      const runtimeDir = path.dirname(storage.binaryPath);
       child = spawnFn(storage.binaryPath, args, {
-        cwd: path.dirname(storage.binaryPath),
+        cwd: runtimeDir,
         windowsHide: true,
         stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env },
+        env: {
+          ...process.env,
+          PATH: `${runtimeDir}${path.delimiter}${process.env.PATH || ""}`,
+        },
       }) as unknown as ChildProcessWithoutNullStreams;
     } catch (err) {
       state = "FAILED";
@@ -526,6 +531,31 @@ export function createLocalRuntimeManager(
       tracer.trace.processAliveAtTimeout = alive;
       tracer.trace.failedAtMs = Date.now() - tracer.t0;
       tracer.trace.ramAfterMb = freeMemMb();
+
+      const earlyExit = tracer.trace.exitCode;
+      if (isDllNotFoundExit(earlyExit ?? undefined)) {
+        tracer.push("runtime_failed", "RUNTIME_DEPENDENCY_MISSING", {
+          detail: health.detail,
+          exitCode: earlyExit,
+        });
+        recordDiag(tracer, {
+          level: "ERROR",
+          event: "runtime_failed",
+          errorCode: "RUNTIME_DEPENDENCY_MISSING",
+          metadata: {
+            exitCode: earlyExit,
+            diagnostics: "0xC0000135",
+          },
+        });
+        lastTrace = tracer.finish("RUNTIME_DEPENDENCY_MISSING");
+        await stopInternal("dependency_missing");
+        state = "FAILED";
+        throw new LocalModelError(
+          "RUNTIME_DEPENDENCY_MISSING",
+          userMessageForCode("RUNTIME_DEPENDENCY_MISSING"),
+        );
+      }
+
       tracer.push("runtime_failed", "RUNTIME_HEALTH_TIMEOUT", {
         detail: health.detail,
         alive,
@@ -610,7 +640,28 @@ export function createLocalRuntimeManager(
     },
     isInstalled() {
       if (!manifest) return false;
-      return isRuntimeBinaryPresent(resolveRuntimeStorage(manifest));
+      const paths = resolveRuntimeStorage(manifest);
+      if (!isRuntimeBinaryPresent(paths)) return false;
+      const markerPath = path.join(paths.installRoot, "runtime.json");
+      if (!fs.existsSync(markerPath)) return false;
+      try {
+        const raw = JSON.parse(fs.readFileSync(markerPath, "utf8")) as {
+          preflightOk?: boolean;
+          version?: string;
+          sha256?: string;
+        };
+        if (
+          raw.sha256?.toLowerCase() !== manifest.sha256.toLowerCase() ||
+          raw.version !== manifest.version
+        ) {
+          return false;
+        }
+        // PHASE 61.2.3: sin preflightOk explícito (instalaciones viejas) → no listo.
+        if (raw.preflightOk !== true) return false;
+        return true;
+      } catch {
+        return false;
+      }
     },
     async install(opts) {
       if (!manifest) {
