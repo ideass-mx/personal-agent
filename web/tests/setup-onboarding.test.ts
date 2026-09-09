@@ -393,3 +393,23 @@ describe("setup API client", () => {
     assert.equal(s.installationReady, true);
   });
 });
+
+describe("onboarding intelligence UX (PHASE 62/63)", () => {
+  it("advanced config uses three modes, not a flat provider button list", () => {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(
+      path.join(here, "../src/features/setup/OnboardingWizard.tsx"),
+      "utf8",
+    );
+    assert.match(src, /🔒 Local/);
+    assert.match(src, /☁️ Personal Agent Cloud/);
+    assert.match(src, /🔑 Mi proveedor/);
+    assert.match(src, /llmIntroPanel/);
+    assert.match(src, /onChooseMode\("external"\)/);
+    // No flat map of every provider as primary CTA on the modes screen.
+    assert.doesNotMatch(
+      src,
+      /providerList\.map\(\(p\) =>[\s\S]*btn primary[\s\S]*Mi proveedor/,
+    );
+  });
+});

@@ -24,6 +24,7 @@ import {
   stepFromStatus,
   type OnboardingStep,
 } from "./setup-flow";
+import { providerCardTitle } from "../configuration/intelligenceLabels";
 import {
   formatElapsed,
   formatEta,
@@ -36,6 +37,25 @@ import {
   shouldShowDeterminateBar,
   type InstallUiState,
 } from "../../lib/installProgressUi";
+
+function defaultByokModel(provider: string): string {
+  switch (provider) {
+    case "openai":
+      return "gpt-4.1-mini";
+    case "anthropic":
+      return "claude-sonnet-4-6";
+    case "xai":
+      return "grok-4.6";
+    case "openrouter":
+      return "openai/gpt-4.1-mini";
+    case "groq":
+      return "llama-3.3-70b-versatile";
+    case "openai-compatible":
+      return "gpt-4.1-mini";
+    default:
+      return "gpt-4.1-mini";
+  }
+}
 
 type DesktopBridge = {
   getTailscaleStatus?: () => Promise<{
@@ -77,6 +97,8 @@ export function OnboardingWizard({
     cpuCores: number;
   } | null>(null);
   const [cloudPhase, setCloudPhase] = useState(0);
+  /** Subvista de configuración avanzada: modos vs lista BYOK. */
+  const [llmIntroPanel, setLlmIntroPanel] = useState<"modes" | "byok">("modes");
   const [installUi, setInstallUi] = useState<InstallUiState>({
     phase: "preparing",
     displayName: "Qwen3 4B",
@@ -360,8 +382,10 @@ export function OnboardingWizard({
   }
 
   function onSkipLocalModel() {
-    // Solo configuración avanzada (proveedor cloud explícito) — no chat sin LLM.
+    // Configuración avanzada: Local / Cloud / Mi proveedor — no chat sin LLM.
+    setLlmIntroPanel("modes");
     setStep("llm_intro");
+    void loadProviders();
   }
 
   async function ensureLlmOrBlockInstall(): Promise<boolean> {
@@ -376,12 +400,48 @@ export function OnboardingWizard({
   }
 
   async function onContinueToLlm() {
+    setLlmIntroPanel("modes");
     setStep("llm_intro");
     await loadProviders();
   }
 
+  function onChooseMode(mode: "local" | "personal-agent-cloud" | "external") {
+    setErr(null);
+    if (mode === "local") {
+      onChooseProvider("local");
+      return;
+    }
+    if (mode === "personal-agent-cloud") {
+      onChooseProvider("personal-agent-cloud");
+      return;
+    }
+    setLlmIntroPanel("byok");
+  }
+
   function onChooseProvider(id: string) {
-    const p = providers.find((x) => x.id === id);
+    const list =
+      providers.length > 0
+        ? providers
+        : [
+            { id: "local", name: "Local", mode: "local" as const, available: true },
+            {
+              id: "personal-agent-cloud",
+              name: "Personal Agent Cloud",
+              mode: "personal-agent-cloud" as const,
+              available: true,
+            },
+            { id: "anthropic", name: "Anthropic", available: true },
+            { id: "openai", name: "OpenAI", available: true },
+            { id: "xai", name: "xAI / Grok", available: true },
+            { id: "openrouter", name: "OpenRouter", available: true },
+            { id: "groq", name: "Groq", available: true },
+            {
+              id: "openai-compatible",
+              name: "Compatible con OpenAI",
+              available: true,
+            },
+          ];
+    const p = list.find((x) => x.id === id);
     if (!p || !isProviderSelectable(p)) return;
     setSelectedProvider(id);
     if (id === "local") {
@@ -418,6 +478,7 @@ export function OnboardingWizard({
               ? ex.message
               : "No pudimos conectar este dispositivo con Personal Agent Cloud. Vuelve a intentarlo.",
           );
+          setLlmIntroPanel("modes");
           setStep("llm_intro");
         } finally {
           setBusy(false);
@@ -425,6 +486,8 @@ export function OnboardingWizard({
       })();
       return;
     }
+    setProviderModel(defaultByokModel(id));
+    if (id !== "openai-compatible") setProviderBaseUrl("");
     setStep("llm_key");
   }
 
@@ -847,38 +910,127 @@ export function OnboardingWizard({
   }
 
   if (step === "llm_intro") {
+    const localP = providerList.find((p) => p.id === "local");
+    const cloudP = providerList.find((p) => p.id === "personal-agent-cloud");
+    const byokList = providerList.filter(
+      (p) =>
+        p.id !== "local" &&
+        p.id !== "personal-agent-cloud" &&
+        (p.mode === "external" || !p.mode),
+    );
+
+    if (llmIntroPanel === "byok") {
+      return (
+        <div className="setup-center">
+          <div className="panel" style={{ width: "min(440px, 100%)" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={busy}
+              onClick={() => setLlmIntroPanel("modes")}
+            >
+              ← Volver
+            </button>
+            <h1>Conecta tu proveedor de IA</h1>
+            <p className="lead">
+              Usa tu propia cuenta. La clave se guarda solo en este equipo.
+            </p>
+            <div className="intel-provider-grid" role="list">
+              {byokList.map((p) => {
+                const selectable = isProviderSelectable(p);
+                const title = providerCardTitle(p.id, p.name);
+                return (
+                  <div key={p.id} className="intel-provider-card" role="listitem">
+                    <strong>{title}</strong>
+                    <p className="muted">
+                      {p.id === "xai"
+                        ? "Modelos de Grok mediante tu propia cuenta."
+                        : p.id === "openai-compatible"
+                          ? "Conecta un servicio compatible con la API de OpenAI."
+                          : "Usa tu propia cuenta."}
+                    </p>
+                    <p className="muted">
+                      {selectable
+                        ? "Disponible"
+                        : providerComingSoonLabel(p)}
+                    </p>
+                    <div className="row-actions">
+                      <button
+                        type="button"
+                        className="btn primary"
+                        disabled={!selectable || busy}
+                        onClick={() => onChooseProvider(p.id)}
+                      >
+                        Conectar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {err ? <p className="error">{err}</p> : null}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={busy}
+            onClick={() => setStep("local_recommend")}
+          >
+            ← Volver
+          </button>
           <h1>¿Cómo quieres ejecutar la inteligencia?</h1>
-          <p className="lead">Puedes elegir Local, Personal Agent Cloud o tu propio proveedor.</p>
-          <div className="actions" style={{ flexDirection: "column", gap: 8 }}>
-            {providerList.map((p) => {
-              const selectable = isProviderSelectable(p);
-              const suffix =
-                p.id === "local"
-                  ? " — Ejecutar en este equipo"
-                  : p.id === "personal-agent-cloud"
-                    ? " — Sin API key"
-                    : " — Mi proveedor";
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={selectable ? "btn primary" : "btn"}
-                  disabled={!selectable}
-                  onClick={() => onChooseProvider(p.id)}
-                >
-                  {p.name}
-                  {selectable ? suffix : ""}
-                  {!selectable
-                    ? ` — ${providerComingSoonLabel(p)}`
-                    : " — Disponible"}
-                </button>
-              );
-            })}
+          <p className="lead">
+            Elige Local, Personal Agent Cloud o tu propio proveedor.
+          </p>
+          <div className="intel-choose" role="group" aria-label="Modos de inteligencia">
+            <button
+              type="button"
+              className="intel-mode-card"
+              disabled={busy || !(localP && isProviderSelectable(localP))}
+              onClick={() => onChooseMode("local")}
+            >
+              <strong>🔒 Local</strong>
+              <span className="muted">
+                Ejecuta el modelo en este equipo.
+                {localP && !isProviderSelectable(localP)
+                  ? ` · ${providerComingSoonLabel(localP)}`
+                  : ""}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="intel-mode-card"
+              disabled={busy || !(cloudP && isProviderSelectable(cloudP))}
+              onClick={() => onChooseMode("personal-agent-cloud")}
+            >
+              <strong>☁️ Personal Agent Cloud</strong>
+              <span className="muted">
+                Modelos de Personal Agent · Sin API key.
+                {cloudP && !isProviderSelectable(cloudP)
+                  ? ` · ${providerComingSoonLabel(cloudP)}`
+                  : ""}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="intel-mode-card"
+              disabled={busy}
+              onClick={() => onChooseMode("external")}
+            >
+              <strong>🔑 Mi proveedor</strong>
+              <span className="muted">
+                OpenAI, Anthropic, xAI / Grok y otros con tu propia cuenta.
+              </span>
+            </button>
           </div>
-          {err ? <p className="muted">{err}</p> : null}
+          {err ? <p className="error">{err}</p> : null}
         </div>
       </div>
     );
@@ -890,6 +1042,17 @@ export function OnboardingWizard({
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={busy}
+            onClick={() => {
+              setLlmIntroPanel("byok");
+              setStep("llm_intro");
+            }}
+          >
+            ← Volver
+          </button>
           <h1>Tu clave de acceso</h1>
           <p className="lead">
             Pégala aquí. La guardamos de forma segura en tu equipo; no la
