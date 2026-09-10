@@ -93,8 +93,10 @@ modelo del orden del proveedor (no es “recomendado”).
 Refresh:
 
 - selected ∈ available → se conserva
-- selected ∉ available → `modelStatus = unavailable`, provider sigue conectado
-- `specific` no se cambia en silencio
+- selected ∉ available → se conserva el `modelId` y
+  `modelStatus = unavailable`; el proveedor **sigue conectado**
+- no se cambia un modelo retirado en silencio (ni en modo
+  `recommended` ni `specific`); el usuario elige otro o «Usar recomendado»
 
 ## Local / Cloud
 

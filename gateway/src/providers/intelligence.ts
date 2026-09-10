@@ -282,7 +282,8 @@ export async function upsertExternalConnection(input: {
  * - recommended solo si estática ∈ available
  * - specific: nunca cambia el modelId en silencio
  * - recommended + pending: usa recommended o el primer available
- * - recommended + refresh: conserva selected si sigue available
+ * - refresh: conserva selected si sigue available; si se retiró,
+ *   mantiene el id y la vista marca unavailable (nunca desconecta)
  */
 export function applyModelDiscoveryToConnection(
   connectionId: string,
@@ -310,16 +311,15 @@ export function applyModelDiscoveryToConnection(
       found.modelId = recommended;
       found.modelSelection = "recommended";
     } else if (first) {
+      // Default determinista del orden del proveedor — no es “recomendado”.
       found.modelId = first;
       found.modelSelection = "recommended";
     }
   } else if (ids.includes(found.modelId)) {
     // Sigue disponible: conservar selección.
-  } else if (recommended) {
-    found.modelId = recommended;
-    found.modelSelection = "recommended";
   }
-  // else: selected retired → se conserva el id (modelStatus=unavailable en la vista)
+  // else: selected retired (recommended o specific) → conservar id;
+  // modelStatus=unavailable en la vista. Nunca desconectar.
   writeIntelligenceConfig(cfg);
   return { ...found };
 }

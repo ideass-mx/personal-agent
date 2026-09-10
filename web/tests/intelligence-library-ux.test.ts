@@ -12,20 +12,26 @@ const center = readFileSync(
 
 describe("Intelligence Center library UX", () => {
   it("solo lista Cloud/Local cuando están conectados o instalados", () => {
-    assert.match(center, /Cloud es opcional/);
+    assert.match(center, /Cloud opcional/);
     assert.match(center, /if \(cloud\?\.connected\)/);
-    assert.match(center, /if \(snap\?\.local\.installed \|\| localReady\)/);
-    assert.doesNotMatch(
-      center,
-      /statusLine: cloud\?\.connected[\s\S]*: "No conectado"/,
-    );
+    assert.match(center, /Local siempre visible/);
+    assert.match(center, /○ No instalado/);
   });
 
   it("tras conectar BYOK muestra éxito compacto y activa predeterminada", () => {
     assert.match(center, /byokJustConnected/);
     assert.match(center, /Modelo recomendado/);
+    assert.match(center, /Modelo seleccionado/);
     assert.match(center, /Continuar/);
     assert.match(center, /selectIntelligenceConnection/);
     assert.match(center, /modelSelection: "recommended"/);
+  });
+
+  it("Cloud no expone el proveedor subyacente en el copy", () => {
+    assert.match(center, /Modelos gestionados por Personal Agent/);
+    assert.doesNotMatch(
+      center,
+      /Misma familia de modelos que\s*\n?\s*Anthropic/,
+    );
   });
 });

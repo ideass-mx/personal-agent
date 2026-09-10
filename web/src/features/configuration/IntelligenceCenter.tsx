@@ -133,8 +133,9 @@ export function IntelligenceCenter() {
       ]);
       setSnap(st);
       setCloud(cs);
-      setLocalReady(loc?.ready ?? st.local.installed);
+      setLocalReady(loc?.ready ?? st.local?.installed ?? false);
       setLocalModels(models);
+      setErr(null);
     } catch {
       setErr("No pudimos cargar el estado de inteligencia.");
     }
@@ -250,7 +251,9 @@ export function IntelligenceCenter() {
       }
       setOkMsg(
         wasNew
-          ? "Proveedor conectado. Personal Agent eligió un modelo disponible."
+          ? disc?.recommendedModelId
+            ? "Proveedor conectado. Personal Agent recomienda un modelo disponible."
+            : "Proveedor conectado. Elige un modelo de los disponibles."
           : "Modelo actualizado.",
       );
       setByokConfigured(true);
@@ -500,12 +503,16 @@ export function IntelligenceCenter() {
   }
 
   const active = snap?.active ?? null;
+  // Predeterminada = conexión activa del Gateway (aunque aún no esté usable).
   const selected =
-    snap?.connections.find((c) => c.active) || active || null;
+    active ||
+    snap?.connections.find((c) => c.active) ||
+    snap?.connections.find((c) => c.provider === "local") ||
+    null;
   const selectedUsable = (() => {
     if (!selected || !snap) return false;
     if (selected.provider === "local") {
-      return Boolean(snap.local.installed || localReady);
+      return Boolean(snap.local?.installed || localReady);
     }
     if (selected.provider === "personal-agent-cloud") {
       return Boolean(cloud?.connected);
@@ -518,12 +525,33 @@ export function IntelligenceCenter() {
 
   const libraryRows: LibraryRow[] = (() => {
     const rows: LibraryRow[] = [];
+    const pushUnique = (row: LibraryRow) => {
+      if (rows.some((r) => r.key === row.key)) return;
+      rows.push(row);
+    };
+
+    const localConn =
+      snap?.connections.find((c) => c.mode === "local") || undefined;
+    const localInstalled = Boolean(snap?.local?.installed || localReady);
+    // Local siempre visible: es la inteligencia del producto (instalada o no).
+    pushUnique({
+      key: "local",
+      kind: "local",
+      title: "Local",
+      statusLine: localInstalled
+        ? `● Disponible · ${humanModelLabel("local", localConn?.modelId || "qwen3-4b")}`
+        : "○ No instalado",
+      provider: "local",
+      conn: localConn,
+      isDefault: active?.provider === "local" || selected?.provider === "local",
+    });
+
     const cloudConn = snap?.connections.find(
       (c) => c.mode === "personal-agent-cloud",
     );
-    // Cloud es opcional (como BYOK): solo en la biblioteca si ya está conectado.
+    // Cloud opcional: solo si el usuario ya lo conectó.
     if (cloud?.connected) {
-      rows.push({
+      pushUnique({
         key: "cloud",
         kind: "cloud",
         title: "Personal Agent Cloud",
@@ -536,22 +564,11 @@ export function IntelligenceCenter() {
         isDefault: active?.provider === "personal-agent-cloud",
       });
     }
-    const localConn = snap?.connections.find((c) => c.mode === "local");
-    if (snap?.local.installed || localReady) {
-      rows.push({
-        key: "local",
-        kind: "local",
-        title: "Local",
-        statusLine: `● Disponible · ${humanModelLabel("local", localConn?.modelId || "qwen3-4b")}`,
-        provider: "local",
-        conn: localConn,
-        isDefault: active?.provider === "local",
-      });
-    }
+
     for (const id of BYOK_PROVIDERS) {
       const conn = external.find((c) => c.provider === id);
-      if (!conn?.credentialConfigured && !conn?.active) continue;
-      rows.push({
+      if (!conn?.credentialConfigured) continue;
+      pushUnique({
         key: id,
         kind: "external",
         title: providerCardTitle(id, conn.displayName),
@@ -569,6 +586,25 @@ export function IntelligenceCenter() {
         isDefault: active?.provider === id,
       });
     }
+
+    // Si la predeterminada es BYOK/Cloud y aún no entró por filtros, forzar fila.
+    if (selected?.mode === "external" && selected.provider) {
+      const id = selected.provider;
+      if (!rows.some((r) => r.key === id)) {
+        pushUnique({
+          key: id,
+          kind: "external",
+          title: providerCardTitle(id, selected.displayName),
+          statusLine: selected.credentialConfigured
+            ? "● Conectado"
+            : "○ Sin API key",
+          provider: id,
+          conn: selected,
+          isDefault: true,
+        });
+      }
+    }
+
     return rows;
   })();
 
@@ -639,7 +675,14 @@ export function IntelligenceCenter() {
 
           <div className="intel-default" aria-live="polite">
             <p className="intel-kicker">Predeterminada</p>
-            {selected ? (
+            {!snap && !err ? (
+              <div className="intel-default-card is-empty">
+                <div>
+                  <strong>Cargando inteligencia…</strong>
+                  <p className="muted">Un momento.</p>
+                </div>
+              </div>
+            ) : selected ? (
               <div className="intel-default-card">
                 <div className="intel-default-main">
                   {selected.mode === "external" ? (
@@ -1063,8 +1106,7 @@ export function IntelligenceCenter() {
           </button>
           <h3>☁️ Personal Agent Cloud</h3>
           <p className="muted" style={{ marginTop: 0 }}>
-            Claude en la nube, sin API key. Misma familia de modelos que
-            Anthropic.
+            Modelos gestionados por Personal Agent. Sin API key propia.
           </p>
           {cloud?.connected ? (
             <>
@@ -1372,7 +1414,11 @@ export function IntelligenceCenter() {
               byokJustConnected ? (
                 <div className="intel-connect-success" role="status">
                   <p className="intel-status-line">✓ Conectado</p>
-                  <p className="intel-kicker">Modelo recomendado</p>
+                  <p className="intel-kicker">
+                    {recommendedModelId
+                      ? "Modelo recomendado"
+                      : "Modelo seleccionado"}
+                  </p>
                   <p className="intel-model-current">
                     <strong>
                       {humanModelLabel(
@@ -1382,8 +1428,9 @@ export function IntelligenceCenter() {
                     </strong>
                   </p>
                   <p className="muted">
-                    Ya es tu inteligencia predeterminada. Puedes cambiar el
-                    modelo más tarde al administrarla.
+                    {recommendedModelId
+                      ? "Ya es tu inteligencia predeterminada. Puedes cambiar el modelo más tarde al administrarla."
+                      : "No hay recomendación estática disponible para tu cuenta. Elige entre los modelos que devolvió el proveedor."}
                   </p>
                   <div className="row-actions">
                     <button

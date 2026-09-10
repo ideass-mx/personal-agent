@@ -25,6 +25,7 @@ const {
   resolveModelForConnectivityProbe,
   modelAvailabilityForConnection,
   clearProviderModelsCache,
+  discoverProviderModels,
 } = await import("../../src/providers/model-discovery.ts");
 const {
   resolveRecommendedAgainstAvailable,
@@ -162,6 +163,26 @@ describe("PHASE 63.2 E — selected retired", () => {
     const probe = resolveModelForConnectivityProbe(next, discovery);
     assert.ok(["model-a", "model-c"].includes(probe));
   });
+
+  it("recommended mode also keeps retired id (no silent switch)", async () => {
+    setModelRecommendationSource({
+      getRecommendedModel: () => "model-a",
+    });
+    const conn = await upsertExternalConnection({
+      provider: "openai",
+      apiKey: "sk-test-openai-key-phase632erec",
+      modelId: "model-b",
+      modelSelection: "recommended",
+    });
+    const discovery = buildModelDiscoveryResult({
+      provider: "openai",
+      models: [{ id: "model-a" }, { id: "model-c" }],
+    });
+    assert.equal(discovery.recommendedModelId, "model-a");
+    const next = applyModelDiscoveryToConnection(conn.id, discovery);
+    assert.equal(next.modelId, "model-b");
+    assert.equal(modelAvailabilityForConnection(next, discovery), "unavailable");
+  });
 });
 
 describe("PHASE 63.2 F — auth failure", () => {
@@ -172,10 +193,33 @@ describe("PHASE 63.2 F — auth failure", () => {
       authStatus: "failed",
       discoveryStatus: "failed",
     });
-    // buildModelDiscoveryResult still computes recommendation against empty;
-    // auth failure shape from listModels:
     assert.equal(discovery.authStatus, "failed");
     assert.equal(discovery.models.length, 0);
+  });
+
+  it("GET /models 401 → AUTH_FAILED via discoverProviderModels", async () => {
+    writePersistedProviderApiKey(
+      "openai",
+      "sk-test-openai-key-phase632authf",
+    );
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: { message: "invalid" } }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+    try {
+      const discovery = await discoverProviderModels({
+        provider: "openai",
+        forceRefresh: true,
+      });
+      assert.equal(discovery.authStatus, "failed");
+      assert.equal(discovery.discoveryStatus, "failed");
+      assert.equal(discovery.models.length, 0);
+      assert.equal(discovery.recommendedModelId == null, true);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 });
 
