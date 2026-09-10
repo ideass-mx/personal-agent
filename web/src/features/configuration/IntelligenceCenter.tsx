@@ -41,6 +41,7 @@ type Panel =
   | "overview"
   | "choose"
   | "add"
+  | "add_cloud"
   | "local"
   | "cloud"
   | "byok"
@@ -103,7 +104,12 @@ export function IntelligenceCenter() {
   const [modelId, setModelId] = useState("gpt-4.1-mini");
   const [baseUrl, setBaseUrl] = useState("");
   const [cloudPhase, setCloudPhase] = useState(0);
-  const [byokReturn, setByokReturn] = useState<"add" | "overview">("add");
+  const [byokReturn, setByokReturn] = useState<
+    "add" | "add_cloud" | "overview"
+  >("add");
+  const [cloudReturn, setCloudReturn] = useState<"overview" | "add_cloud">(
+    "overview",
+  );
   const [byokConfigured, setByokConfigured] = useState(false);
   /** Tras conectar BYOK: pantalla compacta (conectado + recomendado), no el catálogo completo. */
   const [byokJustConnected, setByokJustConnected] = useState(false);
@@ -515,6 +521,7 @@ export function IntelligenceCenter() {
       return;
     }
     if (row.kind === "cloud") {
+      setCloudReturn("overview");
       setPanel("cloud");
       return;
     }
@@ -746,6 +753,7 @@ export function IntelligenceCenter() {
                         return;
                       }
                       if (selected.provider === "personal-agent-cloud") {
+                        setCloudReturn("overview");
                         setPanel("cloud");
                         return;
                       }
@@ -909,9 +917,7 @@ export function IntelligenceCenter() {
             ← Volver
           </button>
           <h3>Agregar inteligencia</h3>
-          <p className="muted">
-            Local, Personal Agent Cloud o tu propia cuenta.
-          </p>
+          <p className="muted">Elige Local o Cloud.</p>
 
           <button
             type="button"
@@ -928,11 +934,43 @@ export function IntelligenceCenter() {
           <button
             type="button"
             className="intel-mode-card"
-            onClick={() => setPanel("cloud")}
+            onClick={() => setPanel("add_cloud")}
+          >
+            <strong>☁️ Cloud</strong>
+            <span className="muted">
+              Personal Agent Cloud o tu propia cuenta
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {panel === "add_cloud" ? (
+        <div className="intel-detail">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setPanel("add")}
+          >
+            ← Volver
+          </button>
+          <h3>Cloud</h3>
+          <p className="muted">
+            Elige Personal Agent Cloud o tu propia cuenta.
+          </p>
+
+          <button
+            type="button"
+            className="intel-mode-card"
+            onClick={() => {
+              setCloudReturn("add_cloud");
+              setPanel("cloud");
+            }}
           >
             <strong>☁️ Personal Agent Cloud</strong>
             <span className="muted">
-              {cloud?.connected ? "Ya conectado · gestionar" : "Sin API key"}
+              {cloud?.connected
+                ? "Ya conectado · gestionar"
+                : "Nuestra nube · Sin API key"}
             </span>
           </button>
 
@@ -953,7 +991,7 @@ export function IntelligenceCenter() {
                         setApiKey("");
                         setByokConfigured(false);
                         setByokJustConnected(false);
-                        setByokReturn("add");
+                        setByokReturn("add_cloud");
                         setPanel("byok_form");
                       }}
                     >
@@ -1129,9 +1167,9 @@ export function IntelligenceCenter() {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => setPanel("overview")}
+            onClick={() => setPanel(cloudReturn)}
           >
-            ← Inteligencia
+            ← {cloudReturn === "add_cloud" ? "Cloud" : "Inteligencia"}
           </button>
           <h3>☁️ Personal Agent Cloud</h3>
           <p className="muted" style={{ marginTop: 0 }}>
