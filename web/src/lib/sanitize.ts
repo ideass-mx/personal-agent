@@ -29,6 +29,16 @@ export function humanizeError(code?: string, message?: string): string {
   if (c === "agent_disconnected" || m.includes("agent_disconnected")) {
     return "No puedo ejecutar esa acción porque el agente de tu PC no está disponible. Verifica que esté ejecutándose y vuelve a intentarlo.";
   }
+  if (
+    c === "llm_quota_exceeded" ||
+    c === "provider_quota_exceeded" ||
+    m.includes("provider_quota_exceeded") ||
+    m.includes("crédito") ||
+    m.includes("credito") ||
+    m.includes("spending limit")
+  ) {
+    return "La cuenta del proveedor no tiene crédito disponible o alcanzó su límite de gasto. Revisa el saldo e inténtalo de nuevo.";
+  }
   if (c === "auth_failed" || c === "auth_required") {
     return "No se pudo autenticar. Revisa el token de instalación.";
   }

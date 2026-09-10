@@ -11,6 +11,7 @@ export const PRIMARY_BYOK_PROVIDERS = [
   "openai",
   "anthropic",
   "xai",
+  "gemini",
   "openrouter",
 ] as const;
 
@@ -55,6 +56,24 @@ export function byokModelOptions(provider: string): ByokModelOption[] {
         { id: "grok-4.6", label: "Grok 4.6", hint: "Recomendado" },
         { id: "grok-3-mini", label: "Grok 3 mini", hint: "Más rápido" },
       ];
+    case "gemini":
+      return [
+        {
+          id: "gemini-2.5-flash",
+          label: "Gemini 2.5 Flash",
+          hint: "Recomendado",
+        },
+        {
+          id: "gemini-2.5-pro",
+          label: "Gemini 2.5 Pro",
+          hint: "Más capaz",
+        },
+        {
+          id: "gemini-2.0-flash",
+          label: "Gemini 2.0 Flash",
+          hint: "Más rápido",
+        },
+      ];
     case "openrouter":
       return [
         {
@@ -65,6 +84,10 @@ export function byokModelOptions(provider: string): ByokModelOption[] {
         {
           id: "anthropic/claude-sonnet-4",
           label: "Claude Sonnet",
+        },
+        {
+          id: "google/gemini-2.5-flash",
+          label: "Gemini 2.5 Flash",
         },
         {
           id: "x-ai/grok-4.6",

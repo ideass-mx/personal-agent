@@ -10,6 +10,7 @@ const TONE: Record<string, { bg: string; fg: string }> = {
   openai: { bg: "#103c33", fg: "#6ee7b7" },
   anthropic: { bg: "#3a2a22", fg: "#e7c4a8" },
   xai: { bg: "#1a1a1a", fg: "#f5f5f5" },
+  gemini: { bg: "#1a2a44", fg: "#8ab4f8" },
   openrouter: { bg: "#1e1b4b", fg: "#a5b4fc" },
   groq: { bg: "#3f1210", fg: "#fda4a4" },
   "openai-compatible": { bg: "#1e293b", fg: "#94a3b8" },
@@ -42,6 +43,15 @@ function Mark({ provider }: { provider: string }) {
           <path
             fill="currentColor"
             d="M6.2 5.5h3.1l2.8 4.1 3.3-4.1h3.2l-4.9 6.1 5.1 6.9h-3.2l-3.4-4.5-3.5 4.5H6.4l5.1-6.7-5.3-6.3Z"
+          />
+        </svg>
+      );
+    case "gemini":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M12 3.2 13.8 10.2 20.8 12 13.8 13.8 12 20.8 10.2 13.8 3.2 12 10.2 10.2 12 3.2Z"
           />
         </svg>
       );
@@ -112,6 +122,7 @@ export function ProviderIcon({ provider, size = 36 }: Props) {
 
 export function providerShortBlurb(provider: string): string {
   if (provider === "xai") return "Grok con tu cuenta xAI";
+  if (provider === "gemini") return "Modelos Gemini de Google";
   if (provider === "openrouter") return "Acceso a muchos modelos";
   if (provider === "anthropic") return "Claude para razonar";
   if (provider === "openai") return "Modelos GPT";

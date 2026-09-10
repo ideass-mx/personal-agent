@@ -40,6 +40,7 @@ export type IntelligenceProviderId =
   | "openai"
   | "anthropic"
   | "xai"
+  | "gemini"
   | "openrouter"
   | "groq"
   | "openai-compatible";
@@ -212,6 +213,9 @@ export async function upsertExternalConnection(input: {
   let baseUrl = input.baseUrl?.trim();
   if (provider === "openai" && !baseUrl) baseUrl = "https://api.openai.com/v1";
   if (provider === "xai" && !baseUrl) baseUrl = "https://api.x.ai/v1";
+  if (provider === "gemini" && !baseUrl) {
+    baseUrl = "https://generativelanguage.googleapis.com/v1beta/openai";
+  }
   if (provider === "openrouter" && !baseUrl) baseUrl = "https://openrouter.ai/api/v1";
   if (provider === "groq" && !baseUrl) baseUrl = "https://api.groq.com/openai/v1";
   if (provider === "openai-compatible") {
@@ -234,15 +238,17 @@ export async function upsertExternalConnection(input: {
         ? "Compatible con OpenAI"
         : provider === "xai"
           ? "xAI / Grok"
-          : provider === "openai"
-            ? "OpenAI"
-            : provider === "anthropic"
-              ? "Anthropic"
-              : provider === "openrouter"
-                ? "OpenRouter"
-                : provider === "groq"
-                  ? "Groq"
-                  : provider.toUpperCase(),
+          : provider === "gemini"
+            ? "Gemini"
+            : provider === "openai"
+              ? "OpenAI"
+              : provider === "anthropic"
+                ? "Anthropic"
+                : provider === "openrouter"
+                  ? "OpenRouter"
+                  : provider === "groq"
+                    ? "Groq"
+                    : provider.toUpperCase(),
     credentialRef: `cred_ref_${provider}`,
     baseUrl,
   };
@@ -294,6 +300,7 @@ function humanDisplayName(c: LLMConnection): string {
   if (c.provider === "openai") return "OpenAI";
   if (c.provider === "anthropic") return "Anthropic";
   if (c.provider === "xai") return "xAI / Grok";
+  if (c.provider === "gemini") return "Gemini";
   if (c.provider === "openrouter") return "OpenRouter";
   if (c.provider === "groq") return "Groq";
   return c.displayName;
@@ -350,6 +357,11 @@ export function ensureExternalProviderStubs(): LLMConnection[] {
       displayName: "Anthropic",
     },
     { provider: "xai", modelId: "grok-4.6", displayName: "xAI / Grok" },
+    {
+      provider: "gemini",
+      modelId: "gemini-2.5-flash",
+      displayName: "Gemini",
+    },
     {
       provider: "openrouter",
       modelId: "openai/gpt-4.1-mini",
@@ -552,6 +564,7 @@ function providerForConnection(input: {
   const baseByProvider: Record<string, string | undefined> = {
     openai: "https://api.openai.com/v1",
     xai: "https://api.x.ai/v1",
+    gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
     openrouter: "https://openrouter.ai/api/v1",
     groq: "https://api.groq.com/openai/v1",
   };

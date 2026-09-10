@@ -61,6 +61,7 @@ describe("ProviderRegistry", () => {
     assert.equal(isProviderAvailable("anthropic"), true);
     assert.equal(isProviderAvailable("openai"), true);
     assert.equal(isProviderAvailable("xai"), true);
+    assert.equal(isProviderAvailable("gemini"), true);
     assert.equal(isProviderAvailable("openrouter"), true);
     assert.equal(isProviderAvailable("groq"), true);
     assert.equal(

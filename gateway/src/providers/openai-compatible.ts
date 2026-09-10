@@ -15,6 +15,13 @@ type OpenAiCompatProviderInput = {
   capabilities?: Partial<LLMCapabilities>;
 };
 
+function isQuotaOrBillingDenial(status: number, body: string): boolean {
+  if (status !== 402 && status !== 403) return false;
+  return /credit|credits|spending|quota|billing|payment|insufficient funds|usage limit|monthly spending/i.test(
+    body,
+  );
+}
+
 function mapHttpError(input: {
   provider: string;
   model: string;
@@ -24,13 +31,18 @@ function mapHttpError(input: {
   stage: "LLM_REQUEST" | "LLM_STREAM";
 }): AgentDiagnosticError {
   let errorCode = "LLM_REQUEST_FAILED";
-  if (input.status === 401 || input.status === 403) errorCode = "LLM_AUTH_FAILED";
-  else if (input.status === 404) errorCode = "LLM_MODEL_NOT_FOUND";
+  let message = `provider_http_${input.status}`;
+  if (isQuotaOrBillingDenial(input.status, input.body)) {
+    errorCode = "LLM_QUOTA_EXCEEDED";
+    message = "provider_quota_exceeded";
+  } else if (input.status === 401 || input.status === 403) {
+    errorCode = "LLM_AUTH_FAILED";
+  } else if (input.status === 404) errorCode = "LLM_MODEL_NOT_FOUND";
   else if (input.status === 429) errorCode = "LLM_RATE_LIMITED";
   else if (input.status >= 500) errorCode = "LLM_PROVIDER_UNAVAILABLE";
   else if (input.status === 400) errorCode = "LLM_REQUEST_INVALID";
   return new AgentDiagnosticError({
-    message: `provider_http_${input.status}`,
+    message,
     component: "LLM_PROVIDER",
     stage: input.stage,
     errorCode,

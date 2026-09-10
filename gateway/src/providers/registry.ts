@@ -58,6 +58,7 @@ const CATALOG: readonly LlmProviderDescriptor[] = [
   { id: "openai", mode: "external", name: "OpenAI", available: true },
   { id: "anthropic", mode: "external", name: "Anthropic", available: true },
   { id: "xai", mode: "external", name: "xAI / Grok", available: true },
+  { id: "gemini", mode: "external", name: "Gemini", available: true },
   { id: "openrouter", mode: "external", name: "OpenRouter", available: true },
   { id: "groq", mode: "external", name: "Groq", available: true },
   {
@@ -130,6 +131,7 @@ export function createLlmProvider(id?: string): LLMProvider {
   if (
     id === "openai" ||
     id === "xai" ||
+    id === "gemini" ||
     id === "openrouter" ||
     id === "groq" ||
     id === "openai-compatible"
@@ -137,6 +139,7 @@ export function createLlmProvider(id?: string): LLMProvider {
     const baseByProvider: Record<string, string> = {
       openai: "https://api.openai.com/v1",
       xai: "https://api.x.ai/v1",
+      gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
       openrouter: "https://openrouter.ai/api/v1",
       groq: "https://api.groq.com/openai/v1",
     };

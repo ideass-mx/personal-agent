@@ -26,9 +26,14 @@ describe("PHASE 63 intelligence labels", () => {
     assert.equal(configStatusLabel("not_configured"), "NO CONFIGURADO");
   });
 
-  it("maps xAI / Grok labels", () => {
+  it("maps xAI / Grok and Gemini labels", () => {
     assert.equal(providerCardTitle("xai"), "xAI / Grok");
     assert.equal(humanModelLabel("xai", "grok-4.6"), "Grok 4.6");
     assert.equal(modeTitle("external", "xAI / Grok"), "xAI / Grok");
+    assert.equal(providerCardTitle("gemini"), "Gemini");
+    assert.equal(
+      humanModelLabel("gemini", "gemini-2.5-flash"),
+      "Gemini 2.5 Flash",
+    );
   });
 });

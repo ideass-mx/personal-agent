@@ -234,6 +234,35 @@ describe("PHASE 63.1 xAI / Grok", () => {
     assert.equal(json.error?.code, "PROVIDER_RATE_LIMITED");
   });
 
+  it("G2 — credits/spending 403 → PROVIDER_QUOTA_EXCEEDED", async () => {
+    writePersistedProviderApiKey("xai", "xai-test-key-phase631quotaquota");
+    const app = new Hono();
+    mountSetupHttp(app, {
+      hubToken: HUB,
+      verifyLlm: async () => {
+        const err = new Error("provider_quota_exceeded") as Error & {
+          errorCode?: string;
+          metadata?: { safeProviderMessage?: string };
+        };
+        err.errorCode = "LLM_QUOTA_EXCEEDED";
+        err.metadata = {
+          safeProviderMessage:
+            "Your team has either used all available credits or reached its monthly spending limit.",
+        };
+        throw err;
+      },
+    });
+    const res = await app.request("/v1/setup/providers/xai/test", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${HUB}` },
+    });
+    const json = (await res.json()) as {
+      error?: { code?: string; message?: string };
+    };
+    assert.equal(json.error?.code, "PROVIDER_QUOTA_EXCEEDED");
+    assert.match(json.error?.message || "", /crédito|gasto/i);
+  });
+
   it("H — 500 → PROVIDER_UNAVAILABLE", async () => {
     writePersistedProviderApiKey("xai", "xai-test-key-phase631cccccccc");
     const app = new Hono();

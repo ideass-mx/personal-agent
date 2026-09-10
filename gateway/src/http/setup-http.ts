@@ -402,6 +402,7 @@ export function mountSetupHttp(
       (provider === "openai" ||
         provider === "anthropic" ||
         provider === "xai" ||
+        provider === "gemini" ||
         provider === "openrouter" ||
         provider === "groq" ||
         provider === "openai-compatible") &&
@@ -475,6 +476,7 @@ export function mountSetupHttp(
         provider === "openai" ||
         provider === "anthropic" ||
         provider === "xai" ||
+        provider === "gemini" ||
         provider === "openrouter" ||
         provider === "groq" ||
         provider === "openai-compatible"
@@ -761,6 +763,8 @@ export function mountSetupHttp(
       const message =
         id === "xai"
           ? "Conexión correcta. Grok está disponible."
+          : id === "gemini"
+            ? "Conexión correcta. Gemini está disponible."
           : "La conexión funciona.";
       return c.json({
         ok: true,
@@ -769,33 +773,68 @@ export function mountSetupHttp(
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
+      const errCode =
+        err && typeof err === "object" && "errorCode" in err
+          ? String((err as { errorCode?: string }).errorCode || "")
+          : "";
+      const safeProviderMessage =
+        err && typeof err === "object" && "metadata" in err
+          ? String(
+              ((err as { metadata?: { safeProviderMessage?: string } })
+                .metadata?.safeProviderMessage || ""),
+            )
+          : "";
+      const blob = `${msg} ${errCode} ${safeProviderMessage}`;
       let code = "PROVIDER_UNKNOWN_ERROR";
       let human =
         id === "xai"
           ? "No pudimos conectar con xAI."
           : "No pudimos validar la conexión. Comprueba tu conexión a Internet y vuelve a intentarlo.";
-      if (/auth|401|403|invalid_credential|missing_api_key/i.test(msg)) {
+      if (
+        /quota|credit|credits|spending|billing|provider_quota_exceeded|LLM_QUOTA_EXCEEDED/i.test(
+          blob,
+        )
+      ) {
+        code = "PROVIDER_QUOTA_EXCEEDED";
+        human =
+          id === "xai"
+            ? "Tu cuenta de xAI no tiene crédito disponible o alcanzó su límite de gasto. Añade crédito en la consola de xAI e inténtalo de nuevo."
+            : "La cuenta del proveedor no tiene crédito disponible o alcanzó su límite. Revisa el plan o el saldo e inténtalo de nuevo.";
+      } else if (
+        /auth|401|invalid_credential|missing_api_key|LLM_AUTH_FAILED/i.test(
+          blob,
+        ) ||
+        (/403/i.test(blob) && !/quota|credit|spending/i.test(blob))
+      ) {
         code = "PROVIDER_AUTH_FAILED";
         human =
           id === "xai"
             ? "No pudimos conectar con xAI. Comprueba tu clave e inténtalo de nuevo."
             : "La clave de acceso no es válida. Comprueba tu clave y vuelve a intentarlo.";
-      } else if (/rate|429/i.test(msg)) {
+      } else if (/rate|429|LLM_RATE_LIMITED/i.test(blob)) {
         code = "PROVIDER_RATE_LIMITED";
         human =
           id === "xai"
             ? "xAI está temporalmente limitado. Puedes intentarlo nuevamente más tarde."
             : "El proveedor ha limitado temporalmente las solicitudes.";
-      } else if (/base_url|ssrf|unsafe|invalid/i.test(msg)) {
+      } else if (/base_url|ssrf|unsafe|invalid/i.test(blob)) {
         code = "PROVIDER_INVALID_REQUEST";
         human = "La dirección del proveedor no es válida.";
-      } else if (/cloud|unavailable|network|5\d\d|provider_http_5/i.test(msg)) {
+      } else if (
+        /cloud|unavailable|network|5\d\d|provider_http_5|LLM_PROVIDER_UNAVAILABLE/i.test(
+          blob,
+        )
+      ) {
         code = "PROVIDER_UNAVAILABLE";
         human =
           id === "xai"
             ? "No pudimos conectar con xAI."
             : "No pudimos conectar con este proveedor. Comprueba tu conexión a Internet y vuelve a intentarlo.";
-      } else if (!hasProviderApiKeyConfigured(id) && id !== "local" && id !== "personal-agent-cloud") {
+      } else if (
+        !hasProviderApiKeyConfigured(id) &&
+        id !== "local" &&
+        id !== "personal-agent-cloud"
+      ) {
         code = "PROVIDER_NOT_CONFIGURED";
         human = "Este proveedor aún no está conectado.";
       }

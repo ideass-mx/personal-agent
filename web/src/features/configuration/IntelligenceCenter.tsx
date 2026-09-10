@@ -813,7 +813,7 @@ export function IntelligenceCenter() {
             </>
           ) : (
             <p className="muted">
-              Ya tienes conectados OpenAI, Anthropic, xAI y OpenRouter.
+              Ya tienes conectados OpenAI, Anthropic, xAI, Gemini y OpenRouter.
             </p>
           )}
         </div>

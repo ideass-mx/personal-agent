@@ -34,12 +34,21 @@ export function humanModelLabel(provider: string, modelId: string): string {
     if (modelId.startsWith("grok")) return modelId.replace(/^grok-?/i, "Grok ");
     return "Grok";
   }
+  if (provider === "gemini") {
+    if (modelId.includes("2.5-pro") || modelId.includes("pro")) {
+      return "Gemini 2.5 Pro";
+    }
+    if (modelId.includes("2.0-flash")) return "Gemini 2.0 Flash";
+    if (modelId.includes("flash")) return "Gemini 2.5 Flash";
+    return "Gemini";
+  }
   if (provider === "openai" && modelId.startsWith("gpt")) return modelId.toUpperCase();
   return modelId;
 }
 
 export function providerCardTitle(provider: string, displayName?: string): string {
   if (provider === "xai") return "xAI / Grok";
+  if (provider === "gemini") return "Gemini";
   if (provider === "openai-compatible") return "OpenAI-compatible";
   if (provider === "openai") return "OpenAI";
   if (provider === "anthropic") return "Anthropic";

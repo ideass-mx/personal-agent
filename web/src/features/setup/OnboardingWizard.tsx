@@ -197,6 +197,7 @@ export function OnboardingWizard({
         { id: "anthropic", name: "Anthropic", available: true },
         { id: "openai", name: "OpenAI", available: true },
         { id: "xai", name: "xAI / Grok", available: true },
+        { id: "gemini", name: "Gemini", available: true },
         { id: "openrouter", name: "OpenRouter", available: true },
       ]);
     }
@@ -422,6 +423,7 @@ export function OnboardingWizard({
             { id: "anthropic", name: "Anthropic", available: true },
             { id: "openai", name: "OpenAI", available: true },
             { id: "xai", name: "xAI / Grok", available: true },
+            { id: "gemini", name: "Gemini", available: true },
             { id: "openrouter", name: "OpenRouter", available: true },
           ];
     const p = list.find((x) => x.id === id);
@@ -625,6 +627,7 @@ export function OnboardingWizard({
           { id: "anthropic", name: "Anthropic", available: true },
           { id: "openai", name: "OpenAI", available: true },
           { id: "xai", name: "xAI / Grok", available: true },
+          { id: "gemini", name: "Gemini", available: true },
           { id: "openrouter", name: "OpenRouter", available: true },
         ];
 
