@@ -35,6 +35,10 @@ import {
 } from "./sources.ts";
 import { stripTrailingSourcesSection } from "./strip-fuentes-section.ts";
 import {
+  parseLeakedToolCallJson,
+  stripLeakedToolCallJson,
+} from "./strip-tool-call-leak.ts";
+import {
   resolveAgentInstructions,
   type SkillRegistry,
 } from "./skills/index.ts";
@@ -246,6 +250,34 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                 name: internalToolName,
                 input: event.input,
               });
+            }
+          }
+
+          // Defensa: tool_call JSON filtrado al texto (providers OpenAI-compat).
+          const leakedFromText = parseLeakedToolCallJson(turnText);
+          if (leakedFromText) {
+            full = full.endsWith(turnText)
+              ? full.slice(0, full.length - turnText.length)
+              : stripLeakedToolCallJson(full);
+            turnText = "";
+            if (toolCalls.length === 0) {
+              for (const tc of leakedFromText) {
+                toolCalls.push({
+                  id: tc.id,
+                  name: providerToolNameMap.get(tc.name) || tc.name,
+                  input: tc.input,
+                });
+              }
+            }
+          } else if (turnText) {
+            const cleanedTurn = stripLeakedToolCallJson(turnText);
+            if (cleanedTurn !== turnText) {
+              if (full.endsWith(turnText)) {
+                full = full.slice(0, full.length - turnText.length) + cleanedTurn;
+              } else {
+                full = stripLeakedToolCallJson(full);
+              }
+              turnText = cleanedTurn;
             }
           }
 

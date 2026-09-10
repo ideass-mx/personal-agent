@@ -15,8 +15,6 @@ export type OnboardingStep =
   | "llm_key"
   | "cloud_connecting"
   | "verifying"
-  | "optional_android"
-  | "optional_remote"
   | "done"
   | "error";
 

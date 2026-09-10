@@ -105,6 +105,8 @@ export function IntelligenceCenter() {
   const [cloudPhase, setCloudPhase] = useState(0);
   const [byokReturn, setByokReturn] = useState<"add" | "overview">("add");
   const [byokConfigured, setByokConfigured] = useState(false);
+  /** Tras conectar BYOK: pantalla compacta (conectado + recomendado), no el catálogo completo. */
+  const [byokJustConnected, setByokJustConnected] = useState(false);
   const [localModels, setLocalModels] = useState<LocalModelsDto | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [discoveredModels, setDiscoveredModels] = useState<ProviderModelDto[]>(
@@ -175,6 +177,7 @@ export function IntelligenceCenter() {
         setBaseUrl(conn.baseUrl || "");
         setApiKey("");
         setByokConfigured(false);
+        setByokJustConnected(false);
         setByokReturn("overview");
         setPanel("byok_form");
       } else {
@@ -253,11 +256,24 @@ export function IntelligenceCenter() {
       setByokConfigured(true);
       await refresh();
       if (wasNew) {
+        setByokJustConnected(true);
+        try {
+          const st = await fetchIntelligenceStatus(base, token);
+          const conn = st.connections.find((c) => c.provider === byokProvider);
+          if (conn) {
+            await selectIntelligenceConnection(base, token, conn.id);
+            await refresh();
+          }
+        } catch {
+          /* activar como predeterminada es best-effort */
+        }
         try {
           await loadProviderModels(byokProvider, true);
         } catch {
           /* discovery opcional tras conectar */
         }
+      } else {
+        setByokJustConnected(false);
       }
     } catch (ex) {
       setErr(
@@ -478,6 +494,7 @@ export function IntelligenceCenter() {
     setBaseUrl(row.conn?.baseUrl || "");
     setApiKey("");
     setByokConfigured(Boolean(row.conn?.credentialConfigured));
+    setByokJustConnected(false);
     setByokReturn("overview");
     setPanel("byok_form");
   }
@@ -866,6 +883,7 @@ export function IntelligenceCenter() {
                         setBaseUrl("");
                         setApiKey("");
                         setByokConfigured(false);
+                        setByokJustConnected(false);
                         setByokReturn("add");
                         setPanel("byok_form");
                       }}
@@ -1251,6 +1269,7 @@ export function IntelligenceCenter() {
                               setApiKey("");
                               setDiscoveredModels([]);
                               setByokConfigured(true);
+                              setByokJustConnected(false);
                               setPanel("byok_form");
                               void loadProviderModels(id);
                             }}
@@ -1287,6 +1306,7 @@ export function IntelligenceCenter() {
                             setRecommendedModelId(null);
                             setModelUnavailable(false);
                             setByokConfigured(false);
+                            setByokJustConnected(false);
                             setPanel("byok_form");
                           }}
                         >
@@ -1349,6 +1369,47 @@ export function IntelligenceCenter() {
               </>
             ) : null}
             {byokConfigured ? (
+              byokJustConnected ? (
+                <div className="intel-connect-success" role="status">
+                  <p className="intel-status-line">✓ Conectado</p>
+                  <p className="intel-kicker">Modelo recomendado</p>
+                  <p className="intel-model-current">
+                    <strong>
+                      {humanModelLabel(
+                        byokProvider,
+                        modelId || recommendedModelId || "",
+                      )}
+                    </strong>
+                  </p>
+                  <p className="muted">
+                    Ya es tu inteligencia predeterminada. Puedes cambiar el
+                    modelo más tarde al administrarla.
+                  </p>
+                  <div className="row-actions">
+                    <button
+                      type="button"
+                      className="btn primary"
+                      onClick={() => {
+                        setByokJustConnected(false);
+                        setOkMsg(null);
+                        setPanel("overview");
+                      }}
+                    >
+                      Continuar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        setByokJustConnected(false);
+                        void loadProviderModels(byokProvider, true);
+                      }}
+                    >
+                      Elegir otro modelo
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <>
                 {modelsLoading ? (
                   <p className="muted">Actualizando modelos…</p>
@@ -1437,6 +1498,7 @@ export function IntelligenceCenter() {
                   </button>
                 </div>
               </>
+              )
             ) : (
               <button
                 type="submit"
@@ -1447,7 +1509,7 @@ export function IntelligenceCenter() {
               </button>
             )}
           </form>
-          {byokConfigured ? (
+          {byokConfigured && !byokJustConnected ? (
             <>
               <button
                 type="button"

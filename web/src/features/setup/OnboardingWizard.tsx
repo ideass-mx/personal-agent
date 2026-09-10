@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
   configureSetupLlm,
-  createPairingSession,
   fetchSetupProviders,
   fetchSetupStatus,
   transitionSetup,
@@ -47,22 +46,6 @@ import {
   type InstallUiState,
 } from "../../lib/installProgressUi";
 
-type DesktopBridge = {
-  getTailscaleStatus?: () => Promise<{
-    ready?: boolean;
-    phase?: string;
-    installed?: boolean;
-  }>;
-  openTailscaleDownload?: () => Promise<unknown>;
-  startTailscaleLogin?: () => Promise<unknown>;
-  verifySecureNetwork?: () => Promise<{ ok?: boolean; message?: string }>;
-};
-
-function desktopBridge(): DesktopBridge | null {
-  const w = window as unknown as { desktopApi?: DesktopBridge };
-  return w.desktopApi ?? null;
-}
-
 export function OnboardingWizard({
   onCompleted,
   /** Cuando App ya pasó welcome/session, entrar directo a elegir inteligencia. */
@@ -81,8 +64,6 @@ export function OnboardingWizard({
   const [selectedProvider, setSelectedProvider] = useState<string>("local");
   const [providerModel, setProviderModel] = useState<string>("gpt-4.1-mini");
   const [providerBaseUrl, setProviderBaseUrl] = useState<string>("");
-  const [pairingQr, setPairingQr] = useState<string | null>(null);
-  const [remoteMsg, setRemoteMsg] = useState<string | null>(null);
   const [recommendation, setRecommendation] =
     useState<LocalRecommendationDto | null>(null);
   const [hwSummary, setHwSummary] = useState<{
@@ -259,7 +240,7 @@ export function OnboardingWizard({
           });
           setStatus(ready);
           if (isLlmConfigured(ready)) {
-            setStep("optional_android");
+            setStep("done");
             return;
           }
         } catch {
@@ -338,7 +319,7 @@ export function OnboardingWizard({
         return;
       }
       setInstallUi((prev) => ({ ...prev, phase: "complete" }));
-      setStep("optional_android");
+      setStep("done");
     } catch (ex) {
       const rich = ex as Error & {
         code?: string;
@@ -504,7 +485,7 @@ export function OnboardingWizard({
       setStatus(s);
       const ready = await transitionSetup(base, token, "READY");
       setStatus(ready);
-      setStep("optional_android");
+      setStep("done");
     } catch (ex) {
       setErr(
         ex instanceof Error
@@ -515,94 +496,6 @@ export function OnboardingWizard({
     } finally {
       setBusy(false);
     }
-  }
-
-  async function onAndroidConnect() {
-    setBusy(true);
-    setErr(null);
-    setPairingQr(null);
-    try {
-      const created = await createPairingSession(base, token);
-      setPairingQr(created.qrDataUrl || null);
-      if (!created.qrDataUrl) {
-        setErr(
-          "Emparejamiento iniciado. Continúa desde la app del teléfono con el mismo agente.",
-        );
-      }
-    } catch (ex) {
-      setErr(
-        ex instanceof Error
-          ? ex.message
-          : "No pudimos preparar el emparejamiento.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function onSkipAndroid() {
-    setPairingQr(null);
-    void (async () => {
-      if (!(await ensureLlmOrBlockInstall())) return;
-      setStep("optional_remote");
-    })();
-  }
-
-  async function onRemoteConfigure() {
-    setBusy(true);
-    setRemoteMsg(null);
-    setErr(null);
-    const api = desktopBridge();
-    if (!api?.getTailscaleStatus) {
-      setRemoteMsg(
-        "El acceso remoto se configura desde la aplicación de escritorio cuando esté disponible.",
-      );
-      setBusy(false);
-      return;
-    }
-    try {
-      const status = await api.getTailscaleStatus();
-      if (status?.ready) {
-        setRemoteMsg("Acceso remoto ya está listo en este equipo.");
-        setBusy(false);
-        return;
-      }
-      if (!status?.installed && api.openTailscaleDownload) {
-        await api.openTailscaleDownload();
-        setRemoteMsg(
-          "Te abrimos la descarga. Cuando esté instalado, vuelve e inténtalo de nuevo.",
-        );
-        setBusy(false);
-        return;
-      }
-      if (api.startTailscaleLogin) {
-        await api.startTailscaleLogin();
-      }
-      if (api.verifySecureNetwork) {
-        const v = await api.verifySecureNetwork();
-        if (v?.ok) {
-          setRemoteMsg("Acceso remoto configurado.");
-        } else {
-          setRemoteMsg(
-            v?.message ||
-              "Sigue las instrucciones en pantalla para completar el acceso remoto.",
-          );
-        }
-      } else {
-        setRemoteMsg("Sigue las instrucciones para completar el acceso remoto.");
-      }
-    } catch {
-      setErr("No pudimos configurar el acceso remoto ahora. Puedes hacerlo luego.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function onSkipRemote() {
-    void (async () => {
-      if (!(await ensureLlmOrBlockInstall())) return;
-      setStep("done");
-    })();
   }
 
   function onTalk() {
@@ -1167,92 +1060,15 @@ export function OnboardingWizard({
     );
   }
 
-  if (step === "optional_android") {
-    return (
-      <div className="setup-center">
-        <div className="panel" style={{ width: "min(440px, 100%)" }}>
-          <h1>¿Quieres llevar tu agente contigo?</h1>
-          <p className="lead">
-            Puedes conectar tu teléfono ahora o hacerlo más adelante. No es
-            necesario para usar el chat.
-          </p>
-          {pairingQr ? (
-            <div style={{ textAlign: "center", margin: "16px 0" }}>
-              <img
-                src={pairingQr}
-                alt="Código para conectar el teléfono"
-                width={220}
-                height={220}
-              />
-              <p className="muted">
-                Escanea el código con la app del agente en tu teléfono.
-              </p>
-            </div>
-          ) : null}
-          {err ? <p className="error">{err}</p> : null}
-          <div className="actions" style={{ flexDirection: "column", gap: 8 }}>
-            {!pairingQr ? (
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy}
-                onClick={() => void onAndroidConnect()}
-              >
-                Conectar mi teléfono
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn primary"
-                onClick={onSkipAndroid}
-              >
-                Continuar
-              </button>
-            )}
-            <button type="button" className="btn" onClick={onSkipAndroid}>
-              Ahora no
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "optional_remote") {
-    return (
-      <div className="setup-center">
-        <div className="panel" style={{ width: "min(440px, 100%)" }}>
-          <h1>¿Quieres acceder a tu agente desde otros dispositivos?</h1>
-          <p className="lead">
-            Puedes habilitar acceso remoto de forma segura. Es opcional: tu
-            agente ya funciona en este equipo.
-          </p>
-          {remoteMsg ? <p className="muted">{remoteMsg}</p> : null}
-          {err ? <p className="error">{err}</p> : null}
-          <div className="actions" style={{ flexDirection: "column", gap: 8 }}>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy}
-              onClick={() => void onRemoteConfigure()}
-            >
-              Configurar acceso remoto
-            </button>
-            <button type="button" className="btn" onClick={onSkipRemote}>
-              Ahora no
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   if (step === "done") {
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
           <h1>Tu agente está listo</h1>
-          <p className="lead">Todo está preparado.</p>
+          <p className="lead">
+            Todo está preparado en este equipo. Si más adelante quieres vincular
+            el teléfono u otro dispositivo, hazlo en Configuración → Conexiones.
+          </p>
           <div className="actions">
             <button type="button" className="btn primary" onClick={onTalk}>
               Comenzar

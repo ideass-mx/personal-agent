@@ -11,11 +11,11 @@
     <section id="first-run" class="panel hidden">
       <div id="fr-welcome" class="fr-step">
         <h1>Bienvenido a Personal Agent</h1>
-        <p class="lead">Estamos preparando este equipo para ser un nodo de agente de IA seguro.</p>
+        <p class="lead">Vamos a dejar tu agente listo en este equipo.</p>
         <ul class="bullets">
           <li>Primero la red privada cifrada (Tailscale).</li>
           <li>Después el Agent Runtime en esta PC.</li>
-          <li>Luego el emparejamiento con Android.</li>
+          <li>El teléfono u otros dispositivos se vinculan luego, si quieres.</li>
         </ul>
         <button type="button" id="fr-begin" class="primary">Begin Setup</button>
       </div>
@@ -136,7 +136,6 @@
         <ul class="status-list">
           <li><span>Secure network</span> <strong id="sec-net">…</strong></li>
           <li><span>Agent identity</span> <strong id="sec-id">…</strong></li>
-          <li><span>Device pairing</span> <strong id="sec-pair">…</strong></li>
           <li><span>Runtime</span> <strong id="sec-rt">…</strong></li>
         </ul>
         <button type="button" id="sec-next" class="primary">Continuar</button>
@@ -147,9 +146,9 @@
         <p class="lead">AGENT READY</p>
         <ul class="status-list">
           <li><span>PC</span> <strong>● Online</strong></li>
-          <li><span>Android</span> <strong id="ready-android">○ Pendiente / conectado</strong></li>
           <li><span>Secure Network</span> <strong>● Connected</strong></li>
         </ul>
+        <p class="muted">Puedes vincular Android más tarde desde el panel (Conectar Android) o Configuración → Conexiones.</p>
         <button type="button" id="btn-open-console-fr" class="primary">Open Agent Console</button>
         <button type="button" id="fr-done">Ir al panel</button>
       </div>

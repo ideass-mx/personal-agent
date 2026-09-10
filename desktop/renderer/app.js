@@ -164,16 +164,15 @@ async function resumeFromState(state) {
     } else if (!state.anthropicApiKeySet && st !== "AGENT_READY") {
       showFrStep("fr-provider");
     } else if (st === "AGENT_READY") {
-      showFrStep("fr-pairing");
-      await loadPairingIntoFr();
+      // Pairing Android es opcional: se hace desde el panel / Configuración.
+      await skipPairingAndContinue();
     } else {
       showFrStep("fr-boot");
     }
     return;
   }
   if (st === "PAIRING") {
-    showFrStep("fr-pairing");
-    await loadPairingIntoFr();
+    await skipPairingAndContinue();
     return;
   }
   if (st === "CONFIGURING") {
@@ -191,6 +190,13 @@ function stopPairingPoll() {
     clearInterval(pairingPollTimer);
     pairingPollTimer = null;
   }
+}
+
+async function skipPairingAndContinue() {
+  stopPairingPoll();
+  await window.desktopApi.confirmPairingOrSkip({ skip: true });
+  showFrStep("fr-capabilities");
+  await loadCapabilities();
 }
 
 async function loadPairingIntoFr() {
@@ -389,8 +395,7 @@ $("fr-next-prov").addEventListener("click", async () => {
     const state = await window.desktopApi.getState();
     markBootRows(state);
     if (state.bootReady || state.onboarding?.state === "AGENT_READY") {
-      showFrStep("fr-pairing");
-      await loadPairingIntoFr();
+      await skipPairingAndContinue();
       return;
     }
     if (state.state === "ERROR" || state.onboarding?.state === "ERROR") {
@@ -444,7 +449,6 @@ $("cap-next").addEventListener("click", async () => {
   const state = await window.desktopApi.getState();
   $("sec-net").textContent = state.networkReady ? "✓" : "✗";
   $("sec-id").textContent = state.agentHostId ? "✓" : "✗";
-  $("sec-pair").textContent = state.pairingAuthPresent ? "✓ auth" : "○ pendiente";
   $("sec-rt").textContent = state.bootReady || state.running ? "✓" : "○";
   showFrStep("fr-security");
 });
@@ -455,9 +459,6 @@ $("sec-next").addEventListener("click", async () => {
     $("action-msg").textContent = "No se pudo cerrar el onboarding.";
     return;
   }
-  const state = await window.desktopApi.getState();
-  $("ready-android").textContent =
-    (state.devices || []).length > 0 ? "● Connected" : "○ Pair later";
   showFrStep("fr-ready");
 });
 

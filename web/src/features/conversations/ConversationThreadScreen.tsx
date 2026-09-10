@@ -14,7 +14,7 @@ import {
   isSafeHttpUrl,
   SourcesChip,
   SourcesPanel,
-  stripTrailingSourcesSection,
+  sanitizeAssistantDisplayText,
   type AgentSource,
 } from "../../sources";
 import { ConversationIntelligencePicker } from "../configuration/ConversationIntelligencePicker";
@@ -174,9 +174,9 @@ export function ConversationScreen() {
             ) : m.role === "assistant" ? (
               <div key={m.id} className="msg agent" data-agent="personal">
                 <p>
-                  {m.sources && m.sources.length > 0
-                    ? stripTrailingSourcesSection(m.text)
-                    : m.text}
+                  {sanitizeAssistantDisplayText(m.text, {
+                    stripFuentes: Boolean(m.sources && m.sources.length > 0),
+                  })}
                   {m.streaming && m.text.trim().length > 0 ? (
                     <span className="stream-caret" aria-hidden />
                   ) : null}

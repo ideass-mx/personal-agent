@@ -99,3 +99,14 @@ describe("stripTrailingSourcesSection", () => {
     assert.equal(stripTrailingSourcesSection(input), input);
   });
 });
+
+describe("sanitizeAssistantDisplayText", () => {
+  it("oculta JSON de tool_call filtrado", async () => {
+    const { sanitizeAssistantDisplayText } = await import(
+      "../src/sources/sanitizeAssistantDisplayText.ts"
+    );
+    const leak =
+      '[{"type":"tool_call","id":"call_1","name":"research.search","input":{"query":"x"}}]';
+    assert.equal(sanitizeAssistantDisplayText(leak), "");
+  });
+});

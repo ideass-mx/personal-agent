@@ -41,7 +41,7 @@ import { HITL_TIMEOUT_MS } from "../lib/toolActivity";
 import { humanizeError } from "../lib/sanitize";
 import {
   normalizeAgentSources,
-  stripTrailingSourcesSection,
+  sanitizeAssistantDisplayText,
   type AgentSource,
 } from "../sources";
 
@@ -243,10 +243,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMessages((prev) =>
         prev.map((m) => {
           if (m.streaming || (prevStreamId && m.id === prevStreamId)) {
-            const cleaned =
-              sources && sources.length > 0
-                ? stripTrailingSourcesSection(m.text)
-                : m.text;
+            const cleaned = sanitizeAssistantDisplayText(m.text, {
+              stripFuentes: Boolean(sources && sources.length > 0),
+            });
             return {
               ...m,
               id: msg.messageId,
@@ -398,10 +397,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .filter((r) => r.role === "user" || r.role === "assistant")
             .map((r) => {
               const sources = normalizeAgentSources(r.sources);
-              const text =
-                sources && sources.length > 0
-                  ? stripTrailingSourcesSection(r.content)
-                  : r.content;
+              const text = sanitizeAssistantDisplayText(r.content, {
+                stripFuentes: Boolean(sources && sources.length > 0),
+              });
               return {
                 id: r.id,
                 role: r.role as "user" | "assistant",
