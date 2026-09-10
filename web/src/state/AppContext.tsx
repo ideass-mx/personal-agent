@@ -41,6 +41,7 @@ import { HITL_TIMEOUT_MS } from "../lib/toolActivity";
 import { humanizeError } from "../lib/sanitize";
 import {
   normalizeAgentSources,
+  stripTrailingSourcesSection,
   type AgentSource,
 } from "../sources";
 
@@ -242,9 +243,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMessages((prev) =>
         prev.map((m) => {
           if (m.streaming || (prevStreamId && m.id === prevStreamId)) {
+            const cleaned =
+              sources && sources.length > 0
+                ? stripTrailingSourcesSection(m.text)
+                : m.text;
             return {
               ...m,
               id: msg.messageId,
+              text: cleaned,
               streaming: false,
               ...(sources ? { sources } : { sources: undefined }),
             };
@@ -392,10 +398,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             .filter((r) => r.role === "user" || r.role === "assistant")
             .map((r) => {
               const sources = normalizeAgentSources(r.sources);
+              const text =
+                sources && sources.length > 0
+                  ? stripTrailingSourcesSection(r.content)
+                  : r.content;
               return {
                 id: r.id,
                 role: r.role as "user" | "assistant",
-                text: r.content,
+                text,
                 ...(sources ? { sources } : {}),
               };
             }),

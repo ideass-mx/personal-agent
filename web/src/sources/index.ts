@@ -9,3 +9,4 @@ export {
 export { SourcesChip } from "./SourcesChip";
 export { SourcesPanel } from "./SourcesPanel";
 export { SourceCard } from "./SourceCard";
+export { stripTrailingSourcesSection } from "./stripFuentesSection";

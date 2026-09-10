@@ -171,7 +171,7 @@ describe("PHASE 60.3 research AgentRuntime iterative", () => {
         () => [
           {
             type: "text_delta",
-            text: "Según la guía MCP: schemas claros.\n\nFuentes\n1. MCP Guide\n   https://example.com/mcp",
+            text: "Según la guía MCP: schemas claros.",
           },
           { type: "done" },
         ],
@@ -193,8 +193,8 @@ describe("PHASE 60.3 research AgentRuntime iterative", () => {
         .filter((e) => e.type === "text_delta")
         .map((e) => (e.type === "text_delta" ? e.text : ""))
         .join("");
-      assert.match(text, /Fuentes/);
-      assert.match(text, /example\.com\/mcp/);
+      assert.match(text, /schemas claros/);
+      assert.doesNotMatch(text, /Fuentes/);
       assert.ok(events.some((e) => e.type === "done"));
       const snap = budget.snapshot("conv-research");
       assert.equal(snap.searches, 1);

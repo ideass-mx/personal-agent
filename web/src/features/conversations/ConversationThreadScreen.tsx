@@ -14,6 +14,7 @@ import {
   isSafeHttpUrl,
   SourcesChip,
   SourcesPanel,
+  stripTrailingSourcesSection,
   type AgentSource,
 } from "../../sources";
 import { ConversationIntelligencePicker } from "../configuration/ConversationIntelligencePicker";
@@ -173,7 +174,9 @@ export function ConversationScreen() {
             ) : m.role === "assistant" ? (
               <div key={m.id} className="msg agent" data-agent="personal">
                 <p>
-                  {m.text}
+                  {m.sources && m.sources.length > 0
+                    ? stripTrailingSourcesSection(m.text)
+                    : m.text}
                   {m.streaming && m.text.trim().length > 0 ? (
                     <span className="stream-caret" aria-hidden />
                   ) : null}

@@ -33,6 +33,7 @@ import {
 import {
   createTurnSourceCollector,
 } from "./sources.ts";
+import { stripTrailingSourcesSection } from "./strip-fuentes-section.ts";
 import {
   resolveAgentInstructions,
   type SkillRegistry,
@@ -250,10 +251,14 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
 
           if (toolCalls.length === 0) {
             const finalized = sources.finalize();
+            const persistedText =
+              finalized.length > 0
+                ? stripTrailingSourcesSection(full)
+                : full;
             const messageId = memory.addMessage(
               conversationId,
               "assistant",
-              full,
+              persistedText,
               undefined,
               finalized.length > 0 ? finalized : undefined,
             );
@@ -265,7 +270,7 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
               event: "REQUEST_COMPLETED",
               durationMs: Date.now() - startedAt,
               metadata: {
-                outputLength: full.length,
+                outputLength: persistedText.length,
                 historyCount: history.length,
                 toolCount: 0,
                 sourcesCount: finalized.length,

@@ -77,3 +77,25 @@ describe("PHASE 60.15.1 sources UX helpers", () => {
     assert.equal(isSafeHttpUrl("file:///etc/passwd"), false);
   });
 });
+
+describe("stripTrailingSourcesSection", () => {
+  it("quita bloque **Fuentes:** con lista markdown", async () => {
+    const { stripTrailingSourcesSection } = await import(
+      "../src/sources/stripFuentesSection.ts"
+    );
+    const input =
+      "Respuesta útil sobre doctorados.\n\n**Fuentes:**\n* [SECIHTI](https://www.secihti.mx/)\n* [IPN](https://www.ipn.mx/)";
+    const out = stripTrailingSourcesSection(input);
+    assert.match(out, /doctorados/);
+    assert.doesNotMatch(out, /Fuentes/);
+    assert.doesNotMatch(out, /secihti/);
+  });
+
+  it("no altera texto sin sección Fuentes", async () => {
+    const { stripTrailingSourcesSection } = await import(
+      "../src/sources/stripFuentesSection.ts"
+    );
+    const input = "Solo una respuesta corta.";
+    assert.equal(stripTrailingSourcesSection(input), input);
+  });
+});

@@ -181,8 +181,7 @@ describe("PHASE 60.15 AgentRuntime → MCP → research", () => {
         () => [
           {
             type: "text_delta",
-            text:
-              "PostgreSQL 17 mejora vacuum; 16 introdujo JSON_TABLE.\n\nFuentes:\n1. postgresql.org/docs/17\n2. postgresql.org/docs/16",
+            text: "PostgreSQL 17 mejora vacuum; 16 introdujo JSON_TABLE.",
           },
           { type: "done" },
         ],
@@ -211,8 +210,8 @@ describe("PHASE 60.15 AgentRuntime → MCP → research", () => {
         .filter((e) => e.type === "text_delta")
         .map((e) => (e.type === "text_delta" ? e.text : ""))
         .join("");
-      assert.match(text, /Fuentes/);
-      assert.match(text, /postgresql\.org/);
+      assert.match(text, /PostgreSQL 17/);
+      assert.doesNotMatch(text, /Fuentes/);
       assert.ok(events.some((e) => e.type === "done"));
       const done = events.find((e) => e.type === "done");
       assert.ok(done && done.type === "done");
