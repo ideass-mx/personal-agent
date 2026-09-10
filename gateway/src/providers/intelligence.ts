@@ -193,10 +193,12 @@ export function updateIntelligenceConnectionModel(
     const entry = getLocalModelEntry(mid);
     if (!entry) throw new Error("model_not_in_catalog");
     const manager = createLocalModelManager();
-    if (!manager.isInstalled(mid)) throw new Error("model_not_installed");
-    manager.setActive(mid);
+    // Se puede elegir del catálogo antes de instalar; setActive solo si ya está.
     found.modelId = mid;
     found.displayName = entry.displayName;
+    if (manager.isInstalled(mid)) {
+      manager.setActive(mid);
+    }
   } else {
     if (!hasProviderApiKeyConfigured(found.provider)) {
       throw new Error("credential_required");

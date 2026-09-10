@@ -93,4 +93,19 @@ describe("updateIntelligenceConnectionModel", () => {
       /model_not_allowed/,
     );
   });
+
+  it("allows selecting a local catalog model before it is installed", async () => {
+    const mod = await import("../../src/providers/intelligence.ts");
+    const updated = mod.updateIntelligenceConnectionModel(
+      "conn_local_default",
+      "qwen3-1.7b",
+    );
+    assert.equal(updated.modelId, "qwen3-1.7b");
+    assert.equal(updated.displayName, "Qwen3 1.7B");
+    const cfg = JSON.parse(
+      fs.readFileSync(path.join(tmp, "config", "intelligence.json"), "utf8"),
+    ) as { connections: Array<{ id: string; modelId: string }> };
+    const local = cfg.connections.find((c) => c.id === "conn_local_default");
+    assert.equal(local?.modelId, "qwen3-1.7b");
+  });
 });

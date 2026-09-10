@@ -17,10 +17,12 @@ describe("intelligence model management UX", () => {
     assert.match(center, /onPickLocalModel/);
     assert.match(center, /onPickCloudModel/);
     assert.match(center, /byokModelOptions\("personal-agent-cloud"\)/);
-    assert.match(center, /Claude en la nube, sin API key/);
+    assert.match(center, /Modelos gestionados por Personal Agent/);
     assert.doesNotMatch(center, /Seleccionado por Personal Agent/);
     assert.match(center, /installLocalModel/);
     assert.match(center, /Instalar modelo/);
+    // Elegir modelo ≠ instalar: no auto-download al hacer click.
+    assert.match(center, /Solo selecciona \(puede no estar instalado\)/);
   });
 
   it("local catalog offers 4B / 1.7B / 0.6B", () => {

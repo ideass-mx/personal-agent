@@ -117,6 +117,8 @@ export function IntelligenceCenter() {
   );
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelUnavailable, setModelUnavailable] = useState(false);
+  /** Selección local pendiente de pintar mientras refresca el snapshot. */
+  const [localPickId, setLocalPickId] = useState<string | null>(null);
 
 
   const base = session ? resolveHttpBase(session) : "";
@@ -314,43 +316,43 @@ export function IntelligenceCenter() {
   async function onPickLocalModel(nextModelId: string) {
     const conn = snap?.connections.find((c) => c.provider === "local");
     if (!conn || busy) return;
-    if (conn.modelId === nextModelId && (snap?.local.installed || localReady)) {
-      return;
-    }
-    const installed = (localModels?.installed || []).some(
-      (i) =>
-        i.modelId === nextModelId &&
-        (i.state === "ready" ||
-          i.state === "active" ||
-          i.state === "installed"),
-    );
+    const current =
+      localPickId ||
+      conn.modelId ||
+      localModels?.active?.modelId ||
+      "qwen3-4b";
+    if (current === nextModelId) return;
+    setLocalPickId(nextModelId);
     setBusy(true);
     setErr(null);
+    setOkMsg(null);
     try {
-      if (!installed) {
-        setOkMsg("Descargando modelo local…");
-        await installLocalModel(base, token, { modelId: nextModelId });
-      }
+      // Solo selecciona (puede no estar instalado). Instalar es otro paso.
       await updateIntelligenceConnectionModel(
         base,
         token,
         conn.id,
         nextModelId,
       );
-      await selectIntelligenceConnection(base, token, conn.id);
-      setOkMsg(
-        installed
-          ? "Modelo local actualizado."
-          : "Modelo local instalado y listo.",
+      const installed = (localModels?.installed || []).some(
+        (i) =>
+          i.modelId === nextModelId &&
+          (i.state === "ready" ||
+            i.state === "active" ||
+            i.state === "installed"),
       );
+      if (installed) {
+        await selectIntelligenceConnection(base, token, conn.id);
+        setOkMsg("Modelo local actualizado.");
+      }
       await refresh();
     } catch (ex) {
+      setLocalPickId(null);
       setErr(
         ex instanceof Error
           ? ex.message
           : "No pudimos cambiar el modelo local.",
       );
-      setOkMsg(null);
     } finally {
       setBusy(false);
     }
@@ -359,10 +361,34 @@ export function IntelligenceCenter() {
   async function onInstallLocalSelected() {
     const conn = snap?.connections.find((c) => c.provider === "local");
     const model =
+      localPickId ||
       conn?.modelId ||
       localModels?.active?.modelId ||
       "qwen3-4b";
-    await onPickLocalModel(model);
+    if (!conn) {
+      setErr("No encontramos la inteligencia Local.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    setOkMsg("Descargando modelo local…");
+    try {
+      await installLocalModel(base, token, { modelId: model });
+      await updateIntelligenceConnectionModel(base, token, conn.id, model);
+      await selectIntelligenceConnection(base, token, conn.id);
+      setLocalPickId(null);
+      setOkMsg("Modelo local instalado y listo.");
+      await refresh();
+    } catch (ex) {
+      setErr(
+        ex instanceof Error
+          ? ex.message
+          : "No pudimos instalar el modelo local.",
+      );
+      setOkMsg(null);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function onPickCloudModel(nextModelId: string) {
@@ -967,6 +993,7 @@ export function IntelligenceCenter() {
           </p>
           <IntelligenceModelSection
             value={
+              localPickId ||
               snap?.connections.find((c) => c.provider === "local")?.modelId ||
               localModels?.active?.modelId ||
               "qwen3-4b"
@@ -1063,8 +1090,10 @@ export function IntelligenceCenter() {
                 <span className="muted">ID del modelo</span>
                 <br />
                 <code>
-                  {snap?.connections.find((c) => c.provider === "local")
-                    ?.modelId || "qwen3-4b"}
+                  {localPickId ||
+                    snap?.connections.find((c) => c.provider === "local")
+                      ?.modelId ||
+                    "qwen3-4b"}
                 </code>
               </p>
               <p>
@@ -1079,9 +1108,9 @@ export function IntelligenceCenter() {
                   (localModels?.catalog || []).find(
                     (m) =>
                       m.id ===
-                      (snap?.connections.find((c) => c.provider === "local")
-                        ?.modelId ||
-                        localModels?.active?.modelId ||
+                      (localPickId ||
+                        snap?.connections.find((c) => c.provider === "local")
+                          ?.modelId ||
                         "qwen3-4b"),
                   )?.capabilities?.contextWindow,
                 )}
