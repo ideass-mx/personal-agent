@@ -1,11 +1,13 @@
 /**
- * Proveedores BYOK mostrados en onboarding / Intelligence Center.
- * Groq y OpenAI-compatible siguen soportados en backend si ya están
- * configurados, pero no se ofrecen en la UI de conexión principal.
+ * Proveedores BYOK en onboarding / Intelligence Center.
  *
- * La API key autentica la cuenta del usuario.
- * El modelId lo elige el usuario (con un default recomendado); no viene
- * embebido en la key.
+ * AVAILABLE = respuesta del proveedor (Gateway discovery).
+ * RECOMMENDED = static recommendation del Gateway (un ID por proveedor).
+ * SELECTED = configuración del usuario.
+ *
+ * Esta UI no hardcodea el catálogo completo del proveedor.
+ * Solo conoce el ID recomendado (espejo de PROVIDER_MODEL_DEFAULTS)
+ * para etiquetas / onboarding antes de discovery.
  */
 export const PRIMARY_BYOK_PROVIDERS = [
   "openai",
@@ -17,10 +19,20 @@ export const PRIMARY_BYOK_PROVIDERS = [
 
 export type PrimaryByokProviderId = (typeof PRIMARY_BYOK_PROVIDERS)[number];
 
+/** Espejo de gateway PROVIDER_MODEL_DEFAULTS (solo recommended, no catálogo). */
+export const STATIC_RECOMMENDED_MODEL_ID: Record<string, string> = {
+  openai: "gpt-4.1-mini",
+  anthropic: "claude-sonnet-4-6",
+  xai: "grok-4.6",
+  gemini: "gemini-3.6-flash",
+  openrouter: "openai/gpt-4.1-mini",
+  groq: "llama-3.3-70b-versatile",
+  "personal-agent-cloud": "claude-sonnet-4-6",
+};
+
 export type ByokModelOption = {
   id: string;
   label: string;
-  /** Etiqueta corta a la derecha (Recomendado, Más rápido…). */
   hint?: string;
 };
 
@@ -28,77 +40,36 @@ export function isPrimaryByokProvider(id: string): boolean {
   return (PRIMARY_BYOK_PROVIDERS as readonly string[]).includes(id);
 }
 
-/** Modelos seleccionables en Inteligencia (etiqueta humana → id técnico). */
+/**
+ * Opciones locales de Cloud (SOT del Gateway vía Cloud models).
+ * BYOK externo debe usar modelos descubiertos, no esta lista.
+ */
 export function byokModelOptions(provider: string): ByokModelOption[] {
-  switch (provider) {
-    case "openai":
-      return [
-        { id: "gpt-4.1-mini", label: "GPT 4.1 mini", hint: "Recomendado" },
-        { id: "gpt-4.1", label: "GPT 4.1", hint: "Más capaz" },
-        { id: "gpt-4o-mini", label: "GPT 4o mini", hint: "Más rápido" },
-      ];
-    case "anthropic":
-    case "personal-agent-cloud":
-      return [
-        {
-          id: "claude-sonnet-4-6",
-          label: "Claude Sonnet",
-          hint: "Recomendado",
-        },
-        {
-          id: "claude-haiku-4-5-20251001",
-          label: "Claude Haiku",
-          hint: "Más rápido",
-        },
-      ];
-    case "xai":
-      return [
-        { id: "grok-4.6", label: "Grok 4.6", hint: "Recomendado" },
-        { id: "grok-3-mini", label: "Grok 3 mini", hint: "Más rápido" },
-      ];
-    case "gemini":
-      return [
-        {
-          id: "gemini-3.6-flash",
-          label: "Gemini 3.6 Flash",
-          hint: "Recomendado",
-        },
-        {
-          id: "gemini-3.1-pro-preview",
-          label: "Gemini 3.1 Pro",
-          hint: "Más capaz",
-        },
-        {
-          id: "gemini-3-flash-preview",
-          label: "Gemini 3 Flash",
-          hint: "Más rápido",
-        },
-      ];
-    case "openrouter":
-      return [
-        {
-          id: "openai/gpt-4.1-mini",
-          label: "GPT 4.1 mini",
-          hint: "Recomendado",
-        },
-        {
-          id: "anthropic/claude-sonnet-4",
-          label: "Claude Sonnet",
-        },
-        {
-          id: "google/gemini-2.5-flash",
-          label: "Gemini 2.5 Flash",
-        },
-        {
-          id: "x-ai/grok-4.6",
-          label: "Grok 4.6",
-        },
-      ];
-    default:
-      return [{ id: "gpt-4.1-mini", label: "Modelo por defecto" }];
+  if (provider === "personal-agent-cloud" || provider === "anthropic") {
+    return [
+      {
+        id: "claude-sonnet-4-6",
+        label: "Claude Sonnet",
+        hint: "Recomendado",
+      },
+      {
+        id: "claude-haiku-4-5-20251001",
+        label: "Claude Haiku",
+        hint: "Más rápido",
+      },
+    ];
   }
+  const recommended = STATIC_RECOMMENDED_MODEL_ID[provider];
+  if (recommended) {
+    return [{ id: recommended, label: recommended, hint: "Recomendado" }];
+  }
+  return [];
 }
 
 export function defaultByokModelId(provider: string): string {
-  return byokModelOptions(provider)[0]?.id || "gpt-4.1-mini";
+  return (
+    STATIC_RECOMMENDED_MODEL_ID[provider] ||
+    byokModelOptions(provider)[0]?.id ||
+    ""
+  );
 }

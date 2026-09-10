@@ -11,6 +11,10 @@ import { assertUrlSafeForFetch } from "../resources/ssrf.ts";
 import { resolveProductDataRoot } from "../local-llm/storage.ts";
 import { getEffectiveProviderApiKey } from "../setup/llm-key.ts";
 import { PERSONAL_AGENT_CLOUD_MODELS } from "./cloud-models.ts";
+import {
+  firstAvailableModelId,
+  resolveRecommendedAgainstAvailable,
+} from "./model-recommendation.ts";
 
 export type ModelSelectionMode = "recommended" | "specific";
 
@@ -21,16 +25,12 @@ export type DiscoveryConnectionRef = {
   modelSelection?: ModelSelectionMode;
 };
 
+/** Modelo devuelto por el proveedor (sin filtrar por capacidades). */
 export type ProviderModel = {
   id: string;
   name?: string;
-  capabilities?: {
-    chat?: boolean;
-    vision?: boolean;
-    tools?: boolean;
-    structuredOutput?: boolean;
-  };
-  contextWindow?: number;
+  /** Metadatos opcionales del proveedor; no se usan para filtrar en 63.2. */
+  metadata?: Record<string, unknown>;
 };
 
 export type ModelDiscoveryStatus =
@@ -43,7 +43,11 @@ export type ModelAuthStatus = "ok" | "failed" | "unknown";
 
 export type ModelDiscoveryResult = {
   models: ProviderModel[];
-  recommendedModelId?: string;
+  /**
+   * Estática ∩ available. null si el default de PA no está en la respuesta.
+   * Nunca inventar un ID que el proveedor no devolvió.
+   */
+  recommendedModelId?: string | null;
   discoveryStatus: ModelDiscoveryStatus;
   authStatus: ModelAuthStatus;
   /** Código seguro (sin secretos). */
@@ -54,29 +58,18 @@ export type ModelAvailabilityStatus =
   | "available"
   | "unavailable"
   | "not_discovered"
-  | "discovery_unsupported";
+  | "discovery_unsupported"
+  | "not_selected";
 
 type CachedCatalog = {
   provider: string;
   fetchedAt: number;
   models: ProviderModel[];
-  recommendedModelId?: string;
+  recommendedModelId?: string | null;
   discoveryStatus: ModelDiscoveryStatus;
 };
 
 const CACHE_TTL_MS = 30 * 60 * 1000;
-
-/** Preferencias suaves por proveedor (desempate; no son el único modelo válido). */
-const PREFERRED_ID_FRAGMENTS: Record<string, string[]> = {
-  openai: ["gpt-4.1-mini", "gpt-4.1", "gpt-4o-mini", "gpt-4o"],
-  anthropic: ["claude-sonnet-4", "claude-sonnet", "claude-haiku", "claude-opus"],
-  xai: ["grok-4.6", "grok-4", "grok-3-mini", "grok"],
-  gemini: ["gemini-3.6-flash", "gemini-3.1-pro", "gemini-3-flash", "gemini-flash"],
-  openrouter: ["openai/gpt-4.1-mini", "anthropic/claude-sonnet", "google/gemini"],
-  groq: ["llama-3.3-70b", "llama-3.1-70b", "llama"],
-  "openai-compatible": [],
-  "personal-agent-cloud": ["claude-sonnet-4-6", "claude-sonnet", "claude-haiku"],
-};
 
 function cachePath(): string {
   return path.join(resolveProductDataRoot(), "config", "provider-models-cache.json");
@@ -128,55 +121,20 @@ export function clearProviderModelsCache(provider?: string): void {
   fs.writeFileSync(file, JSON.stringify(all, null, 2), "utf8");
 }
 
-function isObviouslyNonChat(id: string): boolean {
-  const x = id.toLowerCase();
-  return /embedding|embed|tts|whisper|dall-e|image|moderation|realtime|audio|transcri|speech|wav|computer-use|code-search|rerank|guard|aqa|text-embedding|babbage|davinci|curie|ada-00|ft:/.test(
-    x,
-  );
-}
-
-export function filterCompatibleModels(models: ProviderModel[]): ProviderModel[] {
-  return models.filter((m) => {
-    if (!m.id?.trim()) return false;
-    if (m.capabilities?.chat === false) return false;
-    if (isObviouslyNonChat(m.id)) return false;
-    return true;
-  });
-}
-
-/**
- * Ranking determinista:
- * chat → tools → structured → context → preferencias del proveedor → id estable.
- */
-export function recommendModelId(
-  models: ProviderModel[],
+function withRecommendation(
   provider: string,
-): string | undefined {
-  const compatible = filterCompatibleModels(models);
-  if (compatible.length === 0) return undefined;
-  const prefs = PREFERRED_ID_FRAGMENTS[provider] || [];
-  const scored = compatible.map((m) => {
-    let score = 100;
-    const id = m.id.toLowerCase();
-    if (m.capabilities?.chat !== false) score += 50;
-    if (m.capabilities?.tools) score += 40;
-    if (m.capabilities?.structuredOutput) score += 20;
-    if (m.capabilities?.vision) score += 5;
-    const ctx = m.contextWindow || 0;
-    if (ctx >= 100_000) score += 15;
-    else if (ctx >= 32_000) score += 8;
-    for (let i = 0; i < prefs.length; i++) {
-      if (id.includes(prefs[i].toLowerCase())) {
-        score += 80 - i * 8;
-        break;
-      }
-    }
-    if (/mini|flash|haiku|fast/.test(id)) score += 6;
-    if (/opus|pro(?!-)|ultra/.test(id)) score += 3;
-    return { id: m.id, score };
-  });
-  scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-  return scored[0]?.id;
+  models: ProviderModel[],
+  authStatus: ModelAuthStatus = "ok",
+  discoveryStatus: ModelDiscoveryStatus = "ok",
+): ModelDiscoveryResult {
+  const ids = models.map((m) => m.id);
+  const recommended = resolveRecommendedAgainstAvailable(provider, ids);
+  return {
+    models,
+    recommendedModelId: recommended,
+    discoveryStatus,
+    authStatus,
+  };
 }
 
 function defaultBaseUrl(
@@ -241,17 +199,9 @@ function normalizeOpenAiStyleModels(body: unknown): ProviderModel[] {
         (row as { display_name?: string }).display_name ||
         "",
     ).trim();
-    const ctx = Number(
-      (row as { context_window?: number }).context_window ||
-        (row as { context_length?: number }).context_length ||
-        (row as { max_input_tokens?: number }).max_input_tokens ||
-        0,
-    );
     out.push({
       id,
       name: name || undefined,
-      capabilities: { chat: true },
-      contextWindow: ctx > 0 ? ctx : undefined,
     });
   }
   return out;
@@ -266,31 +216,9 @@ function normalizeAnthropicModels(body: unknown): ProviderModel[] {
     const id = String((row as { id?: string }).id || "").trim();
     if (!id) continue;
     const name = String((row as { display_name?: string }).display_name || "").trim();
-    const ctx = Number((row as { max_input_tokens?: number }).max_input_tokens || 0);
-    const caps = (row as { capabilities?: Record<string, unknown> }).capabilities;
-    const tools =
-      caps && typeof caps === "object"
-        ? Boolean(
-            (caps as { tools?: { supported?: boolean } }).tools?.supported ??
-              (caps as { tool_use?: { supported?: boolean } }).tool_use?.supported,
-          )
-        : true;
-    const structured =
-      caps && typeof caps === "object"
-        ? Boolean(
-            (caps as { structured_outputs?: { supported?: boolean } })
-              .structured_outputs?.supported,
-          )
-        : false;
     out.push({
       id,
       name: name || undefined,
-      capabilities: {
-        chat: true,
-        tools: tools || undefined,
-        structuredOutput: structured || undefined,
-      },
-      contextWindow: ctx > 0 ? ctx : undefined,
     });
   }
   return out;
@@ -329,13 +257,7 @@ async function listOpenAiCompatibleModels(input: {
       };
     }
     const models = normalizeOpenAiStyleModels(body);
-    const compatible = filterCompatibleModels(models);
-    return {
-      models: compatible,
-      recommendedModelId: recommendModelId(compatible, input.provider),
-      discoveryStatus: "ok",
-      authStatus: "ok",
-    };
+    return withRecommendation(input.provider, models);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     return {
@@ -377,13 +299,7 @@ async function listAnthropicModels(apiKey: string): Promise<ModelDiscoveryResult
       };
     }
     const models = normalizeAnthropicModels(body);
-    const compatible = filterCompatibleModels(models);
-    return {
-      models: compatible,
-      recommendedModelId: recommendModelId(compatible, "anthropic"),
-      discoveryStatus: "ok",
-      authStatus: "ok",
-    };
+    return withRecommendation("anthropic", models);
   } catch {
     return {
       models: [],
@@ -398,14 +314,8 @@ function listCloudModels(): ModelDiscoveryResult {
   const models: ProviderModel[] = PERSONAL_AGENT_CLOUD_MODELS.map((id) => ({
     id,
     name: id.includes("haiku") ? "Claude Haiku" : "Claude Sonnet",
-    capabilities: { chat: true, tools: true },
   }));
-  return {
-    models,
-    recommendedModelId: recommendModelId(models, "personal-agent-cloud"),
-    discoveryStatus: "ok",
-    authStatus: "ok",
-  };
+  return withRecommendation("personal-agent-cloud", models);
 }
 
 /**
@@ -442,12 +352,8 @@ export async function discoverProviderModels(input: {
   if (input.useCache !== false) {
     const cached = getCachedProviderModels(provider);
     if (cached && cached.discoveryStatus === "ok" && cached.models.length > 0) {
-      return {
-        models: cached.models,
-        recommendedModelId: cached.recommendedModelId,
-        discoveryStatus: "ok",
-        authStatus: "ok",
-      };
+      // Re-evalúa recomendación estática (puede cambiar sin reconsultar /models).
+      return withRecommendation(provider, cached.models);
     }
   }
 
@@ -515,8 +421,8 @@ export function modelAvailabilityForConnection(
 }
 
 /**
- * Elige el modelId a usar en un probe de conectividad (nunca falla solo por
- * un modelId retirado si hay recomendación).
+ * Elige un modelId usable si hace falta un probe (legacy).
+ * Preferencia: selected disponible → recommended → primer available.
  */
 export function resolveModelForConnectivityProbe(
   connection: DiscoveryConnectionRef,
@@ -529,7 +435,8 @@ export function resolveModelForConnectivityProbe(
     return connection.modelId;
   }
   if (discovery.recommendedModelId) return discovery.recommendedModelId;
-  if (discovery.models[0]?.id) return discovery.models[0].id;
+  const first = firstAvailableModelId(discovery.models.map((m) => m.id));
+  if (first) return first;
   return connection.modelId;
 }
 
@@ -539,11 +446,19 @@ export function buildModelDiscoveryResult(input: {
   authStatus?: ModelAuthStatus;
   discoveryStatus?: ModelDiscoveryStatus;
 }): ModelDiscoveryResult {
-  const compatible = filterCompatibleModels(input.models);
-  return {
-    models: compatible,
-    recommendedModelId: recommendModelId(compatible, input.provider),
-    discoveryStatus: input.discoveryStatus ?? "ok",
-    authStatus: input.authStatus ?? "ok",
-  };
+  return withRecommendation(
+    input.provider,
+    input.models.filter((m) => Boolean(m.id?.trim())),
+    input.authStatus ?? "ok",
+    input.discoveryStatus ?? "ok",
+  );
+}
+
+/** Alias explícito del contrato: refresh = discovery sin caché. */
+export async function refreshProviderModels(input: {
+  provider: string;
+  connection?: DiscoveryConnectionRef | null;
+  apiKey?: string;
+}): Promise<ModelDiscoveryResult> {
+  return discoverProviderModels({ ...input, useCache: false });
 }

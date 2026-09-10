@@ -37,14 +37,22 @@ export {
 } from "./intelligence.ts";
 export {
   discoverProviderModels,
-  recommendModelId,
-  filterCompatibleModels,
+  refreshProviderModels,
   buildModelDiscoveryResult,
   type ProviderModel,
   type ModelDiscoveryResult,
   type ModelSelectionMode,
   type ModelAvailabilityStatus,
 } from "./model-discovery.ts";
+export {
+  StaticModelRecommendationSource,
+  PROVIDER_MODEL_DEFAULTS,
+  resolveRecommendedAgainstAvailable,
+  getModelRecommendationSource,
+  setModelRecommendationSource,
+  resetModelRecommendationSource,
+  type ModelRecommendationSource,
+} from "./model-recommendation.ts";
 export {
   CloudAuthError,
   createCloudAuthClient,

@@ -1352,6 +1352,25 @@ export function IntelligenceCenter() {
                 {modelsLoading ? (
                   <p className="muted">Actualizando modelos…</p>
                 ) : null}
+                {modelUnavailable ? (
+                  <p className="muted">
+                    El modelo seleccionado ya no está disponible. El proveedor
+                    sigue conectado.
+                    {recommendedModelId
+                      ? ` Recomendado ahora: ${recommendedModelId}.`
+                      : " Elige otro de la lista."}
+                  </p>
+                ) : null}
+                {modelUnavailable && recommendedModelId ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy}
+                    onClick={() => void onPickByokModel(recommendedModelId)}
+                  >
+                    Usar recomendado
+                  </button>
+                ) : null}
                 {discoveredModels.length > 0 ? (
                   <IntelligenceModelSection
                     value={modelId || recommendedModelId || discoveredModels[0]!.id}
@@ -1371,7 +1390,7 @@ export function IntelligenceCenter() {
                 ) : (
                   <p className="muted">
                     {modelUnavailable
-                      ? "El modelo configurado ya no está disponible. Actualiza la lista y elige otro."
+                      ? "Actualiza la lista y elige otro modelo."
                       : "Aún no hay catálogo de modelos. Prueba la conexión o actualiza."}
                   </p>
                 )}

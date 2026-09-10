@@ -107,8 +107,6 @@ function connectivityPublicShape(
           models: result.discovery.models.map((m) => ({
             id: m.id,
             name: m.name || m.id,
-            capabilities: m.capabilities,
-            contextWindow: m.contextWindow,
           })),
         }
       : undefined,
@@ -629,7 +627,9 @@ export function mountSetupHttp(
     if (denied) return denied;
     const record0 = getSetupState();
     const providerId =
-      getIntelligenceConnection()?.provider || record0.llmProvider || "local";
+      (record0.llmProvider && String(record0.llmProvider).trim()) ||
+      getIntelligenceConnection()?.provider ||
+      "local";
     if (providerId === "local") {
       if (!isLocalLlmConfigured(createLocalModelManager())) {
         return c.json(
@@ -914,8 +914,6 @@ export function mountSetupHttp(
         models: discovery.models.map((m) => ({
           id: m.id,
           name: m.name || m.id,
-          capabilities: m.capabilities,
-          contextWindow: m.contextWindow,
           recommended: m.id === discovery.recommendedModelId,
         })),
       });

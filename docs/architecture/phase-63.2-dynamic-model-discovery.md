@@ -1,105 +1,127 @@
-# PHASE 63.2 — Dynamic model discovery
+# PHASE 63.2 — Dynamic model discovery & static recommendations
 
-## Objetivo
+## Regla
 
-Separar **conexión** de **modelo** para que un `modelId` retirado no
-marque un proveedor válido como desconectado.
+> **El proveedor dice qué existe. Personal Agent recomienda. El usuario selecciona.**
 
 ```text
-CONNECT
-  ↓
-VALIDATE (credencial)
-  ↓
-DISCOVER (listModels del proveedor)
-  ↓
-COMPATIBILITY (filtrar no-chat / embeddings / …)
-  ↓
-RECOMMEND (ranking determinista local)
-  ↓
-READY
+AVAILABLE ≠ RECOMMENDED ≠ SELECTED
 ```
 
-> Provider connection status is independent from model availability.
+Un modelo seleccionado retirado **no** desconecta un proveedor válido.
 
-## Conceptos
+## Flujo
 
-| Concepto | Pregunta |
+```text
+                  INTELLIGENCE
+                       │
+                       ▼
+                    PROVIDER
+                       │
+                  credential
+                       │
+                       ▼
+                  GET /models
+                       │
+                       ▼
+              AVAILABLE MODELS
+                       │
+             ┌─────────┴─────────┐
+             │                   │
+             ▼                   ▼
+      Static Recommendation   User Selection
+      (∩ available only)      (config)
+             │                   │
+             └─────────┬─────────┘
+                       ▼
+                 SELECTED MODEL
+```
+
+## Availability (fuente de verdad)
+
+Para BYOK externo, la API del proveedor (con la key del usuario) lista
+los modelos accesibles:
+
+| Provider | Endpoint |
 |----------|----------|
-| Connection | ¿Personal Agent puede autenticarse con esta inteligencia? |
-| Model | ¿Qué modelo disponible debe usar ahora? |
+| OpenAI / xAI / Gemini / Groq / OpenRouter / openai-compatible | `GET {base}/models` |
+| Anthropic | `GET https://api.anthropic.com/v1/models` |
 
-Estados mínimos:
+No hay catálogo completo hardcodeado en Personal Agent.
+No se scrapean sitios ni catálogos de terceros.
 
-```text
-Connection: connected | not_configured | auth_failed | unavailable
-Model:      available | unavailable | not_discovered | discovery_unsupported
-Selection:  recommended | specific
+Cuando `/models` autentica correctamente, **esa** llamada valida la
+credencial (sin un segundo `GET /validate` ni chat probe obligatorio).
+
+## Recommendation
+
+Abstracción:
+
+```ts
+interface ModelRecommendationSource {
+  getRecommendedModel(providerId: string): string | null;
+}
 ```
 
-## Flujo externo (BYOK)
+Hoy: `StaticModelRecommendationSource` + `PROVIDER_MODEL_DEFAULTS`
+(un ID por proveedor, centralizado).
 
-1. El usuario pega la API key (Credential Store).
-2. Gateway valida autenticación vía el endpoint oficial de modelos
-   (p. ej. `GET /v1/models` OpenAI-compat, Anthropic Models API,
-   OpenRouter catalog).
-3. Se normalizan y filtran modelos incompatibles obvios.
-4. Se elige un modelo recomendado de forma determinista.
-5. Si `modelSelection = recommended`, se actualiza `modelId`.
-6. Si `modelSelection = specific` y el modelo desapareció:
-   la conexión permanece; el modelo queda `unavailable`
-   (el usuario elige otro; el probe de conectividad puede usar la
-   recomendación sin cambiar el pin).
+Futuro (sin cambiar el resto):
 
-No hay fallback automático entre inteligencias
-(Local ↛ Cloud ↛ OpenAI …).
+```text
+RemoteModelRecommendationSource → Personal Agent Model Catalog API
+```
 
-## Personal Agent Cloud
+Validación obligatoria:
 
-Personal Agent Cloud es la **fuente de verdad** de su modelo
-recomendado (hoy: constantes del Gateway / Cloud SOT).
+```text
+staticRecommended ∈ availableModels  →  recommended = that id
+otherwise                            →  recommended = null
+```
 
-El cliente Web/Desktop **no** debe depender de un ID de tercero
-hardcodeado como única opción. Consume lo que el Gateway expone en
-`GET /v1/setup/providers/personal-agent-cloud/models`.
+Nunca mostrar como disponible un ID solo porque está en la config estática.
 
-## Local
+Si no hay recomendación válida, la UI permite elegir entre available.
+En el primer connect, si hace falta un default, se usa el **primer**
+modelo del orden del proveedor (no es “recomendado”).
 
-Sin discovery remoto. Sigue el catálogo instalado (Qwen3 4B, etc.).
+## Selection
 
-`supportsModelDiscovery = false` / `modelStatus = discovery_unsupported`.
+`modelId` + `modelSelection` (`recommended` | `specific`) en
+`intelligence.json`.
+
+Refresh:
+
+- selected ∈ available → se conserva
+- selected ∉ available → `modelStatus = unavailable`, provider sigue conectado
+- `specific` no se cambia en silencio
+
+## Local / Cloud
+
+- **Local:** Qwen3 4B / Model Manager. Sin `/models` externo.
+- **Cloud:** SOT del Gateway/Cloud (`recommendedModel` / modelos Cloud).
+  El Desktop no expone el proveedor subyacente de Cloud.
+
+## Qué NO hace esta fase
+
+- Capability discovery / probes
+- Benchmarks / scoring / routing automático
+- Marketplace de modelos
+- Fallback entre inteligencias
 
 ## API
 
 | Endpoint | Uso |
 |----------|-----|
-| `POST /v1/setup/llm` | Conectar key → discovery → recommended |
-| `POST /v1/setup/providers/:id/test` | Validate + discover + probe con modelo resuelto |
-| `GET /v1/setup/providers/:id/models` | Catálogo descubierto (`?refresh=1` fuerza) |
-| `POST /v1/setup/intelligence/model` | Pin explícito (`specific`) |
+| `POST /v1/setup/llm` | Key → `/models` → recommended ∩ available |
+| `POST /v1/setup/providers/:id/test` | Validate vía discovery |
+| `GET /v1/setup/providers/:id/models?refresh=1` | Refresh catálogo |
 
-Nunca se devuelven API keys ni session tokens.
-
-## Recomendación
-
-Orden de preferencia (simple, documentado):
-
-1. Modelos de chat (excluye embeddings / audio / imagen …)
-2. Tools cuando el metadata lo indica
-3. Structured output
-4. Context window adecuado
-5. Preferencias suaves por proveedor (desempate, no catálogo cerrado)
-6. Orden estable por `id`
-
-## Caché
-
-`config/provider-models-cache.json` (~30 min). Sin polling en
-background. Refresh al conectar, al probar, al abrir Administrar o
-con «Actualizar modelos».
+Caché ligera (~30 min); «Actualizar modelos» fuerza refresh.
 
 ## Seguridad
 
-Keys solo en Credential Store. Respuestas HTTP y diagnostics: metadata
-segura. URLs autenticadas no se registran con secretos.
+Keys solo en Credential Store. Nunca a Web, logs, URLs ni Cloud BYOK.
 
 ## Tests
 

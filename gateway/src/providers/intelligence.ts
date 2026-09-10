@@ -50,6 +50,7 @@ import {
   type ModelDiscoveryResult,
   type ProviderModel,
 } from "./model-discovery.ts";
+import { PROVIDER_MODEL_DEFAULTS } from "./model-recommendation.ts";
 
 export type IntelligenceMode = "local" | "personal-agent-cloud" | "external";
 export type IntelligenceProviderId =
@@ -276,9 +277,12 @@ export async function upsertExternalConnection(input: {
 }
 
 /**
- * Aplica el resultado de discovery a la conexión persistida.
- * - selection recommended → actualiza modelId al recomendado
- * - selection specific + modelo ausente → no cambia modelId (queda unavailable)
+ * Aplica discovery a la conexión.
+ * AVAILABLE ≠ RECOMMENDED ≠ SELECTED.
+ * - recommended solo si estática ∈ available
+ * - specific: nunca cambia el modelId en silencio
+ * - recommended + pending: usa recommended o el primer available
+ * - recommended + refresh: conserva selected si sigue available
  */
 export function applyModelDiscoveryToConnection(
   connectionId: string,
@@ -287,26 +291,35 @@ export function applyModelDiscoveryToConnection(
   const cfg = readIntelligenceConfig();
   const found = cfg.connections.find((c) => c.id === connectionId);
   if (!found) throw new Error("connection_not_found");
+  if (discovery.discoveryStatus !== "ok") {
+    return { ...found };
+  }
+  const ids = discovery.models.map((m) => m.id);
+  const recommended = discovery.recommendedModelId || null;
+  const first = ids.find((id) => Boolean(id.trim())) || null;
   const selection = found.modelSelection || "recommended";
-  if (discovery.discoveryStatus === "ok") {
-    if (selection === "recommended" && discovery.recommendedModelId) {
-      found.modelId = discovery.recommendedModelId;
+  const pending =
+    !found.modelId ||
+    found.modelId === "__pending_discovery__" ||
+    found.modelId.trim() === "";
+
+  if (selection === "specific") {
+    // Pin del usuario: no tocar.
+  } else if (pending) {
+    if (recommended) {
+      found.modelId = recommended;
       found.modelSelection = "recommended";
-    } else if (
-      selection === "recommended" &&
-      !discovery.recommendedModelId &&
-      discovery.models[0]?.id
-    ) {
-      found.modelId = discovery.models[0].id;
-      found.modelSelection = "recommended";
-    } else if (
-      found.modelId === "__pending_discovery__" &&
-      discovery.recommendedModelId
-    ) {
-      found.modelId = discovery.recommendedModelId;
+    } else if (first) {
+      found.modelId = first;
       found.modelSelection = "recommended";
     }
+  } else if (ids.includes(found.modelId)) {
+    // Sigue disponible: conservar selección.
+  } else if (recommended) {
+    found.modelId = recommended;
+    found.modelSelection = "recommended";
   }
+  // else: selected retired → se conserva el id (modelStatus=unavailable en la vista)
   writeIntelligenceConfig(cfg);
   return { ...found };
 }
@@ -460,31 +473,36 @@ export function ensureExternalProviderStubs(): LLMConnection[] {
     provider: Exclude<IntelligenceProviderId, "local" | "personal-agent-cloud">;
     modelId: string;
     displayName: string;
-  }> = [
-    { provider: "openai", modelId: "gpt-4.1-mini", displayName: "OpenAI" },
-    {
-      provider: "anthropic",
-      modelId: "claude-sonnet-4-6",
-      displayName: "Anthropic",
-    },
-    { provider: "xai", modelId: "grok-4.6", displayName: "xAI / Grok" },
-    {
-      provider: "gemini",
-      modelId: "gemini-3.6-flash",
-      displayName: "Gemini",
-    },
-    {
-      provider: "openrouter",
-      modelId: "openai/gpt-4.1-mini",
-      displayName: "OpenRouter",
-    },
-    { provider: "groq", modelId: "llama-3.3-70b-versatile", displayName: "Groq" },
-    {
-      provider: "openai-compatible",
-      modelId: "default",
-      displayName: "Compatible con OpenAI",
-    },
-  ];
+  }> = (
+    [
+      "openai",
+      "anthropic",
+      "xai",
+      "gemini",
+      "openrouter",
+      "groq",
+      "openai-compatible",
+    ] as const
+  ).map((provider) => ({
+    provider,
+    modelId:
+      PROVIDER_MODEL_DEFAULTS[provider]?.recommendedModel ||
+      (provider === "openai-compatible" ? "default" : "default"),
+    displayName:
+      provider === "openai"
+        ? "OpenAI"
+        : provider === "anthropic"
+          ? "Anthropic"
+          : provider === "xai"
+            ? "xAI / Grok"
+            : provider === "gemini"
+              ? "Gemini"
+              : provider === "openrouter"
+                ? "OpenRouter"
+                : provider === "groq"
+                  ? "Groq"
+                  : "Compatible con OpenAI",
+  }));
   let changed = false;
   for (const s of stubs) {
     const id = `conn_ext_${s.provider}`;

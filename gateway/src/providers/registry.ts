@@ -1,7 +1,7 @@
 /**
  * Catálogo de inteligencia para onboarding/settings.
  * PHASE 62: local / personal-agent-cloud / external (sin modo automático).
- * PHASE 63.2: verify → discover models → recommend → probe with resolved model.
+ * PHASE 63.2: validate vía GET /models (discovery); chat probe solo si hace falta.
  */
 import {
   createFakeLocalRuntime,
@@ -191,8 +191,9 @@ export function isAnyLlmConfigured(): boolean {
 }
 
 /**
- * Valida conexión y, si es posible, descubre modelos.
+ * Valida conexión vía discovery (/models) cuando el proveedor lo soporta.
  * Un modelId retirado NO implica fallo de autenticación.
+ * No duplica chat probe si /models ya autenticó.
  */
 export async function verifyProviderConnectivity(
   providerId?: string,
@@ -203,94 +204,100 @@ export async function verifyProviderConnectivity(
   if (!selected) throw new Error("provider_unavailable");
 
   let discovery: ModelDiscoveryResult | null = null;
-  let probeModel = selected.modelId;
   let connection = selected;
 
-  if (selected.provider !== "local") {
-    discovery = await discoverProviderModels({
-      provider: selected.provider,
-      connection: selected,
-      useCache: false,
-    });
-    if (discovery.authStatus === "failed") {
-      throw Object.assign(new Error("invalid_credential"), {
-        errorCode: discovery.errorCode || "PROVIDER_AUTH_FAILED",
-      });
-    }
-    if (discovery.discoveryStatus === "ok") {
-      connection = applyModelDiscoveryToConnection(selected.id, discovery);
-      probeModel = resolveModelForConnectivityProbe(connection, discovery);
-    } else if (discovery.authStatus === "ok") {
-      // Credencial válida; discovery recuperable. No exigir chat probe.
-      return {
-        ok: true,
-        provider: connection.provider,
-        model:
-          connection.modelId === "__pending_discovery__"
-            ? ""
-            : connection.modelId,
-        credentialConfigured: true,
-        request: "success",
-        discovery: {
-          status: discovery.discoveryStatus,
-          authStatus: discovery.authStatus,
-          modelStatus: "not_discovered",
-          recommendedModelId: discovery.recommendedModelId,
-          models: discovery.models,
-          modelSelection: connection.modelSelection || "recommended",
-        },
-      };
-    } else {
-      probeModel =
-        connection.modelId === "__pending_discovery__"
-          ? "default"
-          : connection.modelId;
-    }
-  }
-
-  const provider = createLlmProvider(connection.provider);
-  let text = "";
-  try {
+  if (selected.provider === "local") {
+    const provider = createLlmProvider("local");
+    let text = "";
     for await (const ev of provider.stream({
-      model: probeModel,
-      messages: [{ role: "user", content: "Responde únicamente con la palabra OK." }],
+      model: selected.modelId,
+      messages: [
+        { role: "user", content: "Responde únicamente con la palabra OK." },
+      ],
     })) {
       if (ev.type === "text_delta") text += ev.text;
     }
-  } catch (err) {
-    const blob = err instanceof Error ? err.message : String(err);
-    const code =
-      err && typeof err === "object" && "errorCode" in err
-        ? String((err as { errorCode?: string }).errorCode || "")
-        : "";
-    if (
-      discovery &&
-      discovery.discoveryStatus === "ok" &&
-      discovery.recommendedModelId &&
-      probeModel !== discovery.recommendedModelId &&
-      /MODEL_NOT_FOUND|404|model_not_found/i.test(`${blob} ${code}`)
-    ) {
-      probeModel = discovery.recommendedModelId;
-      text = "";
-      for await (const ev of provider.stream({
-        model: probeModel,
-        messages: [
-          { role: "user", content: "Responde únicamente con la palabra OK." },
-        ],
-      })) {
-        if (ev.type === "text_delta") text += ev.text;
-      }
-    } else {
-      throw err;
-    }
+    if (!text.trim()) throw new Error("empty_llm_response");
+    return {
+      ok: true,
+      provider: "local",
+      model: selected.modelId,
+      credentialConfigured: false,
+      request: "success",
+      sample: text.trim().slice(0, 32),
+    };
   }
-  const sample = text.trim();
-  if (!sample) throw new Error("empty_llm_response");
 
-  const modelStatus: ModelAvailabilityStatus = discovery
-    ? modelAvailabilityForConnection(connection, discovery)
-    : "discovery_unsupported";
+  discovery = await discoverProviderModels({
+    provider: selected.provider,
+    connection: selected,
+    useCache: false,
+  });
+  if (discovery.authStatus === "failed") {
+    throw Object.assign(new Error("invalid_credential"), {
+      errorCode: discovery.errorCode || "PROVIDER_AUTH_FAILED",
+    });
+  }
 
+  if (discovery.discoveryStatus === "ok") {
+    connection = applyModelDiscoveryToConnection(selected.id, discovery);
+    const modelStatus = modelAvailabilityForConnection(connection, discovery);
+    return {
+      ok: true,
+      provider: connection.provider,
+      model:
+        connection.modelId === "__pending_discovery__"
+          ? discovery.recommendedModelId ||
+            discovery.models[0]?.id ||
+            ""
+          : connection.modelId,
+      credentialConfigured: true,
+      request: "success",
+      discovery: {
+        status: discovery.discoveryStatus,
+        authStatus: discovery.authStatus,
+        modelStatus,
+        recommendedModelId: discovery.recommendedModelId || undefined,
+        models: discovery.models,
+        modelSelection: connection.modelSelection || "recommended",
+      },
+    };
+  }
+
+  // Discovery falló sin auth failed: conexión permanece; no chat probe obligatorio.
+  if (discovery.authStatus === "ok") {
+    return {
+      ok: true,
+      provider: connection.provider,
+      model:
+        connection.modelId === "__pending_discovery__"
+          ? ""
+          : connection.modelId,
+      credentialConfigured: true,
+      request: "success",
+      discovery: {
+        status: discovery.discoveryStatus,
+        authStatus: discovery.authStatus,
+        modelStatus: "not_discovered",
+        recommendedModelId: discovery.recommendedModelId || undefined,
+        models: discovery.models,
+        modelSelection: connection.modelSelection || "recommended",
+      },
+    };
+  }
+
+  // auth unknown + discovery failed (p.ej. openai-compatible sin /models):
+  // conservar probe de chat como fallback de validación.
+  const probeModel = resolveModelForConnectivityProbe(connection, discovery);
+  const provider = createLlmProvider(connection.provider);
+  let text = "";
+  for await (const ev of provider.stream({
+    model: probeModel,
+    messages: [{ role: "user", content: "Responde únicamente con la palabra OK." }],
+  })) {
+    if (ev.type === "text_delta") text += ev.text;
+  }
+  if (!text.trim()) throw new Error("empty_llm_response");
   return {
     ok: true,
     provider: connection.provider,
@@ -298,19 +305,17 @@ export async function verifyProviderConnectivity(
       connection.modelId === "__pending_discovery__"
         ? probeModel
         : connection.modelId,
-    credentialConfigured: connection.provider !== "local",
+    credentialConfigured: true,
     request: "success",
-    sample: sample.slice(0, 32),
-    discovery: discovery
-      ? {
-          status: discovery.discoveryStatus,
-          authStatus: discovery.authStatus,
-          modelStatus,
-          recommendedModelId: discovery.recommendedModelId,
-          models: discovery.models,
-          modelSelection: connection.modelSelection || "recommended",
-        }
-      : undefined,
+    sample: text.trim().slice(0, 32),
+    discovery: {
+      status: discovery.discoveryStatus,
+      authStatus: discovery.authStatus,
+      modelStatus: modelAvailabilityForConnection(connection, discovery),
+      recommendedModelId: discovery.recommendedModelId || undefined,
+      models: discovery.models,
+      modelSelection: connection.modelSelection || "recommended",
+    },
   };
 }
 
