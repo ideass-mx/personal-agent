@@ -1,11 +1,14 @@
 /**
  * Selector de inteligencia en el compositor: solo esta conversación.
+ * Solo lista inteligencias realmente activadas (Local instalado, Cloud
+ * conectado, BYOK con API key) — Cloud no aparece “por defecto”.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { resolveHttpBase } from "../../api/http";
 import {
-  connectCloudAuth,
+  fetchCloudAuthStatus,
   fetchIntelligenceStatus,
+  type CloudAuthStatusDto,
   type IntelligenceConnectionDto,
   type IntelligenceStatusDto,
 } from "../../api/setup";
@@ -20,9 +23,13 @@ import { ProviderIcon } from "./ProviderIcon";
 function isUsable(
   c: IntelligenceConnectionDto,
   snap: IntelligenceStatusDto | null,
+  cloud: CloudAuthStatusDto | null,
 ): boolean {
   if (c.mode === "local") return Boolean(snap?.local.installed);
-  if (c.mode === "personal-agent-cloud") return true;
+  if (c.mode === "personal-agent-cloud") {
+    // Opcional como BYOK: solo si el usuario conectó Cloud.
+    return Boolean(cloud?.connected || cloud?.sessionActive);
+  }
   return Boolean(c.credentialConfigured);
 }
 
@@ -39,6 +46,7 @@ export function ConversationIntelligencePicker() {
     setConversationIntelligenceId,
   } = useApp();
   const [snap, setSnap] = useState<IntelligenceStatusDto | null>(null);
+  const [cloud, setCloud] = useState<CloudAuthStatusDto | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -48,12 +56,19 @@ export function ConversationIntelligencePicker() {
     const base = resolveHttpBase(session);
     let cancelled = false;
     const load = () => {
-      void fetchIntelligenceStatus(base, session.token)
-        .then((s) => {
-          if (!cancelled) setSnap(s);
+      void Promise.all([
+        fetchIntelligenceStatus(base, session.token),
+        fetchCloudAuthStatus(base, session.token).catch(() => null),
+      ])
+        .then(([s, cs]) => {
+          if (cancelled) return;
+          setSnap(s);
+          setCloud(cs);
         })
         .catch(() => {
-          if (!cancelled) setSnap(null);
+          if (cancelled) return;
+          setSnap(null);
+          setCloud(null);
         });
     };
     load();
@@ -75,14 +90,16 @@ export function ConversationIntelligencePicker() {
 
   const options = useMemo(() => {
     if (!snap) return [] as IntelligenceConnectionDto[];
-    return (snap.connections || []).filter((c) => isUsable(c, snap));
-  }, [snap]);
+    return (snap.connections || []).filter((c) => isUsable(c, snap, cloud));
+  }, [snap, cloud]);
 
   const selectedId =
     conversationIntelligenceId || snap?.active?.id || null;
+  const selectedFromOptions = options.find((c) => c.id === selectedId);
+  // Si la activa global no es usable (p.ej. Cloud sin sesión), caer a una opción real.
   const selected =
-    options.find((c) => c.id === selectedId) ||
-    snap?.active ||
+    selectedFromOptions ||
+    (snap?.active && isUsable(snap.active, snap, cloud) ? snap.active : null) ||
     options[0] ||
     null;
 
@@ -90,14 +107,6 @@ export function ConversationIntelligencePicker() {
     if (!session || busy) return;
     setBusy(true);
     try {
-      if (conn.mode === "personal-agent-cloud") {
-        const base = resolveHttpBase(session);
-        try {
-          await connectCloudAuth(base, session.token);
-        } catch {
-          /* puede fallar si ya hay sesión; el turno lo validará */
-        }
-      }
       setConversationIntelligenceId(conn.id);
       setOpen(false);
     } finally {

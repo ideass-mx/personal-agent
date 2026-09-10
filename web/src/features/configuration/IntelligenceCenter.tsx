@@ -504,32 +504,33 @@ export function IntelligenceCenter() {
     const cloudConn = snap?.connections.find(
       (c) => c.mode === "personal-agent-cloud",
     );
-    rows.push({
-      key: "cloud",
-      kind: "cloud",
-      title: "Personal Agent Cloud",
-      statusLine: cloud?.connected
-        ? `● Disponible · ${humanModelLabel(
-            "personal-agent-cloud",
-            cloudConn?.modelId || "claude-sonnet-4-6",
-          )}`
-        : "No conectado",
-      provider: "personal-agent-cloud",
-      conn: cloudConn,
-      isDefault: active?.provider === "personal-agent-cloud",
-    });
+    // Cloud es opcional (como BYOK): solo en la biblioteca si ya está conectado.
+    if (cloud?.connected) {
+      rows.push({
+        key: "cloud",
+        kind: "cloud",
+        title: "Personal Agent Cloud",
+        statusLine: `● Disponible · ${humanModelLabel(
+          "personal-agent-cloud",
+          cloudConn?.modelId || "claude-sonnet-4-6",
+        )}`,
+        provider: "personal-agent-cloud",
+        conn: cloudConn,
+        isDefault: active?.provider === "personal-agent-cloud",
+      });
+    }
     const localConn = snap?.connections.find((c) => c.mode === "local");
-    rows.push({
-      key: "local",
-      kind: "local",
-      title: "Local",
-      statusLine: snap?.local.installed
-        ? `● Disponible · ${humanModelLabel("local", localConn?.modelId || "qwen3-4b")}`
-        : "No instalado",
-      provider: "local",
-      conn: localConn,
-      isDefault: active?.provider === "local",
-    });
+    if (snap?.local.installed || localReady) {
+      rows.push({
+        key: "local",
+        kind: "local",
+        title: "Local",
+        statusLine: `● Disponible · ${humanModelLabel("local", localConn?.modelId || "qwen3-4b")}`,
+        provider: "local",
+        conn: localConn,
+        isDefault: active?.provider === "local",
+      });
+    }
     for (const id of BYOK_PROVIDERS) {
       const conn = external.find((c) => c.provider === id);
       if (!conn?.credentialConfigured && !conn?.active) continue;

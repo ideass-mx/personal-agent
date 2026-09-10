@@ -19,7 +19,7 @@ describe("conversation intelligence picker", () => {
     assert.doesNotMatch(thread, /IntelligenceIndicator/);
   });
 
-  it("picker copy scopes change to this conversation", () => {
+  it("picker only lists Cloud when the user connected it", () => {
     const picker = readFileSync(
       join(
         root,
@@ -27,8 +27,12 @@ describe("conversation intelligence picker", () => {
       ),
       "utf8",
     );
-    assert.match(picker, /solo esta conversación/);
-    assert.match(picker, /setConversationIntelligenceId/);
+    assert.match(picker, /fetchCloudAuthStatus/);
+    assert.match(picker, /cloud\?\.connected/);
+    assert.doesNotMatch(
+      picker,
+      /mode === "personal-agent-cloud"\) return true/,
+    );
   });
 
   it("WS client can send intelligenceConnectionId", () => {
