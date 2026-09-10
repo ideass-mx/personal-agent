@@ -11,14 +11,14 @@ const center = readFileSync(
 );
 
 describe("Intelligence Center library UX", () => {
-  it("solo lista Cloud/Local cuando están conectados o instalados", () => {
+  it("solo lista Cloud/Local cuando estan conectados o instalados", () => {
     assert.match(center, /Cloud opcional/);
     assert.match(center, /if \(cloud\?\.connected\)/);
     assert.match(center, /Local siempre visible/);
     assert.match(center, /○ No instalado/);
   });
 
-  it("tras conectar BYOK muestra éxito compacto y activa predeterminada", () => {
+  it("tras conectar BYOK muestra exito compacto y activa predeterminada", () => {
     assert.match(center, /byokJustConnected/);
     assert.match(center, /Modelo recomendado/);
     assert.match(center, /Modelo seleccionado/);
@@ -33,5 +33,19 @@ describe("Intelligence Center library UX", () => {
       center,
       /Misma familia de modelos que\s*\n?\s*Anthropic/,
     );
+  });
+
+  it("Agregar: Local/Cloud primero; proveedores solo bajo Cloud", () => {
+    assert.match(center, /panel === "add"/);
+    assert.match(center, /panel === "add_cloud"/);
+    assert.match(center, /Elige Local o Cloud/);
+    assert.match(center, /Personal Agent Cloud o tu propia cuenta/);
+    const addBlock = center.slice(
+      center.indexOf('{panel === "add" ? ('),
+      center.indexOf('{panel === "add_cloud" ? ('),
+    );
+    assert.doesNotMatch(addBlock, /provider-card-grid/);
+    assert.doesNotMatch(addBlock, /Tu cuenta/);
+    assert.match(addBlock, /setPanel\("add_cloud"\)/);
   });
 });
