@@ -37,6 +37,7 @@ export function byokModelOptions(provider: string): ByokModelOption[] {
         { id: "gpt-4o-mini", label: "GPT 4o mini", hint: "Más rápido" },
       ];
     case "anthropic":
+    case "personal-agent-cloud":
       return [
         {
           id: "claude-sonnet-4-6",

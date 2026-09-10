@@ -212,11 +212,11 @@ export function mountSetupHttp(
           404,
         );
       }
-      if (message === "cloud_model_managed") {
+      if (message === "model_not_allowed") {
         return c.json(
           httpErrorBody(
-            "cloud_model_managed",
-            "Personal Agent elige el modelo por ti.",
+            "model_not_allowed",
+            "Ese modelo no está disponible en Personal Agent Cloud.",
           ),
           400,
         );

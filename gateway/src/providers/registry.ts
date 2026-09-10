@@ -14,6 +14,7 @@ import {
   localAvailabilitySummary,
   modeForConnection,
   readIntelligenceConfig,
+  resolvePersonalAgentCloudModelId,
   type IntelligenceProviderId,
 } from "./intelligence.ts";
 import { createAnthropicProvider } from "./anthropic.ts";
@@ -105,9 +106,15 @@ export function createLlmProvider(id?: string): LLMProvider {
       async *stream(request) {
         const { client, baseUrl } = await getCloudAuthClient();
         const identity = ensureLocalIdentity();
+        const selected = getIntelligenceConnection();
+        const model = resolvePersonalAgentCloudModelId(
+          selected?.provider === "personal-agent-cloud"
+            ? selected.modelId
+            : "claude-sonnet-4-6",
+        );
         const provider = createPersonalAgentCloudProvider({
           baseUrl,
-          model: "pa-cloud-default",
+          model,
           auth: client,
           extraHeaders: {
             "X-Personal-Agent-User-Id": identity.user.id,

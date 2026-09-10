@@ -71,10 +71,27 @@ const DEFAULT_CONNECTIONS: LLMConnection[] = [
     id: "conn_cloud_default",
     mode: "personal-agent-cloud",
     provider: "personal-agent-cloud",
-    modelId: "pa-cloud-default",
+    modelId: "claude-sonnet-4-6",
     displayName: "Personal Agent Cloud",
   },
 ];
+
+/** Modelos Claude permitidos en Personal Agent Cloud (misma familia que BYOK Anthropic). */
+export const PERSONAL_AGENT_CLOUD_MODELS = [
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
+] as const;
+
+export function resolvePersonalAgentCloudModelId(modelId: string): string {
+  const mid = modelId.trim();
+  if (!mid || mid === "pa-cloud-default") return "claude-sonnet-4-6";
+  return mid;
+}
+
+export function isPersonalAgentCloudModel(modelId: string): boolean {
+  const mid = resolvePersonalAgentCloudModelId(modelId);
+  return (PERSONAL_AGENT_CLOUD_MODELS as readonly string[]).includes(mid);
+}
 
 function intelligenceConfigPath(): string {
   return path.join(resolveProductDataRoot(), "config", "intelligence.json");
@@ -142,8 +159,7 @@ export function selectIntelligenceConnection(connectionId: string): LLMConnectio
 }
 
 /**
- * Cambia el modelo de una conexión. Personal Agent Cloud no permite
- * elección de modelo (lo gestiona el producto).
+ * Cambia el modelo de una conexión (Local, Cloud Claude o BYOK).
  */
 export function updateIntelligenceConnectionModel(
   connectionId: string,
@@ -155,9 +171,13 @@ export function updateIntelligenceConnectionModel(
   const found = cfg.connections.find((c) => c.id === connectionId);
   if (!found) throw new Error("connection_not_found");
   if (found.mode === "personal-agent-cloud") {
-    throw new Error("cloud_model_managed");
-  }
-  if (found.mode === "local") {
+    const midCloud = resolvePersonalAgentCloudModelId(mid);
+    if (!isPersonalAgentCloudModel(midCloud)) {
+      throw new Error("model_not_allowed");
+    }
+    found.modelId = midCloud;
+    found.displayName = "Personal Agent Cloud";
+  } else if (found.mode === "local") {
     const entry = getLocalModelEntry(mid);
     if (!entry) throw new Error("model_not_in_catalog");
     const manager = createLocalModelManager();
@@ -381,10 +401,18 @@ export function ensureExternalProviderStubs(): LLMConnection[] {
 export function getIntelligenceStatusSnapshot(): IntelligenceStatusSnapshot {
   ensureExternalProviderStubs();
   const cfg = readIntelligenceConfig();
+  // Si el selected apunta a una conexión borrada, cae a local.
+  if (!cfg.connections.some((c) => c.id === cfg.selectedConnectionId)) {
+    cfg.selectedConnectionId = "conn_local_default";
+    if (!cfg.connections.some((c) => c.id === "conn_local_default")) {
+      cfg.connections = [...DEFAULT_CONNECTIONS, ...cfg.connections];
+    }
+    writeIntelligenceConfig(cfg);
+  }
   const views = cfg.connections.map((c) =>
     toIntelligenceConnectionView(c, cfg.selectedConnectionId),
   );
-  const active = views.find((v) => v.active) || null;
+  const active = views.find((v) => v.active) || views[0] || null;
   const local = localAvailabilitySummary();
   return {
     active,
@@ -487,7 +515,7 @@ function providerForConnection(input: {
           const identity = ensureLocalIdentity();
           const provider = createPersonalAgentCloudProvider({
             baseUrl,
-            model: c.modelId,
+            model: resolvePersonalAgentCloudModelId(c.modelId),
             auth: client,
             extraHeaders: {
               "X-Personal-Agent-User-Id": identity.user.id,
@@ -606,7 +634,9 @@ export function createIntelligenceRouterProvider(input: {
           localRuntime: input.localRuntime,
           diagnostics: input.diagnostics,
         }),
-        connection.modelId || request.model || "claude-sonnet-4-6",
+        connection.provider === "personal-agent-cloud"
+          ? resolvePersonalAgentCloudModelId(connection.modelId)
+          : connection.modelId || request.model || "claude-sonnet-4-6",
       );
       try {
         for await (const ev of provider.stream(request)) {

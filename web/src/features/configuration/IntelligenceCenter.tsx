@@ -238,7 +238,9 @@ export function IntelligenceCenter() {
   async function onPickLocalModel(nextModelId: string) {
     const conn = snap?.connections.find((c) => c.provider === "local");
     if (!conn || busy) return;
-    if (conn.modelId === nextModelId) return;
+    if (conn.modelId === nextModelId && (snap?.local.installed || localReady)) {
+      return;
+    }
     const installed = (localModels?.installed || []).some(
       (i) =>
         i.modelId === nextModelId &&
@@ -259,7 +261,12 @@ export function IntelligenceCenter() {
         conn.id,
         nextModelId,
       );
-      setOkMsg("Modelo local actualizado.");
+      await selectIntelligenceConnection(base, token, conn.id);
+      setOkMsg(
+        installed
+          ? "Modelo local actualizado."
+          : "Modelo local instalado y listo.",
+      );
       await refresh();
     } catch (ex) {
       setErr(
@@ -268,6 +275,43 @@ export function IntelligenceCenter() {
           : "No pudimos cambiar el modelo local.",
       );
       setOkMsg(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onInstallLocalSelected() {
+    const conn = snap?.connections.find((c) => c.provider === "local");
+    const model =
+      conn?.modelId ||
+      localModels?.active?.modelId ||
+      "qwen3-4b";
+    await onPickLocalModel(model);
+  }
+
+  async function onPickCloudModel(nextModelId: string) {
+    const conn = snap?.connections.find(
+      (c) => c.provider === "personal-agent-cloud",
+    );
+    if (!conn || busy) return;
+    if (conn.modelId === nextModelId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateIntelligenceConnectionModel(
+        base,
+        token,
+        conn.id,
+        nextModelId,
+      );
+      setOkMsg("Modelo de Cloud actualizado.");
+      await refresh();
+    } catch (ex) {
+      setErr(
+        ex instanceof Error
+          ? ex.message
+          : "No pudimos cambiar el modelo de Cloud.",
+      );
     } finally {
       setBusy(false);
     }
@@ -376,6 +420,18 @@ export function IntelligenceCenter() {
   }
 
   const active = snap?.active ?? null;
+  const selected =
+    snap?.connections.find((c) => c.active) || active || null;
+  const selectedUsable = (() => {
+    if (!selected || !snap) return false;
+    if (selected.provider === "local") {
+      return Boolean(snap.local.installed || localReady);
+    }
+    if (selected.provider === "personal-agent-cloud") {
+      return Boolean(cloud?.connected);
+    }
+    return Boolean(selected.credentialConfigured);
+  })();
   const external = (snap?.connections || []).filter(
     (c) => c.mode === "external",
   );
@@ -390,7 +446,10 @@ export function IntelligenceCenter() {
       kind: "cloud",
       title: "Personal Agent Cloud",
       statusLine: cloud?.connected
-        ? "● Disponible"
+        ? `● Disponible · ${humanModelLabel(
+            "personal-agent-cloud",
+            cloudConn?.modelId || "claude-sonnet-4-6",
+          )}`
         : "No conectado",
       provider: "personal-agent-cloud",
       conn: cloudConn,
@@ -495,36 +554,62 @@ export function IntelligenceCenter() {
 
           <div className="intel-default" aria-live="polite">
             <p className="intel-kicker">Predeterminada</p>
-            {active ? (
+            {selected ? (
               <div className="intel-default-card">
                 <div className="intel-default-main">
-                  {active.mode === "external" ? (
-                    <ProviderIcon provider={active.provider} size={40} />
+                  {selected.mode === "external" ? (
+                    <ProviderIcon provider={selected.provider} size={40} />
                   ) : (
                     <span className="intel-default-emoji" aria-hidden="true">
-                      {modeIcon(active.mode)}
+                      {modeIcon(selected.mode)}
                     </span>
                   )}
                   <div>
                     <strong>
-                      {modeTitle(active.mode, active.displayName)}
+                      {modeTitle(selected.mode, selected.displayName)}
                     </strong>
                     <p className="muted">
-                      {humanModelLabel(active.provider, active.modelId)}
+                      {selectedUsable
+                        ? humanModelLabel(selected.provider, selected.modelId)
+                        : selected.provider === "local"
+                          ? "No instalado"
+                          : selected.provider === "personal-agent-cloud"
+                            ? "No conectado"
+                            : "Sin API key"}
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  className="btn"
+                  className={selectedUsable ? "btn" : "btn primary"}
                   disabled={busy}
                   onClick={() => {
                     setErr(null);
                     setOkMsg(null);
+                    if (!selectedUsable) {
+                      if (selected.provider === "local") {
+                        setPanel("local");
+                        return;
+                      }
+                      if (selected.provider === "personal-agent-cloud") {
+                        setPanel("cloud");
+                        return;
+                      }
+                      openLibraryRow({
+                        key: selected.provider,
+                        kind: "external",
+                        title: modeTitle(selected.mode, selected.displayName),
+                        statusLine: "",
+                        provider: selected.provider,
+                        conn: selected,
+                        isDefault: true,
+                      });
+                      return;
+                    }
                     setPanel("choose");
                   }}
                 >
-                  Cambiar
+                  {selectedUsable ? "Cambiar" : "Configurar"}
                 </button>
               </div>
             ) : (
@@ -545,9 +630,13 @@ export function IntelligenceCenter() {
                 </button>
               </div>
             )}
-            {active ? (
+            {selected && selectedUsable ? (
               <p className="muted intel-default-hint">
                 Tu agente usará esta inteligencia en las conversaciones nuevas.
+              </p>
+            ) : selected ? (
+              <p className="muted intel-default-hint">
+                Termina de configurarla para usarla en conversaciones nuevas.
               </p>
             ) : null}
           </div>
@@ -740,40 +829,62 @@ export function IntelligenceCenter() {
             ← Inteligencia
           </button>
           <h3>🔒 Local</h3>
-          {snap?.local.installed || localReady ? (
-            <>
-              <p className="intel-status-line">
-                ● Disponible
-                {active?.provider === "local" ? " · Predeterminada" : ""}
-              </p>
-              <IntelligenceModelSection
-                value={
-                  snap?.connections.find((c) => c.provider === "local")
-                    ?.modelId ||
-                  localModels?.active?.modelId ||
-                  "qwen3-4b"
-                }
-                disabled={busy}
-                onChange={(id) => void onPickLocalModel(id)}
-                options={(localModels?.catalog || []).map((m) => {
-                  const installed = (localModels?.installed || []).some(
-                    (i) =>
-                      i.modelId === m.id &&
-                      (i.state === "ready" ||
-                        i.state === "active" ||
-                        i.state === "installed"),
-                  );
-                  return {
-                    id: m.id,
-                    label: m.displayName,
-                    hint: localModelHint(m.tierLabel, installed),
-                  };
-                })}
-              />
-              {snap?.local.warning ? (
-                <p className="intel-warn">{snap.local.warning}</p>
-              ) : null}
-              <div className="row-actions">
+          <p className="intel-status-line">
+            {snap?.local.installed || localReady
+              ? `● Disponible${
+                  active?.provider === "local" ? " · Predeterminada" : ""
+                }`
+              : "○ No instalado"}
+          </p>
+          <IntelligenceModelSection
+            value={
+              snap?.connections.find((c) => c.provider === "local")?.modelId ||
+              localModels?.active?.modelId ||
+              "qwen3-4b"
+            }
+            disabled={busy}
+            onChange={(id) => void onPickLocalModel(id)}
+            options={(
+              localModels?.catalog?.length
+                ? localModels.catalog
+                : [
+                    {
+                      id: "qwen3-4b",
+                      displayName: "Qwen3 4B",
+                      tierLabel: "Equilibrado",
+                    },
+                    {
+                      id: "qwen3-1.7b",
+                      displayName: "Qwen3 1.7B",
+                      tierLabel: "Rápido",
+                    },
+                    {
+                      id: "qwen3-0.6b",
+                      displayName: "Qwen3 0.6B",
+                      tierLabel: "Ligero",
+                    },
+                  ]
+            ).map((m) => {
+              const installed = (localModels?.installed || []).some(
+                (i) =>
+                  i.modelId === m.id &&
+                  (i.state === "ready" ||
+                    i.state === "active" ||
+                    i.state === "installed"),
+              );
+              return {
+                id: m.id,
+                label: m.displayName,
+                hint: localModelHint(m.tierLabel, installed),
+              };
+            })}
+          />
+          {snap?.local.warning ? (
+            <p className="intel-warn">{snap.local.warning}</p>
+          ) : null}
+          <div className="row-actions">
+            {snap?.local.installed || localReady ? (
+              <>
                 <button
                   type="button"
                   className="btn"
@@ -797,72 +908,61 @@ export function IntelligenceCenter() {
                     Usar Local
                   </button>
                 ) : null}
-              </div>
-              <button
-                type="button"
-                className="intel-advanced-toggle"
-                aria-expanded={advancedOpen}
-                onClick={() => setAdvancedOpen((v) => !v)}
-              >
-                {advancedOpen ? "▾" : "▸"} Avanzado
-              </button>
-              {advancedOpen ? (
-                <div className="intel-advanced">
-                  <p>
-                    <span className="muted">ID del modelo</span>
-                    <br />
-                    <code>
-                      {snap?.connections.find((c) => c.provider === "local")
-                        ?.modelId || "qwen3-4b"}
-                    </code>
-                  </p>
-                  <p>
-                    <span className="muted">Endpoint</span>
-                    <br />
-                    en el dispositivo
-                  </p>
-                  <p>
-                    <span className="muted">Tamaño de contexto</span>
-                    <br />
-                    {formatContextWindow(
-                      (
-                        localModels?.catalog || []
-                      ).find(
-                        (m) =>
-                          m.id ===
-                          (snap?.connections.find((c) => c.provider === "local")
-                            ?.modelId ||
-                            localModels?.active?.modelId ||
-                            "qwen3-4b"),
-                      )?.capabilities?.contextWindow,
-                    )}
-                  </p>
-                  <p className="muted" style={{ fontSize: 13 }}>
-                    Ajustes técnicos. La mayoría de las personas no necesita
-                    cambiarlos.
-                  </p>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <p className="muted">Aún no está instalado.</p>
-              {snap?.local.warning ? (
-                <p className="intel-warn">{snap.local.warning}</p>
-              ) : null}
+              </>
+            ) : (
               <button
                 type="button"
                 className="btn primary"
-                onClick={() => setPanel("choose")}
+                disabled={busy}
+                onClick={() => void onInstallLocalSelected()}
               >
-                Elegir otra inteligencia
+                Instalar modelo
               </button>
-              <p className="muted" style={{ marginTop: 12 }}>
-                Para instalar el modelo local, vuelve a la configuración inicial
-                del agente (mismo instalador del onboarding).
+            )}
+          </div>
+          <button
+            type="button"
+            className="intel-advanced-toggle"
+            aria-expanded={advancedOpen}
+            onClick={() => setAdvancedOpen((v) => !v)}
+          >
+            {advancedOpen ? "▾" : "▸"} Avanzado
+          </button>
+          {advancedOpen ? (
+            <div className="intel-advanced">
+              <p>
+                <span className="muted">ID del modelo</span>
+                <br />
+                <code>
+                  {snap?.connections.find((c) => c.provider === "local")
+                    ?.modelId || "qwen3-4b"}
+                </code>
               </p>
-            </>
-          )}
+              <p>
+                <span className="muted">Endpoint</span>
+                <br />
+                en el dispositivo
+              </p>
+              <p>
+                <span className="muted">Tamaño de contexto</span>
+                <br />
+                {formatContextWindow(
+                  (localModels?.catalog || []).find(
+                    (m) =>
+                      m.id ===
+                      (snap?.connections.find((c) => c.provider === "local")
+                        ?.modelId ||
+                        localModels?.active?.modelId ||
+                        "qwen3-4b"),
+                  )?.capabilities?.contextWindow,
+                )}
+              </p>
+              <p className="muted" style={{ fontSize: 13 }}>
+                Ajustes técnicos. La mayoría de las personas no necesita
+                cambiarlos.
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -876,6 +976,10 @@ export function IntelligenceCenter() {
             ← Inteligencia
           </button>
           <h3>☁️ Personal Agent Cloud</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Claude en la nube, sin API key. Misma familia de modelos que
+            Anthropic.
+          </p>
           {cloud?.connected ? (
             <>
               <p className="intel-status-line">
@@ -885,12 +989,22 @@ export function IntelligenceCenter() {
                   : ""}
               </p>
               <IntelligenceModelSection
-                selectable={false}
-                options={[]}
-                value="pa-cloud-default"
-                onChange={() => undefined}
-                managedLabel="Seleccionado por Personal Agent"
-                managedHint="Personal Agent elige y actualiza el modelo por ti. No tienes que gestionarlo."
+                value={
+                  snap?.connections.find(
+                    (c) => c.provider === "personal-agent-cloud",
+                  )?.modelId === "pa-cloud-default"
+                    ? "claude-sonnet-4-6"
+                    : snap?.connections.find(
+                        (c) => c.provider === "personal-agent-cloud",
+                      )?.modelId || "claude-sonnet-4-6"
+                }
+                disabled={busy}
+                onChange={(id) => void onPickCloudModel(id)}
+                options={byokModelOptions("personal-agent-cloud").map((o) => ({
+                  id: o.id,
+                  label: o.label,
+                  hint: o.hint,
+                }))}
               />
               <div className="row-actions">
                 <button
@@ -936,6 +1050,15 @@ export function IntelligenceCenter() {
               {advancedOpen ? (
                 <div className="intel-advanced">
                   <p>
+                    <span className="muted">ID del modelo</span>
+                    <br />
+                    <code>
+                      {snap?.connections.find(
+                        (c) => c.provider === "personal-agent-cloud",
+                      )?.modelId || "claude-sonnet-4-6"}
+                    </code>
+                  </p>
+                  <p>
                     <span className="muted">Dispositivo</span>
                     <br />
                     {cloud.deviceLabel || "Este equipo"}
@@ -950,14 +1073,24 @@ export function IntelligenceCenter() {
             </>
           ) : (
             <>
-              <p className="muted">No conectado</p>
+              <p className="intel-status-line">○ No conectado</p>
               <IntelligenceModelSection
-                selectable={false}
-                options={[]}
-                value="pa-cloud-default"
-                onChange={() => undefined}
-                managedLabel="Seleccionado por Personal Agent"
-                managedHint="Personal Agent elige y actualiza el modelo por ti. No tienes que gestionarlo."
+                value={
+                  snap?.connections.find(
+                    (c) => c.provider === "personal-agent-cloud",
+                  )?.modelId === "pa-cloud-default"
+                    ? "claude-sonnet-4-6"
+                    : snap?.connections.find(
+                        (c) => c.provider === "personal-agent-cloud",
+                      )?.modelId || "claude-sonnet-4-6"
+                }
+                disabled={busy}
+                onChange={(id) => void onPickCloudModel(id)}
+                options={byokModelOptions("personal-agent-cloud").map((o) => ({
+                  id: o.id,
+                  label: o.label,
+                  hint: o.hint,
+                }))}
               />
               <button
                 type="button"

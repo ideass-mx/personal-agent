@@ -13,7 +13,15 @@ describe("PHASE 63 intelligence labels", () => {
     assert.equal(modeIcon("local"), "🔒");
     assert.equal(modeTitle("personal-agent-cloud"), "Personal Agent Cloud");
     assert.equal(modeTitle("external", "OpenAI"), "OpenAI");
-    assert.equal(humanModelLabel("personal-agent-cloud", "x"), "Personal Agent");
+    assert.equal(humanModelLabel("personal-agent-cloud", "x"), "Claude");
+    assert.equal(
+      humanModelLabel("personal-agent-cloud", "claude-sonnet-4-6"),
+      "Claude Sonnet",
+    );
+    assert.equal(
+      humanModelLabel("personal-agent-cloud", "pa-cloud-default"),
+      "Claude Sonnet",
+    );
     assert.equal(configStatusLabel("active"), "ACTIVA");
     assert.equal(configStatusLabel("not_configured"), "NO CONFIGURADO");
   });

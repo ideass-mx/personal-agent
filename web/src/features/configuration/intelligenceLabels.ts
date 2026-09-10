@@ -21,14 +21,20 @@ export function humanModelLabel(provider: string, modelId: string): string {
     if (modelId === "qwen3-0.6b") return "Qwen3 0.6B";
     return modelId;
   }
-  if (provider === "personal-agent-cloud") return "Personal Agent";
+  if (provider === "personal-agent-cloud" || provider === "anthropic") {
+    if (modelId.includes("haiku")) return "Claude Haiku";
+    if (modelId.includes("opus")) return "Claude Opus";
+    if (modelId.includes("sonnet") || modelId === "pa-cloud-default") {
+      return "Claude Sonnet";
+    }
+    return "Claude";
+  }
   if (provider === "xai") {
     if (modelId === "grok-4.6" || modelId.startsWith("grok-4.6")) return "Grok 4.6";
     if (modelId.startsWith("grok")) return modelId.replace(/^grok-?/i, "Grok ");
     return "Grok";
   }
   if (provider === "openai" && modelId.startsWith("gpt")) return modelId.toUpperCase();
-  if (provider === "anthropic") return "Claude";
   return modelId;
 }
 

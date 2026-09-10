@@ -31,7 +31,7 @@ describe("updateIntelligenceConnectionModel", () => {
               id: "conn_cloud_default",
               mode: "personal-agent-cloud",
               provider: "personal-agent-cloud",
-              modelId: "pa-cloud-default",
+              modelId: "claude-sonnet-4-6",
               displayName: "Personal Agent Cloud",
             },
             {
@@ -64,20 +64,33 @@ describe("updateIntelligenceConnectionModel", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("updates BYOK model and rejects cloud", async () => {
+  it("updates BYOK and Cloud Claude models; rejects unknown cloud model", async () => {
     const mod = await import("../../src/providers/intelligence.ts");
     const updated = mod.updateIntelligenceConnectionModel(
       "conn_ext_openai",
       "gpt-4.1",
     );
     assert.equal(updated.modelId, "gpt-4.1");
+
+    const cloud = mod.updateIntelligenceConnectionModel(
+      "conn_cloud_default",
+      "claude-haiku-4-5-20251001",
+    );
+    assert.equal(cloud.modelId, "claude-haiku-4-5-20251001");
+
+    const legacy = mod.updateIntelligenceConnectionModel(
+      "conn_cloud_default",
+      "pa-cloud-default",
+    );
+    assert.equal(legacy.modelId, "claude-sonnet-4-6");
+
     assert.throws(
       () =>
         mod.updateIntelligenceConnectionModel(
           "conn_cloud_default",
-          "anything",
+          "gpt-4.1",
         ),
-      /cloud_model_managed/,
+      /model_not_allowed/,
     );
   });
 });
