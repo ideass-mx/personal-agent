@@ -16,7 +16,7 @@ import {
   SourcesPanel,
   type AgentSource,
 } from "../../sources";
-import { IntelligenceIndicator } from "../configuration/IntelligenceIndicator";
+import { ConversationIntelligencePicker } from "../configuration/ConversationIntelligencePicker";
 
 /** Hilo a pantalla completa — conversación real vía Gateway WS/HTTP. */
 export function ConversationScreen() {
@@ -135,19 +135,22 @@ export function ConversationScreen() {
             e.preventDefault();
             if (canSend) send();
           }}
-          placeholder="Escribe lo que necesitas…"
+          placeholder="Escribe a tu agente…"
           aria-label="Mensaje"
           disabled={wsStatus !== "authenticated"}
           autoComplete="off"
         />
-        <button
-          type="submit"
-          className="btn btn-primary composer-send"
-          disabled={!canSend}
-          aria-label="Enviar"
-        >
-          <IconSend size={18} className="composer-send-icon" />
-        </button>
+        <div className="composer-toolbar">
+          <ConversationIntelligencePicker />
+          <button
+            type="submit"
+            className="btn btn-primary composer-send"
+            disabled={!canSend}
+            aria-label="Enviar"
+          >
+            <IconSend size={18} className="composer-send-icon" />
+          </button>
+        </div>
       </div>
     </form>
   );
@@ -244,19 +247,17 @@ export function ConversationScreen() {
       {isBlank ? (
         <div className="blank-state fade-in">
           <div className="blank-state-content">
-            <div className="intel-indicator-wrap">
-              <IntelligenceIndicator />
-            </div>
             <p className="blank-heading">¿En qué te ayudo?</p>
             {composer}
+            <p className="muted conv-intel-hint">
+              El selector del compositor cambia cómo piensa tu agente aquí. Solo
+              afecta a esta conversación; tu predeterminada no cambia.
+            </p>
           </div>
         </div>
       ) : (
         <div className={`conversation-split ${panelOpen ? "is-open" : ""}`}>
           <div className="conversation-main">
-            <div className="intel-indicator-wrap">
-              <IntelligenceIndicator />
-            </div>
             {thread}
           </div>
           {panelOpen ? (

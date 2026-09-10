@@ -34,6 +34,7 @@ import {
   listIntelligenceConnections,
   localAvailabilitySummary,
   selectIntelligenceConnection,
+  updateIntelligenceConnectionModel,
   upsertExternalConnection,
 } from "../providers/intelligence.ts";
 import {
@@ -171,6 +172,85 @@ export function mountSetupHttp(
       return c.json(
         httpErrorBody("connection_not_found", "No encontramos esa conexión."),
         404,
+      );
+    }
+  });
+
+  /**
+   * Cambia el modelo de una inteligencia (Local / BYOK).
+   * Personal Agent Cloud no admite elección de modelo.
+   */
+  app.post("/v1/setup/intelligence/model", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    const body = (await c.req.json().catch(() => ({}))) as {
+      connectionId?: string;
+      modelId?: string;
+    };
+    const connectionId = String(body.connectionId || "").trim();
+    const modelId = String(body.modelId || "").trim();
+    if (!connectionId || !modelId) {
+      return c.json(
+        httpErrorBody(
+          "invalid_request",
+          "Se requieren connectionId y modelId.",
+        ),
+        400,
+      );
+    }
+    try {
+      const connection = updateIntelligenceConnectionModel(
+        connectionId,
+        modelId,
+      );
+      return c.json({ ok: true, connection });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "model_update_failed";
+      if (message === "connection_not_found") {
+        return c.json(
+          httpErrorBody("connection_not_found", "No encontramos esa conexión."),
+          404,
+        );
+      }
+      if (message === "cloud_model_managed") {
+        return c.json(
+          httpErrorBody(
+            "cloud_model_managed",
+            "Personal Agent elige el modelo por ti.",
+          ),
+          400,
+        );
+      }
+      if (message === "model_not_in_catalog") {
+        return c.json(
+          httpErrorBody(
+            "model_not_in_catalog",
+            "Ese modelo no está en el catálogo local.",
+          ),
+          400,
+        );
+      }
+      if (message === "model_not_installed") {
+        return c.json(
+          httpErrorBody(
+            "model_not_installed",
+            "Instala ese modelo antes de usarlo.",
+          ),
+          400,
+        );
+      }
+      if (message === "credential_required") {
+        return c.json(
+          httpErrorBody(
+            "credential_required",
+            "Conecta la API key antes de cambiar el modelo.",
+          ),
+          400,
+        );
+      }
+      return c.json(
+        httpErrorBody("model_update_failed", "No pudimos cambiar el modelo."),
+        400,
       );
     }
   });
@@ -314,6 +394,53 @@ export function mountSetupHttp(
     }
 
     const apiKey = String(body.credential || body.apiKey || "").trim();
+    const modelId = String(body.modelId || DEFAULT_AGENT_MODEL).trim();
+    // Actualizar solo el modelo si ya hay clave guardada y no envían una nueva.
+    if (
+      apiKey.length < 16 &&
+      modelId &&
+      (provider === "openai" ||
+        provider === "anthropic" ||
+        provider === "xai" ||
+        provider === "openrouter" ||
+        provider === "groq" ||
+        provider === "openai-compatible") &&
+      hasProviderApiKeyConfigured(provider)
+    ) {
+      try {
+        const existing = listIntelligenceConnections().find(
+          (x) => x.provider === provider,
+        );
+        if (!existing) {
+          return c.json(
+            httpErrorBody(
+              "connection_not_found",
+              "No encontramos esa conexión.",
+            ),
+            404,
+          );
+        }
+        const connection = updateIntelligenceConnectionModel(
+          existing.id,
+          modelId,
+        );
+        return c.json({
+          ...setupStatusPayload(),
+          llmConfigured: true,
+          connection,
+        });
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "model_update_failed";
+        return c.json(
+          httpErrorBody(
+            message,
+            "No pudimos actualizar el modelo de este proveedor.",
+          ),
+          400,
+        );
+      }
+    }
     if (apiKey.length < 16) {
       try {
         const cur = getSetupState();
@@ -344,7 +471,6 @@ export function mountSetupHttp(
       );
     }
     try {
-      const modelId = String(body.modelId || DEFAULT_AGENT_MODEL).trim();
       if (
         provider === "openai" ||
         provider === "anthropic" ||

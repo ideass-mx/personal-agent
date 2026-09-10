@@ -100,7 +100,11 @@ export class HubSocket {
     };
   }
 
-  sendUserMessage(text: string, conversationId?: string): void {
+  sendUserMessage(
+    text: string,
+    conversationId?: string,
+    intelligenceConnectionId?: string,
+  ): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.authenticated) {
       throw new Error("not_connected");
     }
@@ -109,6 +113,9 @@ export class HubSocket {
         type: "user_message",
         text,
         ...(conversationId ? { conversationId } : {}),
+        ...(intelligenceConnectionId
+          ? { intelligenceConnectionId }
+          : {}),
       }),
     );
   }

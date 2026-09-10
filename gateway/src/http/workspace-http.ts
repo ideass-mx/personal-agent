@@ -15,6 +15,11 @@ import {
 } from "../memory/conversation-workspace.ts";
 import { listConversationMessages } from "../memory/history.ts";
 import { resolveWorkspaceForConversation } from "../memory/resolve-workspace-for-conversation.ts";
+import {
+  getConversationIntelligenceConnectionId,
+  setConversationIntelligenceConnectionId,
+} from "../providers/conversation-intelligence.ts";
+import { getIntelligenceConnection } from "../providers/intelligence.ts";
 import type { WorkspaceSqlDb } from "../workspace/sqlite-workspace-store.ts";
 import type { WorkspaceStore } from "../workspace/types.ts";
 import {
@@ -297,6 +302,57 @@ export function mountWorkspaceHttp(app: Hono, deps: WorkspaceHttpDeps): void {
       ? listConversationMessages(conversationId, sql)
       : listConversationMessages(conversationId);
     return c.json(messages);
+  });
+
+  app.get("/conversations/:id/intelligence", (c) => {
+    const denied = requireAuth(c, hubToken);
+    if (denied) return denied;
+    const conversationId = c.req.param("id");
+    const found = getConversation(conversationId, sql);
+    if (!found) {
+      return c.json(errorBody("not_found", "Conversation inexistente."), 404);
+    }
+    return c.json({
+      conversationId,
+      connectionId: getConversationIntelligenceConnectionId(conversationId),
+    });
+  });
+
+  app.put("/conversations/:id/intelligence", async (c) => {
+    const denied = requireAuth(c, hubToken);
+    if (denied) return denied;
+    const conversationId = c.req.param("id");
+    const found = getConversation(conversationId, sql);
+    if (!found) {
+      return c.json(errorBody("not_found", "Conversation inexistente."), 404);
+    }
+    let body: unknown;
+    try {
+      body = await readJson(c);
+    } catch {
+      return c.json(errorBody("bad_request", "JSON inválido."), 400);
+    }
+    if (
+      !isRecord(body) ||
+      !(
+        body.connectionId === null ||
+        typeof body.connectionId === "string"
+      )
+    ) {
+      return c.json(
+        errorBody("bad_request", "Se requiere connectionId (string|null)."),
+        400,
+      );
+    }
+    const connectionId =
+      typeof body.connectionId === "string" && body.connectionId.trim()
+        ? body.connectionId.trim()
+        : null;
+    if (connectionId && !getIntelligenceConnection(connectionId)) {
+      return c.json(errorBody("not_found", "Conexión inexistente."), 404);
+    }
+    setConversationIntelligenceConnectionId(conversationId, connectionId);
+    return c.json({ conversationId, connectionId });
   });
 
   app.get("/conversations/:id/workspace", (c) => {

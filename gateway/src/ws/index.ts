@@ -45,6 +45,11 @@ import {
   issueDeviceAuthChallenge,
   verifyDeviceAuthSignature,
 } from "../identity/device-auth.ts";
+import {
+  getConversationIntelligenceConnectionId,
+  setConversationIntelligenceConnectionId,
+} from "../providers/conversation-intelligence.ts";
+import { getIntelligenceConnection } from "../providers/intelligence.ts";
 
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
@@ -93,6 +98,19 @@ export function attachGateway(
     });
     session.confirmationWaiter = waiter;
     const conversationId = ensureConversation(msg.conversationId);
+    if (msg.intelligenceConnectionId) {
+      const conn = getIntelligenceConnection(msg.intelligenceConnectionId);
+      if (conn) {
+        setConversationIntelligenceConnectionId(
+          conversationId,
+          msg.intelligenceConnectionId,
+        );
+      }
+    }
+    const intelligenceConnectionId =
+      msg.intelligenceConnectionId ||
+      getConversationIntelligenceConnectionId(conversationId) ||
+      undefined;
     const startedAt = Date.now();
     diagnostics?.record({
       diagnosticId,
@@ -105,6 +123,9 @@ export function attachGateway(
         deviceId: session.deviceId,
         inputLength: msg.text.length,
         authSessionId: session.authSessionId,
+        ...(intelligenceConnectionId
+          ? { intelligenceConnectionId }
+          : {}),
       },
     });
     try {
@@ -116,6 +137,9 @@ export function attachGateway(
         userMessage: msg.text,
         userContext,
         confirmation: waiter.port,
+        ...(intelligenceConnectionId
+          ? { intelligenceConnectionId }
+          : {}),
       })) {
         switch (event.type) {
           case "text_delta":

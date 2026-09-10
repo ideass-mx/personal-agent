@@ -76,6 +76,8 @@ export interface AgentTurnInput {
    * Si falta y una tool pide confirm → fail-closed (no ejecuta).
    */
   confirmation?: ConfirmationPort;
+  /** Inteligencia de este hilo (no cambia la predeterminada global). */
+  intelligenceConnectionId?: string;
 }
 
 /**
@@ -227,6 +229,9 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
             system: systemPrompt,
             model: agent.model,
             diagnosticId,
+            ...(input.intelligenceConnectionId
+              ? { intelligenceConnectionId: input.intelligenceConnectionId }
+              : {}),
           })) {
             if (event.type === "text_delta") {
               turnText += event.text;

@@ -1239,44 +1239,53 @@ tr:last-child td {
 
 .composer-shell {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px 10px 18px;
+  padding: 12px 14px 10px 16px;
   border: 0;
-  border-radius: 30px;
+  border-radius: 28px;
   background: color-mix(in srgb, var(--surface) 92%, var(--sunken));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
   min-height: 56px;
+  position: relative;
+}
+
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .composer-dock .composer-shell {
   width: min(760px, 100%);
   margin: 0 auto;
   border: 0;
-  border-radius: 30px;
+  border-radius: 28px;
   background: color-mix(in srgb, var(--surface) 92%, var(--sunken));
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
   min-height: 56px;
-  padding: 10px 12px 10px 18px;
+  padding: 12px 14px 10px 16px;
 }
 
 .composer-hero .composer-shell {
   border: 0;
-  border-radius: 30px;
+  border-radius: 28px;
   min-height: 56px;
-  padding: 10px 12px 10px 18px;
+  padding: 12px 14px 10px 16px;
 }
 
 .composer-hero .composer-shell.is-compact {
-  align-items: center;
+  align-items: stretch;
 }
 
 .composer-hero .composer-shell.is-tall,
 .composer-dock .composer-shell.is-tall {
   align-items: flex-end;
-  border-radius: 24px;
+  border-radius: 28px;
 }
 
 .composer-input {
@@ -1320,7 +1329,7 @@ tr:last-child td {
   align-items: center;
   justify-content: center;
   line-height: 1;
-  align-self: flex-end;
+  align-self: center;
   margin-bottom: 0;
 }
 
@@ -1331,6 +1340,136 @@ tr:last-child td {
 
 .composer-shell.is-compact .composer-send {
   align-self: center;
+}
+
+.conv-intel-hint {
+  margin: 12px auto 0;
+  max-width: 36rem;
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+.conv-intel-picker {
+  position: relative;
+  z-index: 5;
+}
+
+.conv-intel-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--fg, #fff) 4%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.conv-intel-pill:hover,
+.conv-intel-pill:focus-visible {
+  border-color: color-mix(in srgb, var(--fg, #eee) 35%, var(--line));
+  outline: none;
+}
+
+.conv-intel-pill:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.conv-intel-pill-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.conv-intel-chevron {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.conv-intel-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: min(320px, 78vw);
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.conv-intel-menu-kicker {
+  margin: 0 6px 8px;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.conv-intel-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conv-intel-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 8px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conv-intel-option:hover,
+.conv-intel-option:focus-visible,
+.conv-intel-option.is-active {
+  background: color-mix(in srgb, var(--fg, #fff) 6%, transparent);
+  outline: none;
+}
+
+.conv-intel-option-icon {
+  width: 22px;
+  display: inline-flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.conv-intel-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.conv-intel-option-text strong {
+  font-size: 0.9rem;
+}
+
+.conv-intel-option-text .muted {
+  font-size: 0.75rem;
+}
+
+.conv-intel-check {
+  color: color-mix(in srgb, #7ddea8 90%, #fff);
+  font-weight: 700;
 }
 
 .account-name {
@@ -2444,12 +2583,160 @@ button.linkish {
   flex-direction: column;
   gap: 20px;
 }
-.intel-kicker {
-  margin: 0 0 6px;
-  font-size: 12px;
+.intel-lead {
+  margin: 0 0 4px !important;
+}
+.intel-default {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.intel-default-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.intel-default-card.is-empty {
+  align-items: flex-start;
+}
+.intel-default-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.intel-default-main strong {
+  display: block;
+  font-size: 1.05rem;
+}
+.intel-default-main .muted,
+.intel-default-card .muted {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+}
+.intel-default-emoji {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.intel-default-hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.intel-library h4 {
+  margin: 8px 0 10px;
+  font-size: 0.95rem;
+}
+.intel-library-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.intel-library-list li + li {
+  border-top: 1px solid var(--line);
+}
+.intel-library-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.intel-library-row:hover,
+.intel-library-row:focus-visible {
+  background: color-mix(in srgb, var(--fg, #fff) 4%, transparent);
+  outline: none;
+}
+.intel-library-icon {
+  width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1.1rem;
+}
+.intel-library-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.intel-library-text strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.95rem;
+}
+.intel-library-chevron {
+  color: var(--muted);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.intel-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, #6b7cff 22%, transparent);
+  color: color-mix(in srgb, #aeb8ff 90%, #fff);
+}
+.intel-add-btn {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 2px;
+}
+.intel-add-btn:hover,
+.intel-add-btn:focus-visible {
+  color: color-mix(in srgb, #8b9cff 90%, #fff);
+  outline: none;
+}
+.intel-add-btn span[aria-hidden="true"] {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 1rem;
+  line-height: 1;
+}
+.setup-section-label {
+  margin: 18px 0 10px;
+  font-size: 0.78rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
+  font-weight: 650;
+}
+.setup-cloud-primary {
+  margin-bottom: 4px;
 }
 .intel-active {
   padding: 20px 22px;
@@ -2502,6 +2789,113 @@ button.linkish {
 }
 .intel-detail h3 {
   margin: 8px 0 12px;
+}
+.intel-status-line {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  color: color-mix(in srgb, #7ddea8 85%, var(--muted));
+}
+.intel-kicker {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-transform: none;
+}
+.intel-model-section {
+  margin: 0 0 18px;
+}
+.intel-model-current {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+.intel-model-managed {
+  margin: 4px 0 0;
+}
+.intel-model-managed strong {
+  display: block;
+  font-size: 1.05rem;
+}
+.intel-model-managed .muted {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  max-width: 36rem;
+}
+.intel-model-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 94%, var(--sunken));
+}
+.intel-model-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.intel-model-list li:last-child .intel-model-option {
+  border-bottom: none;
+}
+.intel-model-option:hover,
+.intel-model-option:focus-visible,
+.intel-model-option.is-active {
+  background: color-mix(in srgb, var(--fg, #fff) 5%, transparent);
+  outline: none;
+}
+.intel-model-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.intel-model-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.intel-model-option-text strong {
+  font-size: 0.95rem;
+}
+.intel-model-option-text .muted {
+  font-size: 0.78rem;
+}
+.intel-model-check {
+  color: color-mix(in srgb, #7ddea8 90%, #fff);
+  font-weight: 700;
+}
+.intel-advanced-toggle {
+  margin-top: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.intel-advanced {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+.intel-advanced p {
+  margin: 0 0 10px;
+}
+.intel-advanced p:last-child {
+  margin-bottom: 0;
 }
 .intel-warn {
   padding: 12px 14px;
@@ -2641,6 +3035,19 @@ button.linkish {
 }
 .provider-feature-card[data-provider="openrouter"] {
   border-color: color-mix(in srgb, #a5b4fc 28%, var(--line));
+}
+.provider-feature-card[data-provider="personal-agent-cloud"],
+.provider-feature-card--featured {
+  border-color: color-mix(in srgb, #8b9cff 35%, var(--line));
+  grid-column: 1 / -1;
+}
+.provider-icon--cloud {
+  background: #1a2338;
+  color: #c7d2fe;
+  font-size: 1.15rem;
+  border-radius: 12px;
+  width: 44px;
+  height: 44px;
 }
 
 .provider-pick-row {

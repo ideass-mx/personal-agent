@@ -61,6 +61,7 @@ sealed interface ClientMessage {
     data class UserMessage(
         val text: String,
         val conversationId: String? = null,
+        val intelligenceConnectionId: String? = null,
     ) : ClientMessage
 
     @Serializable

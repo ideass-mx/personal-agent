@@ -36,6 +36,8 @@ export interface LLMRequest {
   model?: string;
   /** Correlation id técnico de la request actual. */
   diagnosticId?: string;
+  /** Preferencia de inteligencia de esta conversación (opcional). */
+  intelligenceConnectionId?: string;
 }
 
 export type LLMEvent =

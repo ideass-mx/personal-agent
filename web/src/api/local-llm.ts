@@ -31,6 +31,11 @@ export type LocalModelsDto = {
     displayName: string;
     description: string;
     tierLabel: string;
+    capabilities?: {
+      streaming?: boolean;
+      toolCalling?: boolean;
+      contextWindow?: number;
+    };
   }>;
   installed: Array<{
     modelId: string;
@@ -67,6 +72,24 @@ export async function fetchLocalModels(
   });
   if (!res.ok) throw new Error(`local_models_${res.status}`);
   return (await res.json()) as LocalModelsDto;
+}
+
+export async function activateLocalModel(
+  base: string,
+  token: string,
+  opts: { modelId: string; variantId?: string },
+): Promise<void> {
+  const res = await fetch(`${base}/v1/local-llm/activate`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(opts),
+  });
+  if (!res.ok) {
+    const json = (await res.json().catch(() => ({}))) as {
+      error?: { message?: string };
+    };
+    throw new Error(json.error?.message || `local_activate_${res.status}`);
+  }
 }
 
 export async function fetchLocalLlmStatus(

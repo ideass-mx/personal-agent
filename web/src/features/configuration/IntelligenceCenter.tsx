@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { resolveHttpBase } from "../../api/http";
-import { fetchLocalLlmStatus } from "../../api/local-llm";
+import {
+  fetchLocalLlmStatus,
+  fetchLocalModels,
+  installLocalModel,
+  type LocalModelsDto,
+} from "../../api/local-llm";
 import {
   configureSetupLlm,
   connectCloudAuth,
@@ -10,18 +15,19 @@ import {
   fetchIntelligenceStatus,
   selectIntelligenceConnection,
   testProviderConnection,
+  updateIntelligenceConnectionModel,
   type CloudAuthStatusDto,
   type IntelligenceConnectionDto,
   type IntelligenceStatusDto,
 } from "../../api/setup";
 import { useApp } from "../../state/AppContext";
 import {
-  configStatusLabel,
   humanModelLabel,
   modeIcon,
   modeTitle,
   providerCardTitle,
 } from "./intelligenceLabels";
+import { IntelligenceModelSection } from "./IntelligenceModelSection";
 import { ProviderIcon, providerShortBlurb } from "./ProviderIcon";
 import {
   PRIMARY_BYOK_PROVIDERS,
@@ -32,6 +38,7 @@ import {
 type Panel =
   | "overview"
   | "choose"
+  | "add"
   | "local"
   | "cloud"
   | "byok"
@@ -40,9 +47,42 @@ type Panel =
 
 const BYOK_PROVIDERS = PRIMARY_BYOK_PROVIDERS;
 
+function localModelHint(tierLabel: string, installed: boolean): string {
+  const base =
+    tierLabel === "Equilibrado"
+      ? "Recomendado"
+      : tierLabel === "Rápido"
+        ? "Más rápido"
+        : tierLabel === "Ligero"
+          ? "Más ligero"
+          : tierLabel || "";
+  if (installed) return base;
+  return base ? `${base} · se descargará` : "Se descargará";
+}
+
+function formatContextWindow(tokens?: number): string {
+  if (!tokens || tokens <= 0) return "—";
+  if (tokens >= 1000) {
+    const k = tokens / 1000;
+    const label = Number.isInteger(k) ? `${k}` : k.toFixed(1);
+    return `${label}k tokens`;
+  }
+  return `${tokens} tokens`;
+}
+
 function defaultModel(provider: string): string {
   return defaultByokModelId(provider);
 }
+
+type LibraryRow = {
+  key: string;
+  kind: "local" | "cloud" | "external";
+  title: string;
+  statusLine: string;
+  provider: string;
+  conn?: IntelligenceConnectionDto;
+  isDefault: boolean;
+};
 
 export function IntelligenceCenter() {
   const { session } = useApp();
@@ -61,6 +101,10 @@ export function IntelligenceCenter() {
   const [modelId, setModelId] = useState("gpt-4.1-mini");
   const [baseUrl, setBaseUrl] = useState("");
   const [cloudPhase, setCloudPhase] = useState(0);
+  const [byokReturn, setByokReturn] = useState<"add" | "overview">("add");
+  const [byokConfigured, setByokConfigured] = useState(false);
+  const [localModels, setLocalModels] = useState<LocalModelsDto | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const base = session ? resolveHttpBase(session) : "";
   const token = session?.token || "";
@@ -68,14 +112,16 @@ export function IntelligenceCenter() {
   const refresh = useCallback(async () => {
     if (!session || !base) return;
     try {
-      const [st, cs, loc] = await Promise.all([
+      const [st, cs, loc, models] = await Promise.all([
         fetchIntelligenceStatus(base, token),
         fetchCloudAuthStatus(base, token).catch(() => null),
         fetchLocalLlmStatus(base, token).catch(() => null),
+        fetchLocalModels(base, token).catch(() => null),
       ]);
       setSnap(st);
       setCloud(cs);
       setLocalReady(loc?.ready ?? st.local.installed);
+      setLocalModels(models);
     } catch {
       setErr("No pudimos cargar el estado de inteligencia.");
     }
@@ -117,6 +163,8 @@ export function IntelligenceCenter() {
         setModelId(conn.modelId || defaultModel(conn.provider));
         setBaseUrl(conn.baseUrl || "");
         setApiKey("");
+        setByokConfigured(false);
+        setByokReturn("overview");
         setPanel("byok_form");
       } else {
         await selectIntelligenceConnection(base, token, conn.id);
@@ -138,7 +186,7 @@ export function IntelligenceCenter() {
   async function onChooseMode(mode: "local" | "personal-agent-cloud" | "external") {
     if (!snap) return;
     if (mode === "external") {
-      setPanel("byok");
+      setPanel("add");
       return;
     }
     const conn = snap.connections.find((c) => c.mode === mode);
@@ -158,14 +206,22 @@ export function IntelligenceCenter() {
     setBusy(true);
     setErr(null);
     try {
+      const key = apiKey.trim();
+      if (!byokConfigured && key.length < 16) {
+        setErr("Pega una API key válida.");
+        setBusy(false);
+        return;
+      }
       await configureSetupLlm(base, token, {
         provider: byokProvider,
-        credential: apiKey.trim(),
+        ...(key.length >= 16 ? { credential: key } : {}),
         modelId: modelId.trim(),
         baseUrl: baseUrl.trim() || undefined,
       });
       setApiKey("");
-      setOkMsg("Proveedor conectado.");
+      setOkMsg(
+        byokConfigured ? "Modelo actualizado." : "Proveedor conectado.",
+      );
       setPanel("overview");
       await refresh();
     } catch (ex) {
@@ -173,6 +229,78 @@ export function IntelligenceCenter() {
         ex instanceof Error
           ? ex.message
           : "No pudimos guardar la configuración.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onPickLocalModel(nextModelId: string) {
+    const conn = snap?.connections.find((c) => c.provider === "local");
+    if (!conn || busy) return;
+    if (conn.modelId === nextModelId) return;
+    const installed = (localModels?.installed || []).some(
+      (i) =>
+        i.modelId === nextModelId &&
+        (i.state === "ready" ||
+          i.state === "active" ||
+          i.state === "installed"),
+    );
+    setBusy(true);
+    setErr(null);
+    try {
+      if (!installed) {
+        setOkMsg("Descargando modelo local…");
+        await installLocalModel(base, token, { modelId: nextModelId });
+      }
+      await updateIntelligenceConnectionModel(
+        base,
+        token,
+        conn.id,
+        nextModelId,
+      );
+      setOkMsg("Modelo local actualizado.");
+      await refresh();
+    } catch (ex) {
+      setErr(
+        ex instanceof Error
+          ? ex.message
+          : "No pudimos cambiar el modelo local.",
+      );
+      setOkMsg(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onPickByokModel(nextModelId: string) {
+    if (!byokConfigured || busy) {
+      setModelId(nextModelId);
+      return;
+    }
+    const conn = snap?.connections.find((c) => c.provider === byokProvider);
+    if (!conn) {
+      setModelId(nextModelId);
+      return;
+    }
+    if (conn.modelId === nextModelId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await updateIntelligenceConnectionModel(
+        base,
+        token,
+        conn.id,
+        nextModelId,
+      );
+      setModelId(nextModelId);
+      setOkMsg("Modelo actualizado.");
+      await refresh();
+    } catch (ex) {
+      setErr(
+        ex instanceof Error
+          ? ex.message
+          : "No pudimos cambiar el modelo.",
       );
     } finally {
       setBusy(false);
@@ -226,9 +354,85 @@ export function IntelligenceCenter() {
     }
   }
 
+  function openLibraryRow(row: LibraryRow) {
+    setErr(null);
+    setOkMsg(null);
+    setAdvancedOpen(false);
+    if (row.kind === "local") {
+      setPanel("local");
+      return;
+    }
+    if (row.kind === "cloud") {
+      setPanel("cloud");
+      return;
+    }
+    setByokProvider(row.provider);
+    setModelId(row.conn?.modelId || defaultModel(row.provider));
+    setBaseUrl(row.conn?.baseUrl || "");
+    setApiKey("");
+    setByokConfigured(Boolean(row.conn?.credentialConfigured));
+    setByokReturn("overview");
+    setPanel("byok_form");
+  }
+
   const active = snap?.active ?? null;
   const external = (snap?.connections || []).filter(
     (c) => c.mode === "external",
+  );
+
+  const libraryRows: LibraryRow[] = (() => {
+    const rows: LibraryRow[] = [];
+    const cloudConn = snap?.connections.find(
+      (c) => c.mode === "personal-agent-cloud",
+    );
+    rows.push({
+      key: "cloud",
+      kind: "cloud",
+      title: "Personal Agent Cloud",
+      statusLine: cloud?.connected
+        ? "● Disponible"
+        : "No conectado",
+      provider: "personal-agent-cloud",
+      conn: cloudConn,
+      isDefault: active?.provider === "personal-agent-cloud",
+    });
+    const localConn = snap?.connections.find((c) => c.mode === "local");
+    rows.push({
+      key: "local",
+      kind: "local",
+      title: "Local",
+      statusLine: snap?.local.installed
+        ? `● Disponible · ${humanModelLabel("local", localConn?.modelId || "qwen3-4b")}`
+        : "No instalado",
+      provider: "local",
+      conn: localConn,
+      isDefault: active?.provider === "local",
+    });
+    for (const id of BYOK_PROVIDERS) {
+      const conn = external.find((c) => c.provider === id);
+      if (!conn?.credentialConfigured && !conn?.active) continue;
+      rows.push({
+        key: id,
+        kind: "external",
+        title: providerCardTitle(id, conn.displayName),
+        statusLine: `● Conectada${
+          conn.modelId
+            ? ` · ${humanModelLabel(id, conn.modelId)}`
+            : ""
+        }`,
+        provider: id,
+        conn,
+        isDefault: active?.provider === id,
+      });
+    }
+    return rows;
+  })();
+
+  const addableByok = BYOK_PROVIDERS.filter(
+    (id) =>
+      !external.some(
+        (c) => c.provider === id && (c.credentialConfigured || c.active),
+      ),
   );
 
   if (!session) {
@@ -285,22 +489,35 @@ export function IntelligenceCenter() {
 
       {panel === "overview" ? (
         <>
-          <div className="intel-active" aria-live="polite">
-            <p className="intel-kicker">Inteligencia activa</p>
+          <p className="lead intel-lead">
+            Así piensa tu agente. Tú decides la fuente y, si quieres, el modelo.
+          </p>
+
+          <div className="intel-default" aria-live="polite">
+            <p className="intel-kicker">Predeterminada</p>
             {active ? (
-              <>
-                <h3>
-                  {modeIcon(active.mode)} {modeTitle(active.mode, active.displayName)}
-                </h3>
-                <p className="muted">
-                  {active.configStatus === "active" ? "Conectado" : "Seleccionado"}
-                </p>
-                <p className="muted">
-                  Modelo: {humanModelLabel(active.provider, active.modelId)}
-                </p>
+              <div className="intel-default-card">
+                <div className="intel-default-main">
+                  {active.mode === "external" ? (
+                    <ProviderIcon provider={active.provider} size={40} />
+                  ) : (
+                    <span className="intel-default-emoji" aria-hidden="true">
+                      {modeIcon(active.mode)}
+                    </span>
+                  )}
+                  <div>
+                    <strong>
+                      {modeTitle(active.mode, active.displayName)}
+                    </strong>
+                    <p className="muted">
+                      {humanModelLabel(active.provider, active.modelId)}
+                    </p>
+                  </div>
+                </div>
                 <button
                   type="button"
                   className="btn"
+                  disabled={busy}
                   onClick={() => {
                     setErr(null);
                     setOkMsg(null);
@@ -309,79 +526,88 @@ export function IntelligenceCenter() {
                 >
                   Cambiar
                 </button>
-              </>
+              </div>
             ) : (
-              <>
-                <h3>No hay una inteligencia conectada</h3>
+              <div className="intel-default-card is-empty">
+                <div>
+                  <strong>No hay inteligencia predeterminada</strong>
+                  <p className="muted">
+                    Agrega o conecta una y actívala para las conversaciones
+                    nuevas.
+                  </p>
+                </div>
                 <button
                   type="button"
                   className="btn primary"
-                  onClick={() => setPanel("choose")}
+                  onClick={() => setPanel("add")}
                 >
-                  Configurar inteligencia
+                  Agregar
                 </button>
-              </>
+              </div>
             )}
+            {active ? (
+              <p className="muted intel-default-hint">
+                Tu agente usará esta inteligencia en las conversaciones nuevas.
+              </p>
+            ) : null}
           </div>
 
-          <div className="intel-modes">
-            <button
-              type="button"
-              className="intel-mode-card"
-              onClick={() => setPanel("local")}
-            >
-              <strong>🔒 Local</strong>
-              <span className="muted">
-                {snap?.local.installed
-                  ? "Modelo instalado · Este equipo"
-                  : "Aún no instalado"}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="intel-mode-card"
-              onClick={() => setPanel("cloud")}
-            >
-              <strong>☁️ Personal Agent Cloud</strong>
-              <span className="muted">
-                {cloud?.connected ? "● Conectado" : "No conectado"}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="intel-mode-card"
-              onClick={() => setPanel("byok")}
-            >
-              <strong>🔑 Mi proveedor</strong>
-              <span className="muted">Tu propia cuenta de IA</span>
-            </button>
-          </div>
-
-          <section className="intel-connections" aria-label="Tus conexiones">
-            <h4>Tus conexiones</h4>
-            <ul className="intel-conn-list">
-              {(snap?.connections || [])
-                .filter(
-                  (c) =>
-                    c.mode !== "external" ||
-                    c.credentialConfigured ||
-                    c.active,
-                )
-                .map((c) => (
-                  <li key={c.id}>
-                    <span>
-                      {modeIcon(c.mode)} {c.displayName}
-                    </span>
-                    <span className="muted">{configStatusLabel(c.configStatus)}</span>
+          <section className="intel-library" aria-label="Mis inteligencias">
+            <h4>Mis inteligencias</h4>
+            {libraryRows.length === 0 ? (
+              <p className="muted">Aún no hay inteligencias configuradas.</p>
+            ) : (
+              <ul className="intel-library-list">
+                {libraryRows.map((row) => (
+                  <li key={row.key}>
+                    <button
+                      type="button"
+                      className="intel-library-row"
+                      onClick={() => openLibraryRow(row)}
+                    >
+                      <span className="intel-library-icon" aria-hidden="true">
+                        {row.kind === "external" ? (
+                          <ProviderIcon provider={row.provider} size={32} />
+                        ) : row.kind === "cloud" ? (
+                          "☁️"
+                        ) : (
+                          "🔒"
+                        )}
+                      </span>
+                      <span className="intel-library-text">
+                        <strong>
+                          {row.title}
+                          {row.isDefault ? (
+                            <span className="intel-badge">Predeterminada</span>
+                          ) : null}
+                        </strong>
+                        <span className="muted">{row.statusLine}</span>
+                      </span>
+                      <span className="intel-library-chevron" aria-hidden="true">
+                        ›
+                      </span>
+                    </button>
                   </li>
                 ))}
-            </ul>
+              </ul>
+            )}
+            <button
+              type="button"
+              className="intel-add-btn"
+              onClick={() => {
+                setErr(null);
+                setOkMsg(null);
+                setPanel("add");
+              }}
+            >
+              <span aria-hidden="true">+</span> Agregar inteligencia
+            </button>
           </section>
         </>
       ) : null}
 
       {panel === "choose" ? (
-        <div className="intel-choose">
+        <div className="intel-detail">
           <button
             type="button"
             className="btn btn-ghost"
@@ -389,36 +615,118 @@ export function IntelligenceCenter() {
           >
             ← Volver
           </button>
-          <h3>¿Con qué inteligencia quieres trabajar?</h3>
+          <h3>Elegir predeterminada</h3>
+          <p className="muted">
+            Solo aparecen inteligencias ya disponibles o conectadas.
+          </p>
+          <ul className="intel-library-list">
+            {libraryRows
+              .filter((r) => {
+                if (r.kind === "local") return Boolean(snap?.local.installed);
+                if (r.kind === "cloud") return Boolean(cloud?.connected);
+                return Boolean(r.conn?.credentialConfigured);
+              })
+              .map((row) => (
+                <li key={row.key}>
+                  <button
+                    type="button"
+                    className="intel-library-row"
+                    disabled={busy}
+                    onClick={() => {
+                      if (row.conn) void activateConnection(row.conn);
+                      else if (row.kind === "local")
+                        void onChooseMode("local");
+                      else if (row.kind === "cloud")
+                        void onChooseMode("personal-agent-cloud");
+                    }}
+                  >
+                    <span className="intel-library-text">
+                      <strong>{row.title}</strong>
+                      <span className="muted">{row.statusLine}</span>
+                    </span>
+                    {row.isDefault ? (
+                      <span className="intel-badge">Actual</span>
+                    ) : (
+                      <span className="provider-feature-cta">Usar</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {panel === "add" ? (
+        <div className="intel-detail">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setPanel("overview")}
+          >
+            ← Volver
+          </button>
+          <h3>Agregar inteligencia</h3>
+          <p className="muted">
+            Local, Personal Agent Cloud o tu propia cuenta.
+          </p>
+
           <button
             type="button"
             className="intel-mode-card"
-            disabled={busy}
-            onClick={() => void onChooseMode("local")}
+            onClick={() => setPanel("local")}
           >
             <strong>🔒 Local</strong>
-            <span className="muted">Ejecuta el modelo en tu equipo.</span>
-          </button>
-          <button
-            type="button"
-            className="intel-mode-card"
-            disabled={busy}
-            onClick={() => void onChooseMode("personal-agent-cloud")}
-          >
-            <strong>☁️ Personal Agent Cloud</strong>
             <span className="muted">
-              Modelos proporcionados por Personal Agent.
+              {snap?.local.installed
+                ? "Ya instalado · gestionar"
+                : "Instalar modelo en este equipo"}
             </span>
           </button>
           <button
             type="button"
             className="intel-mode-card"
-            disabled={busy}
-            onClick={() => void onChooseMode("external")}
+            onClick={() => setPanel("cloud")}
           >
-            <strong>🔑 Mi proveedor</strong>
-            <span className="muted">Utiliza tu propia cuenta de IA.</span>
+            <strong>☁️ Personal Agent Cloud</strong>
+            <span className="muted">
+              {cloud?.connected ? "Ya conectado · gestionar" : "Sin API key"}
+            </span>
           </button>
+
+          {addableByok.length > 0 ? (
+            <>
+              <p className="setup-section-label">Tu cuenta</p>
+              <ul className="provider-card-grid">
+                {addableByok.map((id) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      className="provider-feature-card"
+                      data-provider={id}
+                      onClick={() => {
+                        setByokProvider(id);
+                        setModelId(defaultModel(id));
+                        setBaseUrl("");
+                        setApiKey("");
+                        setByokConfigured(false);
+                        setByokReturn("add");
+                        setPanel("byok_form");
+                      }}
+                    >
+                      <ProviderIcon provider={id} size={40} />
+                      <strong>{providerCardTitle(id)}</strong>
+                      <span className="muted">{providerShortBlurb(id)}</span>
+                      <span className="provider-feature-cta">Conectar</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="muted">
+              Ya tienes conectados OpenAI, Anthropic, xAI y OpenRouter.
+            </p>
+          )}
         </div>
       ) : null}
 
@@ -429,41 +737,112 @@ export function IntelligenceCenter() {
             className="btn btn-ghost"
             onClick={() => setPanel("overview")}
           >
-            ← Volver
+            ← Inteligencia
           </button>
           <h3>🔒 Local</h3>
           {snap?.local.installed || localReady ? (
             <>
-              <p className="muted">Activo en este equipo</p>
-              <ul className="status-list">
-                <li>✓ Modelo instalado · {snap?.local.displayName || "Qwen3 4B"}</li>
-                <li>✓ Motor local disponible</li>
-                <li>✓ Listo para usar</li>
-              </ul>
+              <p className="intel-status-line">
+                ● Disponible
+                {active?.provider === "local" ? " · Predeterminada" : ""}
+              </p>
+              <IntelligenceModelSection
+                value={
+                  snap?.connections.find((c) => c.provider === "local")
+                    ?.modelId ||
+                  localModels?.active?.modelId ||
+                  "qwen3-4b"
+                }
+                disabled={busy}
+                onChange={(id) => void onPickLocalModel(id)}
+                options={(localModels?.catalog || []).map((m) => {
+                  const installed = (localModels?.installed || []).some(
+                    (i) =>
+                      i.modelId === m.id &&
+                      (i.state === "ready" ||
+                        i.state === "active" ||
+                        i.state === "installed"),
+                  );
+                  return {
+                    id: m.id,
+                    label: m.displayName,
+                    hint: localModelHint(m.tierLabel, installed),
+                  };
+                })}
+              />
               {snap?.local.warning ? (
                 <p className="intel-warn">{snap.local.warning}</p>
               ) : null}
               <div className="row-actions">
                 <button
                   type="button"
-                  className="btn primary"
-                  disabled={busy}
-                  onClick={() => {
-                    const conn = snap?.connections.find((c) => c.provider === "local");
-                    if (conn) void activateConnection(conn);
-                  }}
-                >
-                  Usar Local
-                </button>
-                <button
-                  type="button"
                   className="btn"
                   disabled={busy}
                   onClick={() => void onTest("local")}
                 >
-                  Probar
+                  Probar conexión
                 </button>
+                {active?.provider !== "local" ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy}
+                    onClick={() => {
+                      const conn = snap?.connections.find(
+                        (c) => c.provider === "local",
+                      );
+                      if (conn) void activateConnection(conn);
+                    }}
+                  >
+                    Usar Local
+                  </button>
+                ) : null}
               </div>
+              <button
+                type="button"
+                className="intel-advanced-toggle"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((v) => !v)}
+              >
+                {advancedOpen ? "▾" : "▸"} Avanzado
+              </button>
+              {advancedOpen ? (
+                <div className="intel-advanced">
+                  <p>
+                    <span className="muted">ID del modelo</span>
+                    <br />
+                    <code>
+                      {snap?.connections.find((c) => c.provider === "local")
+                        ?.modelId || "qwen3-4b"}
+                    </code>
+                  </p>
+                  <p>
+                    <span className="muted">Endpoint</span>
+                    <br />
+                    en el dispositivo
+                  </p>
+                  <p>
+                    <span className="muted">Tamaño de contexto</span>
+                    <br />
+                    {formatContextWindow(
+                      (
+                        localModels?.catalog || []
+                      ).find(
+                        (m) =>
+                          m.id ===
+                          (snap?.connections.find((c) => c.provider === "local")
+                            ?.modelId ||
+                            localModels?.active?.modelId ||
+                            "qwen3-4b"),
+                      )?.capabilities?.contextWindow,
+                    )}
+                  </p>
+                  <p className="muted" style={{ fontSize: 13 }}>
+                    Ajustes técnicos. La mayoría de las personas no necesita
+                    cambiarlos.
+                  </p>
+                </div>
+              ) : null}
             </>
           ) : (
             <>
@@ -494,35 +873,49 @@ export function IntelligenceCenter() {
             className="btn btn-ghost"
             onClick={() => setPanel("overview")}
           >
-            ← Volver
+            ← Inteligencia
           </button>
           <h3>☁️ Personal Agent Cloud</h3>
           {cloud?.connected ? (
             <>
-              <p>● Conectado</p>
-              <p className="muted">
-                Modelos proporcionados por Personal Agent.
+              <p className="intel-status-line">
+                ● Disponible
+                {active?.provider === "personal-agent-cloud"
+                  ? " · Predeterminada"
+                  : ""}
               </p>
-              <p className="muted">
-                Dispositivo: {cloud.deviceLabel || "Este equipo"}
-              </p>
-              <p className="muted">
-                Sesión: {cloud.sessionActive ? "Activa" : "Inactiva"}
-              </p>
+              <IntelligenceModelSection
+                selectable={false}
+                options={[]}
+                value="pa-cloud-default"
+                onChange={() => undefined}
+                managedLabel="Seleccionado por Personal Agent"
+                managedHint="Personal Agent elige y actualiza el modelo por ti. No tienes que gestionarlo."
+              />
               <div className="row-actions">
                 <button
                   type="button"
-                  className="btn primary"
+                  className="btn"
                   disabled={busy}
-                  onClick={() => {
-                    const conn = snap?.connections.find(
-                      (c) => c.provider === "personal-agent-cloud",
-                    );
-                    if (conn) void activateConnection(conn);
-                  }}
+                  onClick={() => void onTest("personal-agent-cloud")}
                 >
-                  Usar Cloud
+                  Probar conexión
                 </button>
+                {active?.provider !== "personal-agent-cloud" ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy}
+                    onClick={() => {
+                      const conn = snap?.connections.find(
+                        (c) => c.provider === "personal-agent-cloud",
+                      );
+                      if (conn) void activateConnection(conn);
+                    }}
+                  >
+                    Usar Cloud
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn"
@@ -532,10 +925,40 @@ export function IntelligenceCenter() {
                   Desconectar
                 </button>
               </div>
+              <button
+                type="button"
+                className="intel-advanced-toggle"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((v) => !v)}
+              >
+                {advancedOpen ? "▾" : "▸"} Avanzado
+              </button>
+              {advancedOpen ? (
+                <div className="intel-advanced">
+                  <p>
+                    <span className="muted">Dispositivo</span>
+                    <br />
+                    {cloud.deviceLabel || "Este equipo"}
+                  </p>
+                  <p>
+                    <span className="muted">Sesión</span>
+                    <br />
+                    {cloud.sessionActive ? "Activa" : "Inactiva"}
+                  </p>
+                </div>
+              ) : null}
             </>
           ) : (
             <>
               <p className="muted">No conectado</p>
+              <IntelligenceModelSection
+                selectable={false}
+                options={[]}
+                value="pa-cloud-default"
+                onChange={() => undefined}
+                managedLabel="Seleccionado por Personal Agent"
+                managedHint="Personal Agent elige y actualiza el modelo por ti. No tienes que gestionarlo."
+              />
               <button
                 type="button"
                 className="btn primary"
@@ -676,58 +1099,132 @@ export function IntelligenceCenter() {
           <button
             type="button"
             className="btn btn-ghost"
-            onClick={() => setPanel("byok")}
+            onClick={() => setPanel(byokReturn)}
           >
-            ← Volver
+            ← Inteligencia
           </button>
           <h3>{providerCardTitle(byokProvider)}</h3>
-          <p className="muted">
-            La API key autentica tu cuenta. El modelo es el que usará el agente.
-          </p>
-          <form onSubmit={(e) => void onSaveByok(e)} className="intel-form">
-            <label>
-              API key
-              <input
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                required
-                minLength={16}
-                aria-describedby="intel-key-hint"
-                placeholder="Pega tu API key"
-              />
-            </label>
-            <p id="intel-key-hint" className="muted">
-              Se guarda de forma segura en este dispositivo; no la volveremos a
-              mostrar.
+          {byokConfigured ? (
+            <p className="intel-status-line">
+              ● Disponible
+              {active?.provider === byokProvider ? " · Predeterminada" : ""}
             </p>
-            <label>
-              Modelo
-              <select
-                value={
-                  byokModelOptions(byokProvider).some((o) => o.id === modelId)
-                    ? modelId
-                    : defaultByokModelId(byokProvider)
-                }
-                onChange={(e) => setModelId(e.target.value)}
-                aria-label="Modelo del agente"
+          ) : (
+            <p className="muted">
+              La API key autentica tu cuenta. El modelo es el que usará el
+              agente.
+            </p>
+          )}
+          <form onSubmit={(e) => void onSaveByok(e)} className="intel-form">
+            {!byokConfigured ? (
+              <>
+                <label>
+                  API key
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    required
+                    minLength={16}
+                    aria-describedby="intel-key-hint"
+                    placeholder="Pega tu API key"
+                  />
+                </label>
+                <p id="intel-key-hint" className="muted">
+                  Se guarda de forma segura en este dispositivo; no la
+                  volveremos a mostrar.
+                </p>
+              </>
+            ) : null}
+            <IntelligenceModelSection
+              value={
+                byokModelOptions(byokProvider).some((o) => o.id === modelId)
+                  ? modelId
+                  : defaultByokModelId(byokProvider)
+              }
+              disabled={busy}
+              onChange={(id) => void onPickByokModel(id)}
+              options={byokModelOptions(byokProvider).map((o) => ({
+                id: o.id,
+                label: o.label,
+                hint: o.hint,
+              }))}
+            />
+            {!byokConfigured ? (
+              <button
+                type="submit"
+                className="btn primary"
+                disabled={busy || apiKey.trim().length < 16}
               >
-                {byokModelOptions(byokProvider).map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={busy || apiKey.trim().length < 16}
-            >
-              Conectar
-            </button>
+                Conectar
+              </button>
+            ) : (
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => void onTest(byokProvider)}
+                >
+                  Probar conexión
+                </button>
+                {active?.provider !== byokProvider ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy}
+                    onClick={() => {
+                      const conn = snap?.connections.find(
+                        (c) => c.provider === byokProvider,
+                      );
+                      if (conn) void activateConnection(conn);
+                    }}
+                  >
+                    Usar
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => setConfirmDisconnect(byokProvider)}
+                >
+                  Desconectar
+                </button>
+              </div>
+            )}
           </form>
+          {byokConfigured ? (
+            <>
+              <button
+                type="button"
+                className="intel-advanced-toggle"
+                aria-expanded={advancedOpen}
+                onClick={() => setAdvancedOpen((v) => !v)}
+              >
+                {advancedOpen ? "▾" : "▸"} Avanzado
+              </button>
+              {advancedOpen ? (
+                <div className="intel-advanced">
+                  <p>
+                    <span className="muted">ID del modelo</span>
+                    <br />
+                    <code>{modelId}</code>
+                  </p>
+                  <p>
+                    <span className="muted">Proveedor</span>
+                    <br />
+                    {providerCardTitle(byokProvider)}
+                  </p>
+                  <p className="muted" style={{ fontSize: 13 }}>
+                    Ajustes técnicos. La mayoría de las personas no necesita
+                    cambiarlos.
+                  </p>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

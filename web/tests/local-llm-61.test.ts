@@ -1,12 +1,12 @@
 /**
- * PHASE 61 — onboarding local-first (sin API key en camino crítico).
+ * PHASE 61 / 62 — onboarding: elegir inteligencia (Local o Cloud).
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { stepFromStatus } from "../src/features/setup/setup-flow.ts";
 
 describe("PHASE 61 setup flow local-first", () => {
-  it("AGENT_READY sin LLM → hardware (modelo local)", () => {
+  it("AGENT_READY sin LLM → llm_intro (elegir cómo piensa el agente)", () => {
     const step = stepFromStatus({
       state: "AGENT_READY",
       installationReady: true,
@@ -18,7 +18,7 @@ describe("PHASE 61 setup flow local-first", () => {
       lastErrorMessage: null,
       updatedAt: null,
     });
-    assert.equal(step, "hardware");
+    assert.equal(step, "llm_intro");
   });
 
   it("READY con llmConfigured → done", () => {

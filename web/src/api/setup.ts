@@ -170,6 +170,30 @@ export async function selectIntelligenceConnection(
   return json;
 }
 
+export async function updateIntelligenceConnectionModel(
+  base: string,
+  token: string,
+  connectionId: string,
+  modelId: string,
+): Promise<IntelligenceConnectionDto> {
+  const res = await fetch(`${base}/v1/setup/intelligence/model`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ connectionId, modelId }),
+  });
+  const json = (await res.json()) as {
+    connection?: IntelligenceConnectionDto;
+    error?: { code: string; message: string };
+  };
+  if (!res.ok) {
+    throw new Error(json.error?.message || `setup_model_${res.status}`);
+  }
+  if (!json.connection) {
+    throw new Error("setup_model_empty");
+  }
+  return json.connection;
+}
+
 export async function verifySetup(
   base: string,
   token: string,

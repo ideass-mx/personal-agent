@@ -395,7 +395,7 @@ describe("setup API client", () => {
 });
 
 describe("onboarding intelligence UX (PHASE 62/63)", () => {
-  it("initial LLM step is three modes; local install is a follow-up", () => {
+  it("onboarding offers Local + Cloud; BYOK under Cloud", () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(
       path.join(here, "../src/features/setup/OnboardingWizard.tsx"),
@@ -403,18 +403,19 @@ describe("onboarding intelligence UX (PHASE 62/63)", () => {
     );
     const app = readFileSync(path.join(here, "../src/App.tsx"), "utf8");
     assert.match(src, /🔒 Local/);
-    assert.match(src, /☁️ Personal Agent Cloud/);
-    assert.match(src, /🔑 Mi proveedor/);
+    assert.match(src, /☁️ Cloud/);
     assert.match(src, /llmIntroPanel/);
-    assert.match(src, /onChooseMode\("external"\)/);
-    assert.match(src, /Elegir otra inteligencia/);
-    assert.doesNotMatch(src, /Configuración avanzada/);
-    assert.doesNotMatch(src, /Tu agente está listo para instalarse/);
-    assert.match(src, /initialStep = "llm_intro"/);
-    assert.match(app, /initialStep="llm_intro"/);
+    assert.match(src, /¿Cómo quieres que piense tu agente\?/);
+    assert.match(src, /onChooseMode\("cloud"\)/);
+    assert.match(src, /Personal Agent Cloud/);
+    assert.match(src, /data-provider="personal-agent-cloud"/);
+    assert.doesNotMatch(src, /🔑 Mi proveedor/);
+    assert.doesNotMatch(src, /Otras opciones/);
     assert.match(src, /provider-card-grid/);
     assert.match(src, /ProviderIcon/);
     assert.match(src, /isPrimaryByokProvider/);
+    assert.match(src, /initialStep = "llm_intro"/);
+    assert.match(app, /initialStep="llm_intro"/);
     assert.doesNotMatch(src, /intel-provider-card/);
     assert.doesNotMatch(src, /id: "groq"/);
     assert.doesNotMatch(src, /openai-compatible/);

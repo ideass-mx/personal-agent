@@ -37,6 +37,8 @@ export const UserMessage = z.object({
   type: z.literal("user_message"),
   text: z.string().min(1),
   conversationId: z.string().optional(),
+  /** Preferencia de inteligencia solo para este hilo (no cambia la global). */
+  intelligenceConnectionId: z.string().min(1).optional(),
 });
 
 export const ConfirmResponseMessage = z.object({

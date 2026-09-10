@@ -6,6 +6,7 @@ import {
   createLocalModelManager,
   createLocalProvider,
   detectHardware,
+  getLocalModelEntry,
   isLocalLlmConfigured,
   readLlmPreference,
   type LocalLLMRuntime,
@@ -138,6 +139,40 @@ export function selectIntelligenceConnection(connectionId: string): LLMConnectio
   cfg.selectedConnectionId = found.id;
   writeIntelligenceConfig(cfg);
   return found;
+}
+
+/**
+ * Cambia el modelo de una conexión. Personal Agent Cloud no permite
+ * elección de modelo (lo gestiona el producto).
+ */
+export function updateIntelligenceConnectionModel(
+  connectionId: string,
+  modelId: string,
+): LLMConnection {
+  const mid = modelId.trim();
+  if (!mid) throw new Error("model_required");
+  const cfg = readIntelligenceConfig();
+  const found = cfg.connections.find((c) => c.id === connectionId);
+  if (!found) throw new Error("connection_not_found");
+  if (found.mode === "personal-agent-cloud") {
+    throw new Error("cloud_model_managed");
+  }
+  if (found.mode === "local") {
+    const entry = getLocalModelEntry(mid);
+    if (!entry) throw new Error("model_not_in_catalog");
+    const manager = createLocalModelManager();
+    if (!manager.isInstalled(mid)) throw new Error("model_not_installed");
+    manager.setActive(mid);
+    found.modelId = mid;
+    found.displayName = entry.displayName;
+  } else {
+    if (!hasProviderApiKeyConfigured(found.provider)) {
+      throw new Error("credential_required");
+    }
+    found.modelId = mid;
+  }
+  writeIntelligenceConfig(cfg);
+  return { ...found };
 }
 
 export async function upsertExternalConnection(input: {
@@ -541,7 +576,9 @@ export function createIntelligenceRouterProvider(input: {
   return {
     id: "intelligence-router",
     async *stream(request: LLMRequest) {
-      const connection = getIntelligenceConnection();
+      const connection = getIntelligenceConnection(
+        request.intelligenceConnectionId,
+      );
       if (!connection) {
         throw new AgentDiagnosticError({
           message: "intelligence_not_configured",

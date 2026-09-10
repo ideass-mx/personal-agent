@@ -90,8 +90,8 @@ export function OnboardingWizard({
     cpuCores: number;
   } | null>(null);
   const [cloudPhase, setCloudPhase] = useState(0);
-  /** Subvista de configuración avanzada: modos vs lista BYOK. */
-  const [llmIntroPanel, setLlmIntroPanel] = useState<"modes" | "byok">("modes");
+  /** Subvista: modos Local/Cloud, o panel Cloud (PA Cloud + otras). */
+  const [llmIntroPanel, setLlmIntroPanel] = useState<"modes" | "cloud">("modes");
   const [installUi, setInstallUi] = useState<InstallUiState>({
     phase: "preparing",
     displayName: "Qwen3 4B",
@@ -374,7 +374,7 @@ export function OnboardingWizard({
   }
 
   function onSkipLocalModel() {
-    // Volver a elegir Local / Cloud / Mi proveedor.
+    // Volver a elegir Local / Cloud.
     setLlmIntroPanel("modes");
     setStep("llm_intro");
     void loadProviders();
@@ -384,7 +384,7 @@ export function OnboardingWizard({
     const s = await refresh();
     if (s && isLlmConfigured(s)) return true;
     setErr(
-      "Tu agente necesita una inteligencia conectada. Elige Local, Cloud o tu propio proveedor.",
+      "Tu agente necesita una inteligencia conectada. Elige Local o Cloud.",
     );
     setLlmIntroPanel("modes");
     setStep("llm_intro");
@@ -398,17 +398,13 @@ export function OnboardingWizard({
     await loadProviders();
   }
 
-  function onChooseMode(mode: "local" | "personal-agent-cloud" | "external") {
+  function onChooseMode(mode: "local" | "cloud") {
     setErr(null);
     if (mode === "local") {
       onChooseProvider("local");
       return;
     }
-    if (mode === "personal-agent-cloud") {
-      onChooseProvider("personal-agent-cloud");
-      return;
-    }
-    setLlmIntroPanel("byok");
+    setLlmIntroPanel("cloud");
   }
 
   function onChooseProvider(id: string) {
@@ -902,10 +898,16 @@ export function OnboardingWizard({
         (p.mode === "external" || !p.mode),
     );
 
-    if (llmIntroPanel === "byok") {
+    if (llmIntroPanel === "cloud") {
+      const cloudSelectable = Boolean(
+        cloudP && isProviderSelectable(cloudP),
+      );
       return (
         <div className="setup-center">
-          <div className="panel setup-panel-compact" style={{ width: "min(460px, 100%)" }}>
+          <div
+            className="panel setup-panel-compact"
+            style={{ width: "min(460px, 100%)" }}
+          >
             <button
               type="button"
               className="btn btn-ghost"
@@ -914,11 +916,40 @@ export function OnboardingWizard({
             >
               ← Volver
             </button>
-            <h1 className="setup-h-compact">Conecta tu proveedor</h1>
+            <h1 className="setup-h-compact">Cloud</h1>
             <p className="lead setup-lead-compact">
-              La clave se guarda solo en este equipo.
+              Elige Personal Agent Cloud o tu propia cuenta.
             </p>
+
             <ul className="provider-card-grid" role="list">
+              <li role="listitem">
+                <button
+                  type="button"
+                  className="provider-feature-card provider-feature-card--featured"
+                  disabled={busy || !cloudSelectable}
+                  onClick={() => onChooseProvider("personal-agent-cloud")}
+                  aria-label="Conectar Personal Agent Cloud"
+                  data-provider="personal-agent-cloud"
+                >
+                  <span
+                    className="provider-icon provider-icon--cloud"
+                    aria-hidden="true"
+                  >
+                    ☁️
+                  </span>
+                  <strong>Personal Agent Cloud</strong>
+                  <span className="muted">
+                    {cloudSelectable
+                      ? "Nuestra nube · Sin API key"
+                      : cloudP
+                        ? providerComingSoonLabel(cloudP)
+                        : "Próximamente"}
+                  </span>
+                  <span className="provider-feature-cta">
+                    {cloudSelectable ? "Conectar" : "Pronto"}
+                  </span>
+                </button>
+              </li>
               {byokList.map((p) => {
                 const selectable = isProviderSelectable(p);
                 const title = providerCardTitle(p.id, p.name);
@@ -932,7 +963,7 @@ export function OnboardingWizard({
                       aria-label={`Conectar ${title}`}
                       data-provider={p.id}
                     >
-                      <ProviderIcon provider={p.id} size={48} />
+                      <ProviderIcon provider={p.id} size={44} />
                       <strong>{title}</strong>
                       <span className="muted">
                         {selectable
@@ -964,12 +995,15 @@ export function OnboardingWizard({
           >
             ← Volver
           </button>
-          <h1>¿Cómo quieres ejecutar la inteligencia?</h1>
+          <h1>¿Cómo quieres que piense tu agente?</h1>
           <p className="lead">
-            Elige Local, Personal Agent Cloud o tu propio proveedor. Local
-            depende de los recursos de este equipo.
+            Puedes cambiarlo cuando quieras. No tienes que decidirlo todo ahora.
           </p>
-          <div className="intel-choose" role="group" aria-label="Modos de inteligencia">
+          <div
+            className="intel-choose"
+            role="group"
+            aria-label="Modos de inteligencia"
+          >
             <button
               type="button"
               className="intel-mode-card"
@@ -978,7 +1012,7 @@ export function OnboardingWizard({
             >
               <strong>🔒 Local</strong>
               <span className="muted">
-                Ejecuta el modelo en este equipo.
+                Tu agente piensa en tu equipo. Privado, sin depender de la nube.
                 {localP && !isProviderSelectable(localP)
                   ? ` · ${providerComingSoonLabel(localP)}`
                   : ""}
@@ -987,26 +1021,12 @@ export function OnboardingWizard({
             <button
               type="button"
               className="intel-mode-card"
-              disabled={busy || !(cloudP && isProviderSelectable(cloudP))}
-              onClick={() => onChooseMode("personal-agent-cloud")}
-            >
-              <strong>☁️ Personal Agent Cloud</strong>
-              <span className="muted">
-                Modelos de Personal Agent · Sin API key.
-                {cloudP && !isProviderSelectable(cloudP)
-                  ? ` · ${providerComingSoonLabel(cloudP)}`
-                  : ""}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="intel-mode-card"
               disabled={busy}
-              onClick={() => onChooseMode("external")}
+              onClick={() => onChooseMode("cloud")}
             >
-              <strong>🔑 Mi proveedor</strong>
+              <strong>☁️ Cloud</strong>
               <span className="muted">
-                OpenAI, Anthropic, xAI / Grok u OpenRouter con tu cuenta.
+                Tu agente piensa en la nube. Personal Agent Cloud u otra cuenta.
               </span>
             </button>
           </div>
@@ -1019,7 +1039,11 @@ export function OnboardingWizard({
   if (step === "llm_key") {
     const label =
       providerList.find((p) => p.id === selectedProvider)?.name || "IA";
-    const modelOpts = byokModelOptions(selectedProvider);
+    const recommended =
+      byokModelOptions(selectedProvider)[0]?.label.replace(
+        /\s*\(recomendado\)\s*$/i,
+        "",
+      ) || "el modelo recomendado";
     return (
       <div className="setup-center">
         <div className="panel" style={{ width: "min(440px, 100%)" }}>
@@ -1028,7 +1052,7 @@ export function OnboardingWizard({
             className="btn btn-ghost"
             disabled={busy}
             onClick={() => {
-              setLlmIntroPanel("byok");
+              setLlmIntroPanel("cloud");
               setStep("llm_intro");
             }}
           >
@@ -1036,10 +1060,14 @@ export function OnboardingWizard({
           </button>
           <h1>Tu clave de acceso</h1>
           <p className="lead">
-            La clave autentica tu cuenta de {label}. El modelo es el que usará
-            el agente (puedes cambiarlo después en Inteligencia).
+            Pega tu clave de {label}. La guardamos solo en este equipo.
           </p>
-          <form onSubmit={(e) => void onSaveKey(e)}>
+          <form
+            onSubmit={(e) => {
+              setProviderModel(defaultByokModelId(selectedProvider));
+              void onSaveKey(e);
+            }}
+          >
             <label className="field">
               Clave de {label}
               <input
@@ -1052,22 +1080,9 @@ export function OnboardingWizard({
                 placeholder="Pega tu API key"
               />
             </label>
-            <label className="field">
-              Modelo
-              <select
-                value={providerModel}
-                onChange={(e) => setProviderModel(e.target.value)}
-                aria-label="Modelo del agente"
-              >
-                {modelOpts.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="muted" style={{ marginTop: -8, fontSize: 13 }}>
-              Por defecto usamos el modelo recomendado para {label}.
+            <p className="muted" style={{ fontSize: 13 }}>
+              Usaremos {recommended}. Puedes cambiar el modelo después en
+              Configuración → Inteligencia.
             </p>
             {err ? <p className="error">{err}</p> : null}
             <div className="actions">

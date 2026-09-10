@@ -12,10 +12,12 @@ import {
   createConversation,
   compareConversationsForSidebar,
   deleteConversation,
+  fetchConversationIntelligence,
   fetchHealth,
   fetchMessages,
   listConversations,
   patchConversationPinned,
+  putConversationIntelligence,
   resolveHttpBase,
 } from "../api/http";
 import { HubSocket, type ServerMsg } from "../websocket/HubSocket";
@@ -86,6 +88,9 @@ type AppState = {
   openSourcesPanel: (messageId: string) => void;
   closeSourcesPanel: () => void;
   sourcesPanelSources: AgentSource[];
+  /** Inteligencia elegida solo para la conversación activa. */
+  conversationIntelligenceId: string | null;
+  setConversationIntelligenceId: (connectionId: string | null) => void;
 };
 
 const Ctx = createContext<AppState | null>(null);
@@ -126,10 +131,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sourcesPanelMessageId, setSourcesPanelMessageId] = useState<
     string | null
   >(null);
+  const [conversationIntelligenceId, setConversationIntelligenceIdState] =
+    useState<string | null>(null);
   const socketRef = useRef<HubSocket | null>(null);
   const streamIdRef = useRef<string | null>(null);
   const activeRef = useRef<string | null>(null);
+  const conversationIntelRef = useRef<string | null>(null);
   activeRef.current = activeConversationId;
+  conversationIntelRef.current = conversationIntelligenceId;
 
   const refreshHealth = useCallback(async () => {
     if (!session) {
@@ -370,9 +379,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setNav("conversation");
       setBannerError(null);
       setSourcesPanelMessageId(null);
+      setConversationIntelligenceIdState(null);
       try {
         const base = resolveHttpBase(session);
-        const rows = await fetchMessages(base, session.token, id);
+        const [rows, intelId] = await Promise.all([
+          fetchMessages(base, session.token, id),
+          fetchConversationIntelligence(base, session.token, id),
+        ]);
+        setConversationIntelligenceIdState(intelId);
         setMessages(
           rows
             .filter((r) => r.role === "user" || r.role === "assistant")
@@ -391,6 +405,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     },
     [session],
+  );
+
+  const setConversationIntelligenceId = useCallback(
+    (connectionId: string | null) => {
+      setConversationIntelligenceIdState(connectionId);
+      if (!session || !activeConversationId) return;
+      const base = resolveHttpBase(session);
+      void putConversationIntelligence(
+        base,
+        session.token,
+        activeConversationId,
+        connectionId,
+      ).catch(() => undefined);
+    },
+    [session, activeConversationId],
   );
 
   const openSourcesPanel = useCallback((messageId: string) => {
@@ -418,11 +447,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setActive(created.id);
       setMessages([]);
       setSourcesPanelMessageId(null);
+      setConversationIntelligenceIdState(null);
       setNav("conversation");
     } catch {
       setActive(null);
       setMessages([]);
       setSourcesPanelMessageId(null);
+      setConversationIntelligenceIdState(null);
       setNav("conversation");
     }
   }, [session]);
@@ -490,6 +521,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       socketRef.current.sendUserMessage(
         text,
         activeConversationId ?? undefined,
+        conversationIntelRef.current ?? undefined,
       );
     } catch {
       setBusy(false);
@@ -564,6 +596,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openSourcesPanel,
       closeSourcesPanel,
       sourcesPanelSources,
+      conversationIntelligenceId,
+      setConversationIntelligenceId,
     }),
     [
       session,
@@ -600,6 +634,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       openSourcesPanel,
       closeSourcesPanel,
       sourcesPanelSources,
+      conversationIntelligenceId,
+      setConversationIntelligenceId,
     ],
   );
 

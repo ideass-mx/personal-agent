@@ -21,6 +21,7 @@ export {
   readIntelligenceConfig,
   writeIntelligenceConfig,
   selectIntelligenceConnection,
+  updateIntelligenceConnectionModel,
   upsertExternalConnection,
   disconnectExternalProvider,
   localAvailabilitySummary,

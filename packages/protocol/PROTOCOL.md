@@ -70,11 +70,16 @@ aprobación. La private key **nunca** se envía.
 
 ### `user_message`
 ```json
-{ "type": "user_message", "text": "hola, preséntate", "conversationId": "c_abc123" }
+{ "type": "user_message", "text": "hola, preséntate", "conversationId": "c_abc123", "intelligenceConnectionId": "conn_ext_anthropic" }
 ```
 `conversationId` es opcional: si se omite, el Hub crea una conversación nueva
 y devuelve su id en `assistant_done`. El cliente debe reutilizarlo en los
 mensajes siguientes para mantener el hilo.
+
+`intelligenceConnectionId` es opcional: elige qué inteligencia usa **esta
+conversación** para el turno (y queda asociada al hilo). No cambia la
+inteligencia predeterminada global del dispositivo. Si se omite, se usa la
+preferencia ya guardada del hilo o, en su defecto, la predeterminada.
 
 ### `confirm_response`
 ```json

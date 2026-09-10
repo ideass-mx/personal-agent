@@ -15,7 +15,12 @@ export function modeTitle(mode: string, displayName?: string): string {
 }
 
 export function humanModelLabel(provider: string, modelId: string): string {
-  if (provider === "local") return modelId === "qwen3-4b" ? "Qwen3 4B" : modelId;
+  if (provider === "local") {
+    if (modelId === "qwen3-4b") return "Qwen3 4B";
+    if (modelId === "qwen3-1.7b") return "Qwen3 1.7B";
+    if (modelId === "qwen3-0.6b") return "Qwen3 0.6B";
+    return modelId;
+  }
   if (provider === "personal-agent-cloud") return "Personal Agent";
   if (provider === "xai") {
     if (modelId === "grok-4.6" || modelId.startsWith("grok-4.6")) return "Grok 4.6";

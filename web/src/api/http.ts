@@ -167,6 +167,42 @@ export async function fetchMessages(
   }>;
 }
 
+export async function fetchConversationIntelligence(
+  base: string,
+  token: string,
+  conversationId: string,
+): Promise<string | null> {
+  const res = await fetch(
+    `${base}/conversations/${encodeURIComponent(conversationId)}/intelligence`,
+    { headers: authHeaders(token) },
+  );
+  if (!res.ok) return null;
+  const data = (await res.json()) as { connectionId?: string | null };
+  return typeof data.connectionId === "string" && data.connectionId
+    ? data.connectionId
+    : null;
+}
+
+export async function putConversationIntelligence(
+  base: string,
+  token: string,
+  conversationId: string,
+  connectionId: string | null,
+): Promise<void> {
+  const res = await fetch(
+    `${base}/conversations/${encodeURIComponent(conversationId)}/intelligence`,
+    {
+      method: "PUT",
+      headers: {
+        ...authHeaders(token),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ connectionId }),
+    },
+  );
+  if (!res.ok) throw new Error(`conversation_intelligence_${res.status}`);
+}
+
 export type WorkspaceRow = {
   id: string;
   name: string;
