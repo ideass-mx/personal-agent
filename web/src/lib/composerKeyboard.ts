@@ -20,7 +20,10 @@ export function composerEnterShouldSend(input: {
 
 /**
  * Autosize real vía scrollHeight.
- * Crece al escribir y se reduce al borrar; overflow interno solo tras max-height.
+ * Crece al escribir/pegar y se reduce al borrar; overflow interno solo tras max-height.
+ *
+ * Importante: resetear a 0px (no solo "auto") para que flex/layout no congelen
+ * scrollHeight en el alto anterior.
  */
 export function applyComposerAutosize(
   el: HTMLTextAreaElement,
@@ -29,7 +32,9 @@ export function applyComposerAutosize(
   const minPx = opts.minPx ?? COMPOSER_TEXTAREA_MIN_PX;
   const maxPx = opts.maxPx ?? COMPOSER_TEXTAREA_MAX_PX;
   el.style.overflowY = "hidden";
-  el.style.height = "auto";
+  el.style.height = "0px";
+  // Forzar reflow antes de leer scrollHeight.
+  void el.offsetHeight;
   const contentPx = el.scrollHeight;
   const heightPx = Math.min(Math.max(contentPx, minPx), maxPx);
   const overflowY: "hidden" | "auto" = contentPx > maxPx ? "auto" : "hidden";

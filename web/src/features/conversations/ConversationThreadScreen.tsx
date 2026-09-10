@@ -83,6 +83,11 @@ export function ConversationScreen() {
     setComposerTall(result.heightPx > COMPOSER_TEXTAREA_MIN_PX + 4);
   }, [draft, isBlank]);
 
+  function syncComposerHeight(el: HTMLTextAreaElement) {
+    const result = applyComposerAutosize(el);
+    setComposerTall(result.heightPx > COMPOSER_TEXTAREA_MIN_PX + 4);
+  }
+
   useEffect(() => {
     if (wsStatus !== "authenticated") return;
     const id = window.setTimeout(() => {
@@ -119,6 +124,7 @@ export function ConversationScreen() {
           value={draft}
           rows={1}
           onChange={(e) => setDraft(e.target.value)}
+          onInput={(e) => syncComposerHeight(e.currentTarget)}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
             const coarse =

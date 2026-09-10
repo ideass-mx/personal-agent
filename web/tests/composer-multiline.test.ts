@@ -69,9 +69,9 @@ describe("PHASE 58.6 composer multiline helpers", () => {
     assert.equal(result.heightPx, COMPOSER_TEXTAREA_MIN_PX);
     assert.equal(result.overflowY, "hidden");
     assert.equal(el.style.height, "28px");
-    // height=auto debe poder asignarse (medición previa al clamp).
-    el.style.height = "auto";
-    assert.equal(el.style.height, "auto");
+    // Reset de medición usa 0px (no solo auto) para no congelar scrollHeight.
+    el.style.height = "0px";
+    assert.equal(el.style.height, "0px");
   });
 
   it("autosize mid grows between min and max", () => {
