@@ -18,6 +18,41 @@ export type IntelligenceConnectionDto = {
   credentialLabel?: string | null;
   configStatus?: "active" | "configured" | "not_configured";
   active?: boolean;
+  modelSelection?: "recommended" | "specific";
+  modelStatus?:
+    | "available"
+    | "unavailable"
+    | "not_discovered"
+    | "discovery_unsupported";
+  recommendedModelId?: string | null;
+  supportsModelDiscovery?: boolean;
+};
+
+export type ProviderModelDto = {
+  id: string;
+  name: string;
+  recommended?: boolean;
+  capabilities?: {
+    chat?: boolean;
+    vision?: boolean;
+    tools?: boolean;
+    structuredOutput?: boolean;
+  };
+  contextWindow?: number;
+};
+
+export type ProviderModelsDto = {
+  ok?: boolean;
+  provider: string;
+  discoveryStatus: string;
+  authStatus?: string;
+  supportsModelDiscovery: boolean;
+  recommendedModelId: string | null;
+  modelStatus?: string | null;
+  modelSelection?: string | null;
+  modelId?: string | null;
+  models: ProviderModelDto[];
+  message?: string;
 };
 
 export type IntelligenceStatusDto = {
@@ -129,8 +164,14 @@ export async function transitionSetup(
 export async function configureSetupLlm(
   base: string,
   token: string,
-  opts: { provider: string; credential?: string; modelId?: string; baseUrl?: string },
-): Promise<SetupStatusDto> {
+  opts: {
+    provider: string;
+    credential?: string;
+    modelId?: string;
+    baseUrl?: string;
+    modelSelection?: "recommended" | "specific";
+  },
+): Promise<SetupStatusDto & { discovery?: ProviderModelsDto }> {
   const res = await fetch(`${base}/v1/setup/llm`, {
     method: "POST",
     headers: authHeaders(token),
@@ -140,10 +181,12 @@ export async function configureSetupLlm(
       apiKey: opts.credential,
       modelId: opts.modelId,
       baseUrl: opts.baseUrl,
+      modelSelection: opts.modelSelection,
     }),
   });
   const json = (await res.json()) as SetupStatusDto & {
     error?: { code: string; message: string };
+    discovery?: ProviderModelsDto;
   };
   if (!res.ok) {
     throw new Error(json.error?.message || `setup_llm_${res.status}`);
@@ -301,7 +344,16 @@ export async function testProviderConnection(
   base: string,
   token: string,
   providerId: string,
-): Promise<{ ok: true; message: string }> {
+): Promise<{
+  ok: true;
+  message: string;
+  discovery?: {
+    status: string;
+    modelStatus?: string;
+    recommendedModelId?: string | null;
+    models?: ProviderModelDto[];
+  };
+}> {
   const res = await fetch(
     `${base}/v1/setup/providers/${encodeURIComponent(providerId)}/test`,
     {
@@ -313,13 +365,48 @@ export async function testProviderConnection(
   const json = (await res.json()) as {
     ok?: boolean;
     message?: string;
+    connectivity?: {
+      discovery?: {
+        status: string;
+        modelStatus?: string;
+        recommendedModelId?: string | null;
+        models?: ProviderModelDto[];
+      };
+    };
     error?: { message?: string };
   };
   if (!res.ok) {
     throw new Error(json.error?.message || `provider_test_${res.status}`);
   }
-  return { ok: true, message: json.message || "La conexión funciona." };
+  return {
+    ok: true,
+    message: json.message || "La conexión funciona.",
+    discovery: json.connectivity?.discovery,
+  };
 }
+
+export async function fetchProviderModels(
+  base: string,
+  token: string,
+  providerId: string,
+  opts?: { refresh?: boolean },
+): Promise<ProviderModelsDto> {
+  const q = opts?.refresh ? "?refresh=1" : "";
+  const res = await fetch(
+    `${base}/v1/setup/providers/${encodeURIComponent(providerId)}/models${q}`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+  const json = (await res.json()) as ProviderModelsDto & {
+    error?: { message?: string };
+  };
+  if (!res.ok) {
+    throw new Error(json.error?.message || `provider_models_${res.status}`);
+  }
+  return json;
+}
+
 
 export type PairingCreateResponse = {
   ok: true;

@@ -19,7 +19,16 @@ import {
   writePersistedProviderApiKey,
 } from "../setup/llm-key.ts";
 import { assertUrlSafeForFetch } from "../resources/ssrf.ts";
+import {
+  isPersonalAgentCloudModel,
+  resolvePersonalAgentCloudModelId,
+} from "./cloud-models.ts";
 import { createAnthropicProvider } from "./anthropic.ts";
+export {
+  PERSONAL_AGENT_CLOUD_MODELS,
+  resolvePersonalAgentCloudModelId,
+  isPersonalAgentCloudModel,
+} from "./cloud-models.ts";
 import { createOpenAiCompatibleProvider } from "./openai-compatible.ts";
 import {
   createPersonalAgentCloudProvider,
@@ -32,6 +41,15 @@ import type { SqliteDiagnosticsStore } from "../diagnostics/store.ts";
 import { AgentDiagnosticError } from "../diagnostics/error.ts";
 import { resolveProductDataRoot } from "../local-llm/storage.ts";
 import { CloudAuthError, userMessageForCloudAuth } from "./cloud-auth/types.ts";
+import type { ModelSelectionMode } from "./model-discovery.ts";
+import {
+  clearProviderModelsCache,
+  getCachedProviderModels,
+  modelAvailabilityForConnection,
+  type ModelAvailabilityStatus,
+  type ModelDiscoveryResult,
+  type ProviderModel,
+} from "./model-discovery.ts";
 
 export type IntelligenceMode = "local" | "personal-agent-cloud" | "external";
 export type IntelligenceProviderId =
@@ -53,6 +71,11 @@ export type LLMConnection = {
   displayName: string;
   credentialRef?: string;
   baseUrl?: string;
+  /**
+   * recommended = Personal Agent puede actualizar el modelo tras discovery.
+   * specific = el usuario fijó un modelId; no se cambia en silencio.
+   */
+  modelSelection?: ModelSelectionMode;
 };
 
 type IntelligenceConfig = {
@@ -74,25 +97,9 @@ const DEFAULT_CONNECTIONS: LLMConnection[] = [
     provider: "personal-agent-cloud",
     modelId: "claude-sonnet-4-6",
     displayName: "Personal Agent Cloud",
+    modelSelection: "recommended",
   },
 ];
-
-/** Modelos Claude permitidos en Personal Agent Cloud (misma familia que BYOK Anthropic). */
-export const PERSONAL_AGENT_CLOUD_MODELS = [
-  "claude-sonnet-4-6",
-  "claude-haiku-4-5-20251001",
-] as const;
-
-export function resolvePersonalAgentCloudModelId(modelId: string): string {
-  const mid = modelId.trim();
-  if (!mid || mid === "pa-cloud-default") return "claude-sonnet-4-6";
-  return mid;
-}
-
-export function isPersonalAgentCloudModel(modelId: string): boolean {
-  const mid = resolvePersonalAgentCloudModelId(modelId);
-  return (PERSONAL_AGENT_CLOUD_MODELS as readonly string[]).includes(mid);
-}
 
 function intelligenceConfigPath(): string {
   return path.join(resolveProductDataRoot(), "config", "intelligence.json");
@@ -161,10 +168,12 @@ export function selectIntelligenceConnection(connectionId: string): LLMConnectio
 
 /**
  * Cambia el modelo de una conexión (Local, Cloud Claude o BYOK).
+ * En BYOK/Cloud marca selección explícita (specific).
  */
 export function updateIntelligenceConnectionModel(
   connectionId: string,
   modelId: string,
+  opts?: { selection?: ModelSelectionMode },
 ): LLMConnection {
   const mid = modelId.trim();
   if (!mid) throw new Error("model_required");
@@ -178,6 +187,7 @@ export function updateIntelligenceConnectionModel(
     }
     found.modelId = midCloud;
     found.displayName = "Personal Agent Cloud";
+    found.modelSelection = opts?.selection ?? "specific";
   } else if (found.mode === "local") {
     const entry = getLocalModelEntry(mid);
     if (!entry) throw new Error("model_not_in_catalog");
@@ -191,6 +201,7 @@ export function updateIntelligenceConnectionModel(
       throw new Error("credential_required");
     }
     found.modelId = mid;
+    found.modelSelection = opts?.selection ?? "specific";
   }
   writeIntelligenceConfig(cfg);
   return { ...found };
@@ -198,13 +209,13 @@ export function updateIntelligenceConnectionModel(
 
 export async function upsertExternalConnection(input: {
   provider: Exclude<IntelligenceProviderId, "local" | "personal-agent-cloud">;
-  modelId: string;
+  modelId?: string;
   apiKey: string;
   baseUrl?: string;
+  modelSelection?: ModelSelectionMode;
 }): Promise<LLMConnection> {
   const provider = input.provider;
-  const modelId = input.modelId.trim();
-  if (!modelId) throw new Error("model_required");
+  const modelId = (input.modelId || "").trim();
   const apiKey = input.apiKey.trim();
   if (apiKey.length < 10) throw new Error("invalid_credential");
   const cfg = readIntelligenceConfig();
@@ -228,11 +239,15 @@ export async function upsertExternalConnection(input: {
     if (!safe.ok) throw new Error("base_url_unsafe");
   }
   writePersistedProviderApiKey(provider, apiKey);
+  clearProviderModelsCache(provider);
+  const selection: ModelSelectionMode =
+    input.modelSelection ||
+    (modelId ? "specific" : "recommended");
   const connection: LLMConnection = {
     id: connId,
     mode: "external",
     provider,
-    modelId,
+    modelId: modelId || "__pending_discovery__",
     displayName:
       provider === "openai-compatible"
         ? "Compatible con OpenAI"
@@ -248,15 +263,52 @@ export async function upsertExternalConnection(input: {
                   ? "OpenRouter"
                   : provider === "groq"
                     ? "Groq"
-                    : provider.toUpperCase(),
+                    : String(provider),
     credentialRef: `cred_ref_${provider}`,
     baseUrl,
+    modelSelection: selection,
   };
   const others = cfg.connections.filter((c) => c.id !== connId);
   cfg.connections = [...others, connection];
   cfg.selectedConnectionId = connId;
   writeIntelligenceConfig(cfg);
   return connection;
+}
+
+/**
+ * Aplica el resultado de discovery a la conexión persistida.
+ * - selection recommended → actualiza modelId al recomendado
+ * - selection specific + modelo ausente → no cambia modelId (queda unavailable)
+ */
+export function applyModelDiscoveryToConnection(
+  connectionId: string,
+  discovery: ModelDiscoveryResult,
+): LLMConnection {
+  const cfg = readIntelligenceConfig();
+  const found = cfg.connections.find((c) => c.id === connectionId);
+  if (!found) throw new Error("connection_not_found");
+  const selection = found.modelSelection || "recommended";
+  if (discovery.discoveryStatus === "ok") {
+    if (selection === "recommended" && discovery.recommendedModelId) {
+      found.modelId = discovery.recommendedModelId;
+      found.modelSelection = "recommended";
+    } else if (
+      selection === "recommended" &&
+      !discovery.recommendedModelId &&
+      discovery.models[0]?.id
+    ) {
+      found.modelId = discovery.models[0].id;
+      found.modelSelection = "recommended";
+    } else if (
+      found.modelId === "__pending_discovery__" &&
+      discovery.recommendedModelId
+    ) {
+      found.modelId = discovery.recommendedModelId;
+      found.modelSelection = "recommended";
+    }
+  }
+  writeIntelligenceConfig(cfg);
+  return { ...found };
 }
 
 export type ConnectionConfigStatus =
@@ -277,6 +329,10 @@ export type IntelligenceConnectionView = {
   credentialLabel: string | null;
   configStatus: ConnectionConfigStatus;
   active: boolean;
+  modelSelection?: ModelSelectionMode;
+  modelStatus?: ModelAvailabilityStatus;
+  recommendedModelId?: string | null;
+  supportsModelDiscovery?: boolean;
 };
 
 export type IntelligenceStatusSnapshot = {
@@ -327,11 +383,62 @@ export function toIntelligenceConnectionView(
   let configStatus: ConnectionConfigStatus = "not_configured";
   if (active && configured) configStatus = "active";
   else if (configured) configStatus = "configured";
+  const supportsDiscovery =
+    c.provider !== "local" && c.provider !== "openai-compatible"
+      ? true
+      : c.provider === "openai-compatible"
+        ? Boolean(c.baseUrl)
+        : false;
+  // Local uses installed catalog, not remote discovery.
+  const cache =
+    configured && supportsDiscovery
+      ? getCachedProviderModels(c.provider, { maxAgeMs: 24 * 60 * 60 * 1000 })
+      : null;
+  let modelStatus: ModelAvailabilityStatus | undefined;
+  let recommendedModelId: string | null | undefined;
+  if (c.provider === "local") {
+    modelStatus = "discovery_unsupported";
+  } else if (c.provider === "personal-agent-cloud") {
+    const cloudDisc = {
+      models: [] as ProviderModel[],
+      discoveryStatus: "ok" as const,
+      authStatus: "ok" as const,
+      recommendedModelId: undefined as string | undefined,
+    };
+    // Prefer cache; else treat allowlisted cloud models as available offline.
+    if (cache) {
+      modelStatus = modelAvailabilityForConnection(c, {
+        models: cache.models,
+        recommendedModelId: cache.recommendedModelId,
+        discoveryStatus: cache.discoveryStatus,
+        authStatus: "ok",
+      });
+      recommendedModelId = cache.recommendedModelId || null;
+    } else {
+      modelStatus = isPersonalAgentCloudModel(c.modelId)
+        ? "available"
+        : "unavailable";
+      recommendedModelId = "claude-sonnet-4-6";
+      void cloudDisc;
+    }
+  } else if (!configured) {
+    modelStatus = "not_discovered";
+  } else if (cache) {
+    modelStatus = modelAvailabilityForConnection(c, {
+      models: cache.models,
+      recommendedModelId: cache.recommendedModelId,
+      discoveryStatus: cache.discoveryStatus,
+      authStatus: "ok",
+    });
+    recommendedModelId = cache.recommendedModelId || null;
+  } else {
+    modelStatus = "not_discovered";
+  }
   return {
     id: c.id,
     mode: c.mode,
     provider: c.provider,
-    modelId: c.modelId,
+    modelId: c.modelId === "__pending_discovery__" ? "" : c.modelId,
     displayName: humanDisplayName(c),
     baseUrl: c.baseUrl,
     credentialConfigured: configured && c.mode === "external",
@@ -339,6 +446,10 @@ export function toIntelligenceConnectionView(
       configured && c.mode === "external" ? "API key configurada" : null,
     configStatus,
     active,
+    modelSelection: c.modelSelection || (c.mode === "external" ? "recommended" : undefined),
+    modelStatus,
+    recommendedModelId,
+    supportsModelDiscovery: c.provider === "local" ? false : supportsDiscovery || c.provider === "personal-agent-cloud",
   };
 }
 
@@ -359,7 +470,7 @@ export function ensureExternalProviderStubs(): LLMConnection[] {
     { provider: "xai", modelId: "grok-4.6", displayName: "xAI / Grok" },
     {
       provider: "gemini",
-      modelId: "gemini-2.5-flash",
+      modelId: "gemini-3.6-flash",
       displayName: "Gemini",
     },
     {
@@ -456,6 +567,7 @@ export function disconnectExternalProvider(
     throw new Error("use_dedicated_disconnect");
   }
   clearPersistedProviderApiKey(providerId);
+  clearProviderModelsCache(providerId);
   const cfg = readIntelligenceConfig();
   const connId = `conn_ext_${providerId}`;
   const idx = cfg.connections.findIndex((c) => c.id === connId);

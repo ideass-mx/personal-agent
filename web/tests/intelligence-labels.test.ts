@@ -32,8 +32,8 @@ describe("PHASE 63 intelligence labels", () => {
     assert.equal(modeTitle("external", "xAI / Grok"), "xAI / Grok");
     assert.equal(providerCardTitle("gemini"), "Gemini");
     assert.equal(
-      humanModelLabel("gemini", "gemini-2.5-flash"),
-      "Gemini 2.5 Flash",
+      humanModelLabel("gemini", "gemini-3.6-flash"),
+      "Gemini 3.6 Flash",
     );
   });
 });

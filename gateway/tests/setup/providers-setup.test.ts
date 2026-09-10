@@ -45,6 +45,40 @@ const { mountSetupHttp } = await import("../../src/http/setup-http.ts");
 
 const HUB = process.env.HUB_TOKEN!;
 
+/** Discovery inyectado: evita red en CI (PHASE 63.2). */
+async function mockDiscover(input: {
+  provider: string;
+}): Promise<{
+  models: Array<{ id: string; name?: string }>;
+  recommendedModelId?: string;
+  discoveryStatus: "ok";
+  authStatus: "ok";
+}> {
+  const byProvider: Record<string, string> = {
+    anthropic: "claude-sonnet-4-6",
+    openai: "gpt-4.1-mini",
+    xai: "grok-4.6",
+    gemini: "gemini-3.6-flash",
+    openrouter: "openai/gpt-4.1-mini",
+    groq: "llama-3.3-70b-versatile",
+  };
+  const id = byProvider[input.provider] || "default";
+  return {
+    models: [{ id, name: id }],
+    recommendedModelId: id,
+    discoveryStatus: "ok",
+    authStatus: "ok",
+  };
+}
+
+function mountTestSetup(app: import("hono").Hono, extra?: { verifyLlm?: any }) {
+  mountSetupHttp(app, {
+    hubToken: HUB,
+    discoverModels: mockDiscover,
+    ...extra,
+  });
+}
+
 after(() => {
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -94,7 +128,7 @@ describe("AGENT_READY without LLM / Tailscale / Android", () => {
 describe("GET /v1/setup/providers", () => {
   it("returns catalog + intelligence connections without secrets", async () => {
     const app = new Hono();
-    mountSetupHttp(app, { hubToken: HUB });
+    mountTestSetup(app);
     const res = await app.request("/v1/setup/providers", {
       headers: { Authorization: `Bearer ${HUB}` },
     });
@@ -127,7 +161,7 @@ describe("POST /v1/setup/llm", () => {
       updatedAt: new Date().toISOString(),
     });
     const app = new Hono();
-    mountSetupHttp(app, { hubToken: HUB });
+    mountTestSetup(app);
     const res = await app.request("/v1/setup/llm", {
       method: "POST",
       headers: {
@@ -157,7 +191,7 @@ describe("POST /v1/setup/llm", () => {
       updatedAt: new Date().toISOString(),
     });
     const app = new Hono();
-    mountSetupHttp(app, { hubToken: HUB });
+    mountTestSetup(app);
     const secret = "sk-ant-real-looking-key-abcdef";
     const res = await app.request("/v1/setup/llm", {
       method: "POST",
@@ -193,7 +227,7 @@ describe("POST /v1/setup/llm", () => {
       updatedAt: new Date().toISOString(),
     });
     const app = new Hono();
-    mountSetupHttp(app, { hubToken: HUB });
+    mountTestSetup(app);
     const res = await app.request("/v1/setup/llm", {
       method: "POST",
       headers: {
@@ -226,7 +260,7 @@ describe("POST /v1/setup/llm", () => {
     );
     clearCloudAuthClientCache();
     const app = new Hono();
-    mountSetupHttp(app, { hubToken: HUB });
+    mountTestSetup(app);
     const res = await app.request("/v1/setup/llm", {
       method: "POST",
       headers: {
@@ -257,8 +291,7 @@ describe("POST /v1/setup/verify", () => {
       updatedAt: new Date().toISOString(),
     });
     const app = new Hono();
-    mountSetupHttp(app, {
-      hubToken: HUB,
+    mountTestSetup(app, {
       verifyLlm: async () => ({
         ok: true,
         provider: "anthropic",
@@ -314,8 +347,7 @@ describe("POST /v1/setup/verify", () => {
       updatedAt: new Date().toISOString(),
     });
     const app = new Hono();
-    mountSetupHttp(app, {
-      hubToken: HUB,
+    mountTestSetup(app, {
       verifyLlm: async () => {
         throw new Error("upstream_boom");
       },
@@ -356,7 +388,7 @@ describe("POST /v1/setup/verify", () => {
       updatedAt: new Date().toISOString(),
     });
     const app = new Hono();
-    mountSetupHttp(app, { hubToken: HUB });
+    mountTestSetup(app);
     const res = await app.request("/v1/setup/verify", {
       method: "POST",
       headers: {

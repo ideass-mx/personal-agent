@@ -13,12 +13,14 @@ import {
   disconnectProvider,
   fetchCloudAuthStatus,
   fetchIntelligenceStatus,
+  fetchProviderModels,
   selectIntelligenceConnection,
   testProviderConnection,
   updateIntelligenceConnectionModel,
   type CloudAuthStatusDto,
   type IntelligenceConnectionDto,
   type IntelligenceStatusDto,
+  type ProviderModelDto,
 } from "../../api/setup";
 import { useApp } from "../../state/AppContext";
 import {
@@ -105,6 +107,15 @@ export function IntelligenceCenter() {
   const [byokConfigured, setByokConfigured] = useState(false);
   const [localModels, setLocalModels] = useState<LocalModelsDto | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [discoveredModels, setDiscoveredModels] = useState<ProviderModelDto[]>(
+    [],
+  );
+  const [recommendedModelId, setRecommendedModelId] = useState<string | null>(
+    null,
+  );
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelUnavailable, setModelUnavailable] = useState(false);
+
 
   const base = session ? resolveHttpBase(session) : "";
   const token = session?.token || "";
@@ -212,18 +223,42 @@ export function IntelligenceCenter() {
         setBusy(false);
         return;
       }
-      await configureSetupLlm(base, token, {
+      const wasNew = !byokConfigured;
+      const result = await configureSetupLlm(base, token, {
         provider: byokProvider,
         ...(key.length >= 16 ? { credential: key } : {}),
-        modelId: modelId.trim(),
+        ...(byokConfigured && modelId.trim()
+          ? { modelId: modelId.trim(), modelSelection: "specific" }
+          : { modelSelection: "recommended" }),
         baseUrl: baseUrl.trim() || undefined,
       });
       setApiKey("");
+      const disc = result.discovery;
+      if (disc?.models?.length) {
+        setDiscoveredModels(disc.models);
+        setRecommendedModelId(disc.recommendedModelId || null);
+        const next =
+          disc.recommendedModelId ||
+          disc.models.find((m) => m.recommended)?.id ||
+          disc.models[0]?.id ||
+          "";
+        if (next) setModelId(next);
+        setModelUnavailable(false);
+      }
       setOkMsg(
-        byokConfigured ? "Modelo actualizado." : "Proveedor conectado.",
+        wasNew
+          ? "Proveedor conectado. Personal Agent eligió un modelo disponible."
+          : "Modelo actualizado.",
       );
-      setPanel("overview");
+      setByokConfigured(true);
       await refresh();
+      if (wasNew) {
+        try {
+          await loadProviderModels(byokProvider, true);
+        } catch {
+          /* discovery opcional tras conectar */
+        }
+      }
     } catch (ex) {
       setErr(
         ex instanceof Error
@@ -232,6 +267,28 @@ export function IntelligenceCenter() {
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function loadProviderModels(providerId: string, refresh = false) {
+    setModelsLoading(true);
+    try {
+      const models = await fetchProviderModels(base, token, providerId, {
+        refresh,
+      });
+      setDiscoveredModels(models.models || []);
+      setRecommendedModelId(models.recommendedModelId);
+      if (models.modelId) setModelId(models.modelId);
+      setModelUnavailable(models.modelStatus === "unavailable");
+    } catch (ex) {
+      setDiscoveredModels([]);
+      setErr(
+        ex instanceof Error
+          ? ex.message
+          : "No pudimos obtener los modelos disponibles.",
+      );
+    } finally {
+      setModelsLoading(false);
     }
   }
 
@@ -387,6 +444,12 @@ export function IntelligenceCenter() {
     try {
       const r = await testProviderConnection(base, token, providerId);
       setOkMsg(r.message);
+      if (r.discovery?.models?.length) {
+        setDiscoveredModels(r.discovery.models);
+        setRecommendedModelId(r.discovery.recommendedModelId || null);
+        setModelUnavailable(r.discovery.modelStatus === "unavailable");
+      }
+      await refresh();
     } catch (ex) {
       setErr(
         ex instanceof Error
@@ -474,10 +537,14 @@ export function IntelligenceCenter() {
         key: id,
         kind: "external",
         title: providerCardTitle(id, conn.displayName),
-        statusLine: `● Conectada${
-          conn.modelId
-            ? ` · ${humanModelLabel(id, conn.modelId)}`
-            : ""
+        statusLine: `● Conectado${
+          conn.modelStatus === "unavailable"
+            ? " · Modelo no disponible"
+            : conn.modelSelection === "recommended" && conn.modelId
+              ? ` · ${humanModelLabel(id, conn.modelId)} · Recomendado`
+              : conn.modelId
+                ? ` · ${humanModelLabel(id, conn.modelId)}`
+                : ""
         }`,
         provider: id,
         conn,
@@ -1181,10 +1248,13 @@ export function IntelligenceCenter() {
                               setModelId(conn?.modelId || defaultModel(id));
                               setBaseUrl(conn?.baseUrl || "");
                               setApiKey("");
+                              setDiscoveredModels([]);
+                              setByokConfigured(true);
                               setPanel("byok_form");
+                              void loadProviderModels(id);
                             }}
                           >
-                            Editar
+                            Administrar
                           </button>
                           <button
                             type="button"
@@ -1209,9 +1279,13 @@ export function IntelligenceCenter() {
                           className="btn primary"
                           onClick={() => {
                             setByokProvider(id);
-                            setModelId(defaultModel(id));
+                            setModelId("");
                             setBaseUrl("");
                             setApiKey("");
+                            setDiscoveredModels([]);
+                            setRecommendedModelId(null);
+                            setModelUnavailable(false);
+                            setByokConfigured(false);
                             setPanel("byok_form");
                           }}
                         >
@@ -1239,13 +1313,16 @@ export function IntelligenceCenter() {
           <h3>{providerCardTitle(byokProvider)}</h3>
           {byokConfigured ? (
             <p className="intel-status-line">
-              ● Disponible
+              ● Conectado
               {active?.provider === byokProvider ? " · Predeterminada" : ""}
+              {modelUnavailable
+                ? " · Modelo ya no disponible — elige otro"
+                : ""}
             </p>
           ) : (
             <p className="muted">
-              La API key autentica tu cuenta. El modelo es el que usará el
-              agente.
+              La API key autentica tu cuenta. Después Personal Agent descubrirá
+              los modelos disponibles.
             </p>
           )}
           <form onSubmit={(e) => void onSaveByok(e)} className="intel-form">
@@ -1270,21 +1347,77 @@ export function IntelligenceCenter() {
                 </p>
               </>
             ) : null}
-            <IntelligenceModelSection
-              value={
-                byokModelOptions(byokProvider).some((o) => o.id === modelId)
-                  ? modelId
-                  : defaultByokModelId(byokProvider)
-              }
-              disabled={busy}
-              onChange={(id) => void onPickByokModel(id)}
-              options={byokModelOptions(byokProvider).map((o) => ({
-                id: o.id,
-                label: o.label,
-                hint: o.hint,
-              }))}
-            />
-            {!byokConfigured ? (
+            {byokConfigured ? (
+              <>
+                {modelsLoading ? (
+                  <p className="muted">Actualizando modelos…</p>
+                ) : null}
+                {discoveredModels.length > 0 ? (
+                  <IntelligenceModelSection
+                    value={modelId || recommendedModelId || discoveredModels[0]!.id}
+                    disabled={busy || modelsLoading}
+                    onChange={(id) => void onPickByokModel(id)}
+                    options={discoveredModels.map((m) => ({
+                      id: m.id,
+                      label: m.name || humanModelLabel(byokProvider, m.id),
+                      hint:
+                        m.id === recommendedModelId
+                          ? "Recomendado"
+                          : m.recommended
+                            ? "Recomendado"
+                            : undefined,
+                    }))}
+                  />
+                ) : (
+                  <p className="muted">
+                    {modelUnavailable
+                      ? "El modelo configurado ya no está disponible. Actualiza la lista y elige otro."
+                      : "Aún no hay catálogo de modelos. Prueba la conexión o actualiza."}
+                  </p>
+                )}
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy || modelsLoading}
+                    onClick={() => void loadProviderModels(byokProvider, true)}
+                  >
+                    Actualizar modelos
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => void onTest(byokProvider)}
+                  >
+                    Probar conexión
+                  </button>
+                  {active?.provider !== byokProvider ? (
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={busy}
+                      onClick={() => {
+                        const conn = snap?.connections.find(
+                          (c) => c.provider === byokProvider,
+                        );
+                        if (conn) void activateConnection(conn);
+                      }}
+                    >
+                      Usar
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => setConfirmDisconnect(byokProvider)}
+                  >
+                    Desconectar
+                  </button>
+                </div>
+              </>
+            ) : (
               <button
                 type="submit"
                 className="btn primary"
@@ -1292,40 +1425,6 @@ export function IntelligenceCenter() {
               >
                 Conectar
               </button>
-            ) : (
-              <div className="row-actions">
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={busy}
-                  onClick={() => void onTest(byokProvider)}
-                >
-                  Probar conexión
-                </button>
-                {active?.provider !== byokProvider ? (
-                  <button
-                    type="button"
-                    className="btn primary"
-                    disabled={busy}
-                    onClick={() => {
-                      const conn = snap?.connections.find(
-                        (c) => c.provider === byokProvider,
-                      );
-                      if (conn) void activateConnection(conn);
-                    }}
-                  >
-                    Usar
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={busy}
-                  onClick={() => setConfirmDisconnect(byokProvider)}
-                >
-                  Desconectar
-                </button>
-              </div>
             )}
           </form>
           {byokConfigured ? (

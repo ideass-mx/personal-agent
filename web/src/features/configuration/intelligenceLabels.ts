@@ -35,11 +35,13 @@ export function humanModelLabel(provider: string, modelId: string): string {
     return "Grok";
   }
   if (provider === "gemini") {
-    if (modelId.includes("2.5-pro") || modelId.includes("pro")) {
-      return "Gemini 2.5 Pro";
+    if (modelId.includes("3.1-pro") || modelId.includes("pro")) {
+      return "Gemini 3.1 Pro";
     }
-    if (modelId.includes("2.0-flash")) return "Gemini 2.0 Flash";
-    if (modelId.includes("flash")) return "Gemini 2.5 Flash";
+    if (modelId.includes("3.6-flash")) return "Gemini 3.6 Flash";
+    if (modelId.includes("3-flash") || modelId.includes("flash")) {
+      return "Gemini 3 Flash";
+    }
     return "Gemini";
   }
   if (provider === "openai" && modelId.startsWith("gpt")) return modelId.toUpperCase();

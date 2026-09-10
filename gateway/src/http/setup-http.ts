@@ -29,6 +29,7 @@ import {
 } from "../providers/registry.ts";
 import {
   disconnectExternalProvider,
+  applyModelDiscoveryToConnection,
   getIntelligenceConnection,
   getIntelligenceStatusSnapshot,
   listIntelligenceConnections,
@@ -37,6 +38,10 @@ import {
   updateIntelligenceConnectionModel,
   upsertExternalConnection,
 } from "../providers/intelligence.ts";
+import {
+  discoverProviderModels,
+  type ModelDiscoveryResult,
+} from "../providers/model-discovery.ts";
 import {
   getCloudAuthClient,
   isCloudDevAuthEnabled,
@@ -92,6 +97,21 @@ function connectivityPublicShape(
     model: result.model || DEFAULT_AGENT_MODEL,
     credentialConfigured: true as const,
     request: "success" as const,
+    discovery: result.discovery
+      ? {
+          status: result.discovery.status,
+          authStatus: result.discovery.authStatus,
+          modelStatus: result.discovery.modelStatus,
+          recommendedModelId: result.discovery.recommendedModelId || null,
+          modelSelection: result.discovery.modelSelection || "recommended",
+          models: result.discovery.models.map((m) => ({
+            id: m.id,
+            name: m.name || m.id,
+            capabilities: m.capabilities,
+            contextWindow: m.contextWindow,
+          })),
+        }
+      : undefined,
   };
 }
 
@@ -101,9 +121,21 @@ export function mountSetupHttp(
     hubToken: string;
     /** Override para tests; por defecto llama al proveedor real. */
     verifyLlm?: (providerId: string) => Promise<LlmConnectivityResult>;
+    /** Override discovery (tests / sin red). */
+    discoverModels?: (input: {
+      provider: string;
+      connection?: {
+        provider: string;
+        modelId: string;
+        baseUrl?: string;
+      } | null;
+      apiKey?: string;
+      useCache?: boolean;
+    }) => Promise<ModelDiscoveryResult>;
   },
 ): void {
   const runVerify = deps.verifyLlm ?? verifyProviderConnectivity;
+  const runDiscover = deps.discoverModels ?? discoverProviderModels;
   /** Local product setup: install_compat OR browser AuthSession (loopback + owner). */
   const requireSetup = (c: Context) => {
     const gated = requireLocalProductSetup(c, deps.hubToken);
@@ -313,6 +345,7 @@ export function mountSetupHttp(
       credential?: string;
       modelId?: string;
       baseUrl?: string;
+      modelSelection?: "recommended" | "specific";
     };
     const provider = String(body.provider || "anthropic").trim().toLowerCase();
     if (!isProviderAvailable(provider)) {
@@ -394,7 +427,14 @@ export function mountSetupHttp(
     }
 
     const apiKey = String(body.credential || body.apiKey || "").trim();
-    const modelId = String(body.modelId || DEFAULT_AGENT_MODEL).trim();
+    const rawModelId = String(body.modelId || "").trim();
+    const modelId = rawModelId;
+    const modelSelection =
+      body.modelSelection === "specific" || body.modelSelection === "recommended"
+        ? body.modelSelection
+        : rawModelId
+          ? "specific"
+          : "recommended";
     // Actualizar solo el modelo si ya hay clave guardada y no envían una nueva.
     if (
       apiKey.length < 16 &&
@@ -424,6 +464,7 @@ export function mountSetupHttp(
         const connection = updateIntelligenceConnectionModel(
           existing.id,
           modelId,
+          { selection: modelSelection },
         );
         return c.json({
           ...setupStatusPayload(),
@@ -472,6 +513,7 @@ export function mountSetupHttp(
       );
     }
     try {
+      let discoveryPayload: unknown;
       if (
         provider === "openai" ||
         provider === "anthropic" ||
@@ -483,10 +525,61 @@ export function mountSetupHttp(
       ) {
         await upsertExternalConnection({
           provider,
-          modelId,
+          modelId: modelId || undefined,
           apiKey,
           baseUrl: body.baseUrl,
+          modelSelection,
         });
+        // Tras guardar la key: discovery + recomendación (sin secretos en respuesta).
+        try {
+          const conn = listIntelligenceConnections().find(
+            (x) => x.provider === provider,
+          );
+          if (conn) {
+            const discovery = await runDiscover({
+              provider,
+              connection: conn,
+              apiKey,
+              useCache: false,
+            });
+            if (discovery.authStatus === "failed") {
+              disconnectExternalProvider(provider);
+              return c.json(
+                httpErrorBody(
+                  "PROVIDER_AUTH_FAILED",
+                  "La clave de acceso no es válida. Comprueba tu clave y vuelve a intentarlo.",
+                ),
+                400,
+              );
+            }
+            if (discovery.discoveryStatus === "ok") {
+              applyModelDiscoveryToConnection(conn.id, discovery);
+            }
+            discoveryPayload = {
+              status: discovery.discoveryStatus,
+              authStatus: discovery.authStatus,
+              recommendedModelId: discovery.recommendedModelId || null,
+              modelStatus:
+                discovery.discoveryStatus === "ok"
+                  ? discovery.models.length
+                    ? "available"
+                    : "unavailable"
+                  : "not_discovered",
+              models: discovery.models.map((m) => ({
+                id: m.id,
+                name: m.name || m.id,
+              })),
+            };
+          }
+        } catch {
+          discoveryPayload = {
+            status: "failed",
+            authStatus: "unknown",
+            recommendedModelId: null,
+            modelStatus: "not_discovered",
+            models: [],
+          };
+        }
       } else {
         writePersistedProviderApiKey(provider, apiKey);
       }
@@ -514,6 +607,8 @@ export function mountSetupHttp(
       return c.json({
         ...toSetupStatusDto(getSetupState()),
         llmConfigured: true,
+        intelligence: getIntelligenceStatusSnapshot(),
+        discovery: discoveryPayload,
       });
     } catch {
       return c.json(
@@ -747,6 +842,94 @@ export function mountSetupHttp(
     }
   });
 
+  /**
+   * Catálogo de modelos descubiertos para un proveedor (sin secretos).
+   * Refresh si ?refresh=1 o caché ausente/stale.
+   */
+  app.get("/v1/setup/providers/:id/models", async (c) => {
+    const denied = requireSetup(c);
+    if (denied) return denied;
+    const id = c.req.param("id").trim().toLowerCase();
+    if (!isProviderAvailable(id)) {
+      return c.json(
+        httpErrorBody("provider_unsupported", "Ese proveedor no está disponible."),
+        400,
+      );
+    }
+    if (id === "local") {
+      return c.json({
+        ok: true,
+        provider: id,
+        discoveryStatus: "unsupported",
+        supportsModelDiscovery: false,
+        recommendedModelId: null,
+        models: [],
+        message: "Local usa el catálogo instalado, no discovery remoto.",
+      });
+    }
+    const conn = listIntelligenceConnections().find((x) => x.provider === id);
+    if (
+      id !== "personal-agent-cloud" &&
+      !hasProviderApiKeyConfigured(id)
+    ) {
+      return c.json(
+        httpErrorBody(
+          "PROVIDER_NOT_CONFIGURED",
+          "Este proveedor aún no está conectado.",
+        ),
+        400,
+      );
+    }
+    const refresh = c.req.query("refresh") === "1";
+    try {
+      const discovery = await runDiscover({
+        provider: id,
+        connection: conn || undefined,
+        useCache: !refresh,
+      });
+      if (discovery.authStatus === "failed") {
+        return c.json(
+          httpErrorBody(
+            "PROVIDER_AUTH_FAILED",
+            "La clave de acceso no es válida. Comprueba tu clave y vuelve a intentarlo.",
+          ),
+          401,
+        );
+      }
+      if (conn && discovery.discoveryStatus === "ok") {
+        applyModelDiscoveryToConnection(conn.id, discovery);
+      }
+      const snap = getIntelligenceStatusSnapshot();
+      const view = snap.connections.find((x) => x.provider === id) || null;
+      return c.json({
+        ok: true,
+        provider: id,
+        discoveryStatus: discovery.discoveryStatus,
+        authStatus: discovery.authStatus,
+        supportsModelDiscovery: discovery.discoveryStatus !== "unsupported",
+        recommendedModelId: discovery.recommendedModelId || null,
+        modelStatus: view?.modelStatus || null,
+        modelSelection: view?.modelSelection || null,
+        modelId: view?.modelId || conn?.modelId || null,
+        models: discovery.models.map((m) => ({
+          id: m.id,
+          name: m.name || m.id,
+          capabilities: m.capabilities,
+          contextWindow: m.contextWindow,
+          recommended: m.id === discovery.recommendedModelId,
+        })),
+      });
+    } catch {
+      return c.json(
+        httpErrorBody(
+          "MODEL_DISCOVERY_FAILED",
+          "No pudimos obtener los modelos de este proveedor.",
+        ),
+        400,
+      );
+    }
+  });
+
   /** Probar conexión del provider (sin devolver secretos). */
   app.post("/v1/setup/providers/:id/test", async (c) => {
     const denied = requireSetup(c);
@@ -770,6 +953,7 @@ export function mountSetupHttp(
         ok: true,
         message,
         connectivity: connectivityPublicShape(result, id),
+        intelligence: getIntelligenceStatusSnapshot(),
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";

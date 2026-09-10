@@ -23,14 +23,28 @@ export {
   selectIntelligenceConnection,
   updateIntelligenceConnectionModel,
   upsertExternalConnection,
+  applyModelDiscoveryToConnection,
   disconnectExternalProvider,
   localAvailabilitySummary,
+  PERSONAL_AGENT_CLOUD_MODELS,
+  resolvePersonalAgentCloudModelId,
+  isPersonalAgentCloudModel,
   type IntelligenceMode,
   type IntelligenceProviderId,
   type LLMConnection,
   type IntelligenceConnectionView,
   type IntelligenceStatusSnapshot,
 } from "./intelligence.ts";
+export {
+  discoverProviderModels,
+  recommendModelId,
+  filterCompatibleModels,
+  buildModelDiscoveryResult,
+  type ProviderModel,
+  type ModelDiscoveryResult,
+  type ModelSelectionMode,
+  type ModelAvailabilityStatus,
+} from "./model-discovery.ts";
 export {
   CloudAuthError,
   createCloudAuthClient,

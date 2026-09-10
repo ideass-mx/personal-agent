@@ -1,6 +1,7 @@
 /**
  * Catálogo de inteligencia para onboarding/settings.
  * PHASE 62: local / personal-agent-cloud / external (sin modo automático).
+ * PHASE 63.2: verify → discover models → recommend → probe with resolved model.
  */
 import {
   createFakeLocalRuntime,
@@ -9,6 +10,7 @@ import {
   isLocalLlmConfigured,
 } from "../local-llm/index.ts";
 import {
+  applyModelDiscoveryToConnection,
   getIntelligenceConnection,
   listIntelligenceConnections,
   localAvailabilitySummary,
@@ -28,6 +30,14 @@ import {
 import { ensureLocalIdentity } from "../identity/ensure-local.ts";
 import { getEffectiveProviderApiKey } from "../setup/llm-key.ts";
 import type { LLMProvider } from "./types.ts";
+import {
+  discoverProviderModels,
+  modelAvailabilityForConnection,
+  resolveModelForConnectivityProbe,
+  type ModelAvailabilityStatus,
+  type ModelDiscoveryResult,
+  type ProviderModel,
+} from "./model-discovery.ts";
 
 export type LlmProviderId = IntelligenceProviderId;
 
@@ -45,6 +55,14 @@ export type LlmConnectivityResult = {
   credentialConfigured: boolean;
   request: "success";
   sample?: string;
+  discovery?: {
+    status: ModelDiscoveryResult["discoveryStatus"];
+    authStatus: ModelDiscoveryResult["authStatus"];
+    modelStatus: ModelAvailabilityStatus;
+    recommendedModelId?: string;
+    models: ProviderModel[];
+    modelSelection?: "recommended" | "specific";
+  };
 };
 
 const CATALOG: readonly LlmProviderDescriptor[] = [
@@ -143,10 +161,15 @@ export function createLlmProvider(id?: string): LLMProvider {
       openrouter: "https://openrouter.ai/api/v1",
       groq: "https://api.groq.com/openai/v1",
     };
+    const selected = listIntelligenceConnections().find((c) => c.provider === id);
     const apiKey = getEffectiveProviderApiKey(id);
     return createOpenAiCompatibleProvider({
       providerId: id,
-      baseUrl: baseByProvider[id] || process.env.PERSONAL_AGENT_EXTERNAL_BASE_URL || "https://api.openai.com/v1",
+      baseUrl:
+        selected?.baseUrl ||
+        baseByProvider[id] ||
+        process.env.PERSONAL_AGENT_EXTERNAL_BASE_URL ||
+        "https://api.openai.com/v1",
       model: "default",
       apiKey,
     });
@@ -167,6 +190,10 @@ export function isAnyLlmConfigured(): boolean {
   return Boolean(getEffectiveProviderApiKey(selected.provider));
 }
 
+/**
+ * Valida conexión y, si es posible, descubre modelos.
+ * Un modelId retirado NO implica fallo de autenticación.
+ */
 export async function verifyProviderConnectivity(
   providerId?: string,
 ): Promise<LlmConnectivityResult> {
@@ -174,23 +201,116 @@ export async function verifyProviderConnectivity(
     listIntelligenceConnections().find((c) => c.provider === providerId) ||
     getIntelligenceConnection();
   if (!selected) throw new Error("provider_unavailable");
-  const provider = createLlmProvider(selected.provider);
+
+  let discovery: ModelDiscoveryResult | null = null;
+  let probeModel = selected.modelId;
+  let connection = selected;
+
+  if (selected.provider !== "local") {
+    discovery = await discoverProviderModels({
+      provider: selected.provider,
+      connection: selected,
+      useCache: false,
+    });
+    if (discovery.authStatus === "failed") {
+      throw Object.assign(new Error("invalid_credential"), {
+        errorCode: discovery.errorCode || "PROVIDER_AUTH_FAILED",
+      });
+    }
+    if (discovery.discoveryStatus === "ok") {
+      connection = applyModelDiscoveryToConnection(selected.id, discovery);
+      probeModel = resolveModelForConnectivityProbe(connection, discovery);
+    } else if (discovery.authStatus === "ok") {
+      // Credencial válida; discovery recuperable. No exigir chat probe.
+      return {
+        ok: true,
+        provider: connection.provider,
+        model:
+          connection.modelId === "__pending_discovery__"
+            ? ""
+            : connection.modelId,
+        credentialConfigured: true,
+        request: "success",
+        discovery: {
+          status: discovery.discoveryStatus,
+          authStatus: discovery.authStatus,
+          modelStatus: "not_discovered",
+          recommendedModelId: discovery.recommendedModelId,
+          models: discovery.models,
+          modelSelection: connection.modelSelection || "recommended",
+        },
+      };
+    } else {
+      probeModel =
+        connection.modelId === "__pending_discovery__"
+          ? "default"
+          : connection.modelId;
+    }
+  }
+
+  const provider = createLlmProvider(connection.provider);
   let text = "";
-  for await (const ev of provider.stream({
-    model: selected.modelId,
-    messages: [{ role: "user", content: "Responde únicamente con la palabra OK." }],
-  })) {
-    if (ev.type === "text_delta") text += ev.text;
+  try {
+    for await (const ev of provider.stream({
+      model: probeModel,
+      messages: [{ role: "user", content: "Responde únicamente con la palabra OK." }],
+    })) {
+      if (ev.type === "text_delta") text += ev.text;
+    }
+  } catch (err) {
+    const blob = err instanceof Error ? err.message : String(err);
+    const code =
+      err && typeof err === "object" && "errorCode" in err
+        ? String((err as { errorCode?: string }).errorCode || "")
+        : "";
+    if (
+      discovery &&
+      discovery.discoveryStatus === "ok" &&
+      discovery.recommendedModelId &&
+      probeModel !== discovery.recommendedModelId &&
+      /MODEL_NOT_FOUND|404|model_not_found/i.test(`${blob} ${code}`)
+    ) {
+      probeModel = discovery.recommendedModelId;
+      text = "";
+      for await (const ev of provider.stream({
+        model: probeModel,
+        messages: [
+          { role: "user", content: "Responde únicamente con la palabra OK." },
+        ],
+      })) {
+        if (ev.type === "text_delta") text += ev.text;
+      }
+    } else {
+      throw err;
+    }
   }
   const sample = text.trim();
   if (!sample) throw new Error("empty_llm_response");
+
+  const modelStatus: ModelAvailabilityStatus = discovery
+    ? modelAvailabilityForConnection(connection, discovery)
+    : "discovery_unsupported";
+
   return {
     ok: true,
-    provider: selected.provider,
-    model: selected.modelId,
-    credentialConfigured: selected.provider !== "local",
+    provider: connection.provider,
+    model:
+      connection.modelId === "__pending_discovery__"
+        ? probeModel
+        : connection.modelId,
+    credentialConfigured: connection.provider !== "local",
     request: "success",
     sample: sample.slice(0, 32),
+    discovery: discovery
+      ? {
+          status: discovery.discoveryStatus,
+          authStatus: discovery.authStatus,
+          modelStatus,
+          recommendedModelId: discovery.recommendedModelId,
+          models: discovery.models,
+          modelSelection: connection.modelSelection || "recommended",
+        }
+      : undefined,
   };
 }
 

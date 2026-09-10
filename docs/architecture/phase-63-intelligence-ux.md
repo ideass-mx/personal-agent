@@ -59,3 +59,9 @@ Credential Store es la fuente de verdad BYOK.
 `PERSONAL_AGENT_DEV_PROVIDER_ENV=1` habilita overrides de entorno (tests/CI).
 xAI / Grok (`grok-4.6`) está en Mi proveedor — ver
 `docs/architecture/phase-63.1-provider-source-of-truth-xai.md`.
+
+## Seguimiento PHASE 63.2
+
+Discovery dinámico de modelos tras validar la conexión — ver
+`docs/architecture/phase-63.2-dynamic-model-discovery.md`.
+Conexión ≠ disponibilidad de modelo.
