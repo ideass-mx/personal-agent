@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   classifyContentHold,
+  GEMINI_SKIP_THOUGHT_SIGNATURE,
   parseLeakedToolCallJson,
   stripLeakedToolCallJson,
   toOpenAiCompatibleMessages,
@@ -39,7 +40,11 @@ describe("toOpenAiCompatibleMessages", () => {
     const asst = wire[0] as {
       role: "assistant";
       content: string | null;
-      tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+      tool_calls?: Array<{
+        id: string;
+        function: { name: string; arguments: string };
+        extra_content?: { google?: { thought_signature?: string } };
+      }>;
     };
     assert.equal(asst.content, null);
     assert.ok(asst.tool_calls);
@@ -55,6 +60,63 @@ describe("toOpenAiCompatibleMessages", () => {
     assert.equal(tool.content, '{"ok":true}');
     const serialized = JSON.stringify(wire);
     assert.equal(serialized.includes('"type":"tool_call"'), false);
+  });
+
+  it("round-trips Gemini thought_signature on tool_calls", () => {
+    const wire = toOpenAiCompatibleMessages(
+      [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_call",
+              id: "call_1",
+              name: "research.search",
+              input: { query: "tlaxcala" },
+              thoughtSignature: "SigFromGemini==",
+            },
+          ],
+        },
+      ],
+      { ensureGeminiThoughtSignatures: true },
+    );
+    const asst = wire[0] as {
+      tool_calls?: Array<{
+        extra_content?: { google?: { thought_signature?: string } };
+      }>;
+    };
+    assert.equal(
+      asst.tool_calls?.[0]?.extra_content?.google?.thought_signature,
+      "SigFromGemini==",
+    );
+  });
+
+  it("injects Gemini skip signature when missing on first tool_call", () => {
+    const wire = toOpenAiCompatibleMessages(
+      [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_call",
+              id: "call_1",
+              name: "research.search",
+              input: { query: "x" },
+            },
+          ],
+        },
+      ],
+      { ensureGeminiThoughtSignatures: true },
+    );
+    const asst = wire[0] as {
+      tool_calls?: Array<{
+        extra_content?: { google?: { thought_signature?: string } };
+      }>;
+    };
+    assert.equal(
+      asst.tool_calls?.[0]?.extra_content?.google?.thought_signature,
+      GEMINI_SKIP_THOUGHT_SIGNATURE,
+    );
   });
 
   it("keeps plain string messages", () => {

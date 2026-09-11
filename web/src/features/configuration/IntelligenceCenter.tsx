@@ -596,18 +596,18 @@ export function IntelligenceCenter() {
     const localConn =
       snap?.connections.find((c) => c.mode === "local") || undefined;
     const localInstalled = Boolean(snap?.local?.installed || localReady);
-    // Local siempre visible: es la inteligencia del producto (instalada o no).
-    pushUnique({
-      key: "local",
-      kind: "local",
-      title: "Local",
-      statusLine: localInstalled
-        ? `● Disponible · ${humanModelLabel("local", localConn?.modelId || "qwen3-4b")}`
-        : "○ No instalado",
-      provider: "local",
-      conn: localConn,
-      isDefault: active?.provider === "local" || selected?.provider === "local",
-    });
+    // Local solo en la biblioteca si ya está instalado; si no, vía «Agregar».
+    if (localInstalled) {
+      pushUnique({
+        key: "local",
+        kind: "local",
+        title: "Local",
+        statusLine: `● Disponible · ${humanModelLabel("local", localConn?.modelId || "qwen3-4b")}`,
+        provider: "local",
+        conn: localConn,
+        isDefault: active?.provider === "local" || selected?.provider === "local",
+      });
+    }
 
     const cloudConn = snap?.connections.find(
       (c) => c.mode === "personal-agent-cloud",

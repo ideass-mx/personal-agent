@@ -232,7 +232,9 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           const toolCalls: Array<{
             id: string;
             name: string;
+            providerName: string;
             input: unknown;
+            thoughtSignature?: string;
           }> = [];
           let turnText = "";
 
@@ -257,7 +259,11 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
               toolCalls.push({
                 id: event.id,
                 name: internalToolName,
+                providerName: event.name,
                 input: event.input,
+                ...(event.thoughtSignature
+                  ? { thoughtSignature: event.thoughtSignature }
+                  : {}),
               });
             }
           }
@@ -271,9 +277,12 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
             turnText = "";
             if (toolCalls.length === 0) {
               for (const tc of leakedFromText) {
+                const internal =
+                  providerToolNameMap.get(tc.name) || tc.name;
                 toolCalls.push({
                   id: tc.id,
-                  name: providerToolNameMap.get(tc.name) || tc.name,
+                  name: internal,
+                  providerName: toProviderSafeToolName(tc.name),
                   input: tc.input,
                 });
               }
@@ -334,8 +343,12 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
             assistantBlocks.push({
               type: "tool_call",
               id: call.id,
-              name: call.name,
+              // Wire al LLM: nombre que el proveedor emitió / acepta en tools[].
+              name: call.providerName,
               input: call.input,
+              ...(call.thoughtSignature
+                ? { thoughtSignature: call.thoughtSignature }
+                : {}),
             });
           }
           messages.push({ role: "assistant", content: assistantBlocks });

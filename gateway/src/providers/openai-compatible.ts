@@ -46,6 +46,9 @@ type OpenAiWireMessage =
         id: string;
         type: "function";
         function: { name: string; arguments: string };
+        extra_content?: {
+          google?: { thought_signature?: string };
+        };
       }>;
     }
   | {
@@ -53,6 +56,24 @@ type OpenAiWireMessage =
       tool_call_id: string;
       content: string;
     };
+
+/** Dummy oficial de Google cuando no hay firma real (p. ej. tool_call filtrado). */
+export const GEMINI_SKIP_THOUGHT_SIGNATURE =
+  "skip_thought_signature_validator";
+
+function extractThoughtSignature(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const direct =
+    typeof o.thought_signature === "string" ? o.thought_signature : undefined;
+  if (direct?.trim()) return direct.trim();
+  const extra = o.extra_content;
+  if (!extra || typeof extra !== "object") return undefined;
+  const google = (extra as Record<string, unknown>).google;
+  if (!google || typeof google !== "object") return undefined;
+  const sig = (google as Record<string, unknown>).thought_signature;
+  return typeof sig === "string" && sig.trim() ? sig.trim() : undefined;
+}
 
 function isQuotaOrBillingDenial(status: number, body: string): boolean {
   if (status !== 402 && status !== 403) return false;
@@ -98,6 +119,7 @@ function mapHttpError(input: {
 /** Convierte mensajes internos → wire OpenAI (assistant.tool_calls + role=tool). */
 export function toOpenAiCompatibleMessages(
   messages: LLMMessage[],
+  options?: { ensureGeminiThoughtSignatures?: boolean },
 ): OpenAiWireMessage[] {
   const out: OpenAiWireMessage[] = [];
   for (const m of messages) {
@@ -137,16 +159,33 @@ export function toOpenAiCompatibleMessages(
       out.push({
         role: "assistant",
         content: contentText.trim() ? contentText : null,
-        tool_calls: toolCalls.map((tc) => ({
-          id: tc.id,
-          type: "function" as const,
-          function: {
-            name: tc.name,
-            arguments: JSON.stringify(
-              tc.input && typeof tc.input === "object" ? tc.input : {},
-            ),
-          },
-        })),
+        tool_calls: toolCalls.map((tc, index) => {
+          let thoughtSignature = tc.thoughtSignature?.trim() || undefined;
+          if (
+            !thoughtSignature &&
+            options?.ensureGeminiThoughtSignatures &&
+            index === 0
+          ) {
+            thoughtSignature = GEMINI_SKIP_THOUGHT_SIGNATURE;
+          }
+          return {
+            id: tc.id,
+            type: "function" as const,
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(
+                tc.input && typeof tc.input === "object" ? tc.input : {},
+              ),
+            },
+            ...(thoughtSignature
+              ? {
+                  extra_content: {
+                    google: { thought_signature: thoughtSignature },
+                  },
+                }
+              : {}),
+          };
+        }),
       });
       continue;
     }
@@ -184,7 +223,7 @@ async function* parseSseToEvents(
   let buffer = "";
   const pending = new Map<
     number,
-    { id: string; name: string; arguments: string }
+    { id: string; name: string; arguments: string; thoughtSignature?: string }
   >();
   let held = "";
   let contentMode: "undecided" | "stream" | "hold" = "undecided";
@@ -212,6 +251,9 @@ async function* parseSseToEvents(
         id: acc.id || `tool_${Date.now()}_${k}`,
         name: acc.name,
         input: parsedInput,
+        ...(acc.thoughtSignature
+          ? { thoughtSignature: acc.thoughtSignature }
+          : {}),
       };
     }
     pending.clear();
@@ -304,13 +346,20 @@ async function* parseSseToEvents(
               : [];
             for (const tc of toolCalls) {
               const i = typeof tc?.index === "number" ? tc.index : 0;
-              const prev = pending.get(i) || { id: "", name: "", arguments: "" };
+              const prev = pending.get(i) || {
+                id: "",
+                name: "",
+                arguments: "",
+              };
               if (typeof tc?.id === "string" && tc.id) prev.id = tc.id;
               const fn = tc?.function ?? {};
               if (typeof fn?.name === "string" && fn.name) prev.name = fn.name;
               if (typeof fn?.arguments === "string") {
                 prev.arguments += fn.arguments;
               }
+              const sig = extractThoughtSignature(tc);
+              // No concatenar: la firma es opaca; conservar la primera no vacía.
+              if (sig && !prev.thoughtSignature) prev.thoughtSignature = sig;
               pending.set(i, prev);
             }
             const finish = c?.finish_reason;
@@ -376,7 +425,9 @@ export function createOpenAiCompatibleProvider(
       if (input.apiKey && input.apiKey.trim()) {
         headers.Authorization = `Bearer ${input.apiKey.trim()}`;
       }
-      const mapped = toOpenAiCompatibleMessages(request.messages);
+      const mapped = toOpenAiCompatibleMessages(request.messages, {
+        ensureGeminiThoughtSignatures: input.providerId === "gemini",
+      });
       const body: Record<string, unknown> = {
         model,
         stream: true,

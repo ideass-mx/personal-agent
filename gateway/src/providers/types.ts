@@ -14,7 +14,17 @@ export interface LLMToolDescriptor {
 
 export type LLMContentBlock =
   | { type: "text"; text: string }
-  | { type: "tool_call"; id: string; name: string; input: unknown }
+  | {
+      type: "tool_call";
+      id: string;
+      name: string;
+      input: unknown;
+      /**
+       * Gemini 3 (OpenAI-compat): `extra_content.google.thought_signature`.
+       * Debe round-trippearse o el siguiente turno falla con 400.
+       */
+      thoughtSignature?: string;
+    }
   | {
       type: "tool_result";
       toolCallId: string;
@@ -42,7 +52,13 @@ export interface LLMRequest {
 
 export type LLMEvent =
   | { type: "text_delta"; text: string }
-  | { type: "tool_call"; id: string; name: string; input: unknown }
+  | {
+      type: "tool_call";
+      id: string;
+      name: string;
+      input: unknown;
+      thoughtSignature?: string;
+    }
   | { type: "done" };
 
 export interface LLMCapabilities {

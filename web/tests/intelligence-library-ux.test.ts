@@ -14,8 +14,9 @@ describe("Intelligence Center library UX", () => {
   it("solo lista Cloud/Local cuando estan conectados o instalados", () => {
     assert.match(center, /Cloud opcional/);
     assert.match(center, /if \(cloud\?\.connected\)/);
-    assert.match(center, /Local siempre visible/);
-    assert.match(center, /○ No instalado/);
+    assert.match(center, /Local solo en la biblioteca si ya está instalado/);
+    assert.match(center, /if \(localInstalled\)/);
+    assert.doesNotMatch(center, /Local siempre visible/);
   });
 
   it("tras conectar BYOK muestra exito compacto y activa predeterminada", () => {
