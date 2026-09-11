@@ -80,4 +80,13 @@ Credenciales, Cloud Auth, MCP, Local LLM, generación real de PDF, ejecución re
 
 ## Web entry
 
-`ExperienceLabScreen` (nav **Experiencia**): Universal vs Adaptive, selector de agente, Desktop/Mobile/Voice, comparación Universal · Specialized · Adaptive.
+`ExperienceLabScreen` (nav **Experiencia**):
+
+1. **Conversación → Trabajo** — demo conversation-first (mock state machine): home simple → intent → tarea / propuesta de proyecto / trabajo explícito → project shell → Research / Manuscript / evidencia bidireccional / delegación progresiva. Escenarios cargables. Canales Desktop / Mobile / Voice.
+2. **Capas / canales** — lab legacy Universal vs Adaptive + superficies Research/stubs.
+3. **Universal vs Adaptive** — cuatro columnas: Universal Chat · Specialized Apps · Adaptive Agent · **Conversation-first Adaptive**.
+
+Principio visible: *Simple por defecto. Estructurado cuando hace falta. Autónomo cuando lo necesitas.*
+
+Mock only: sin LLM, Cloud, MCP ni Projects API real.
+

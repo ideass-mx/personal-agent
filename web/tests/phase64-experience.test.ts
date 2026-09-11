@@ -47,6 +47,7 @@ describe("PHASE 64 experience web", () => {
       "renderers/ActionBar.tsx",
       "ResearchExperience.tsx",
       "ExperienceLabScreen.tsx",
+      "conversationFirst/ConversationFirstDemo.tsx",
     ];
     for (const f of files) {
       const src = fs.readFileSync(path.join(expDir, f), "utf8");
