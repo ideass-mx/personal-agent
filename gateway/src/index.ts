@@ -96,6 +96,9 @@ async function main(): Promise<void> {
     `[gateway] LLM mode=${selectedConnection?.mode || "local"} provider=${selectedConnection?.provider || "local"} model=${selectedConnection?.modelId || "qwen3-4b"}\n`,
   );
 
+  const { buildMemoryContextBlock } = await import("./user-memory/index.ts");
+  const { LOCAL_USER_ID } = await import("./identity/types.ts");
+
   const activeDef = agents.getActiveDefinition();
   const agentRuntime = agents.createRuntime({
     agent: activeDef,
@@ -103,6 +106,13 @@ async function main(): Promise<void> {
     llm,
     tools: boundTools,
     diagnostics,
+    resolveUserMemoryContext: ({ userMessage, userId }) =>
+      buildMemoryContextBlock({
+        userId: userId || LOCAL_USER_ID,
+        query: userMessage,
+        preferProject: false,
+        limit: 6,
+      }),
   });
 
   // PHASE 59: CredentialManager (metadata SQLite + SecretStore). No se pasa al Runtime/LLM.

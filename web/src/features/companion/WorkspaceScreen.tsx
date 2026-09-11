@@ -43,7 +43,9 @@ export function WorkspaceScreen() {
   }
 
   const sections = ["Overview", ...ws.sections];
-  const projectMemory = memory.filter((m) => m.projectId === ws.id);
+  const projectMemory = memory.filter(
+    (m) => m.projectId === ws.id && m.status === "ACTIVE",
+  );
   const projectTasks = tasks.filter((t) => t.projectId === ws.id);
   const projectActivity = activity.filter((a) => a.projectId === ws.id);
 
@@ -172,7 +174,7 @@ export function WorkspaceScreen() {
               <p className="muted">Este proyecto sabe de…</p>
               <ul className="cp-simple-list">
                 {projectMemory.map((m) => (
-                  <li key={m.id}>{m.text}</li>
+                  <li key={m.id}>{m.content}</li>
                 ))}
                 {projectMemory.length === 0 ? (
                   <li className="muted">Aún sin memorias de proyecto.</li>

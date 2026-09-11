@@ -18,6 +18,7 @@ import { mountLocalModelHttp } from "./local-model-http.ts";
 import { mountDevicesHttp } from "./devices-http.ts";
 import { mountDeviceAuthHttp } from "./device-auth-http.ts";
 import { mountIdentityHttp } from "./identity-http.ts";
+import { mountUserMemoryHttp } from "./user-memory-http.ts";
 import type { LocalModelManager } from "../local-llm/index.ts";
 import {
   isLoopbackRequest,
@@ -196,6 +197,10 @@ export function startServer(
   mountDeviceAuthHttp(app, { hubToken: config.hubToken });
 
   mountIdentityHttp(app, {
+    hubToken: config.hubToken,
+  });
+
+  mountUserMemoryHttp(app, {
     hubToken: config.hubToken,
   });
 

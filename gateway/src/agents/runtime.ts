@@ -116,6 +116,15 @@ export interface AgentRuntimeDeps {
    * Skills solo afectan el system prompt; no habilitan tools.
    */
   skills?: SkillRegistry;
+  /**
+   * Contexto de memoria personal relevante (no historial).
+   * Se añade al system prompt solo si hay contenido.
+   */
+  resolveUserMemoryContext?: (input: {
+    userMessage: string;
+    conversationId: string;
+    userId?: string;
+  }) => string;
 }
 
 /**
@@ -165,8 +174,9 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
   const memory = deps.memory;
   const llm = deps.llm;
   const tools = filterToolsForAgent(deps.tools, agent);
-  const systemPrompt = resolveSystemPrompt(agent, deps.skills);
+  const baseSystemPrompt = resolveSystemPrompt(agent, deps.skills);
   const diagnostics = deps.diagnostics;
+  const resolveUserMemoryContext = deps.resolveUserMemoryContext;
 
   return {
     async *runTurn(input: AgentTurnInput): AsyncGenerator<AgentEvent> {
@@ -183,6 +193,14 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
           input.userMessage,
           input.deviceId,
         );
+        const memoryBlock = resolveUserMemoryContext?.({
+          userMessage: input.userMessage,
+          conversationId,
+          userId: input.userContext?.userId,
+        })?.trim();
+        const systemPrompt = memoryBlock
+          ? `${baseSystemPrompt}\n\n${memoryBlock}`
+          : baseSystemPrompt;
         diagnostics?.record({
           diagnosticId,
           component: "AGENT_RUNTIME",

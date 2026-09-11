@@ -1,8 +1,14 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SegmentedControl, Toggle } from "../../components/controls";
 import { MVP_CAPABILITIES } from "../../lib/capabilities";
 import { useApp } from "../../state/AppContext";
 import type { SettingsSectionId } from "../../types";
+import {
+  createAgentRule,
+  deleteAgentRule,
+  listAgentRules,
+  type AgentRuleRow,
+} from "../../api/memory";
 import { TrustedDevicesPanel } from "./TrustedDevicesPanel";
 import { IntelligenceCenter } from "./IntelligenceCenter";
 
@@ -110,7 +116,8 @@ export function SettingsScreen() {
         {section === "my-agent" ? (
           <Section title="Mi agente">
             <p className="muted lead">
-              Preferencias locales de prototipo — aún no se persisten en el Gateway.
+              Cómo debe comportarse el agente. Memory es lo que sabe de ti; esto
+              es cómo actúa.
             </p>
             <label className="field">
               <span className="field-label">Nombre del agente</span>
@@ -172,16 +179,36 @@ export function SettingsScreen() {
               checked={prefs.confirmations}
               onChange={(confirmations) => setPrefs({ ...prefs, confirmations })}
             />
+            <div className="settings-block" style={{ marginTop: 20 }}>
+              <strong>Reglas del agente</strong>
+              <p className="muted">
+                Instrucciones de comportamiento (p. ej. «Siempre pregunta antes de
+                hacer un pago»). No se mezclan con Memory. API:{" "}
+                <code>/v1/agent-rules</code>.
+              </p>
+              <AgentRulesEditor
+                httpBase={session?.httpBase || ""}
+                token={session?.token || ""}
+              />
+            </div>
           </Section>
         ) : null}
 
         {section === "memory" ? (
           <Section title="Memoria">
+            <p className="muted lead">
+              Memory = lo que el agente sabe de ti. Settings = cómo debe
+              comportarse. El historial de chat no es Memory.
+            </p>
             <div className="placeholder-card">
-              <strong>Sin API de memoria de usuario</strong>
+              <strong>Categorías</strong>
               <p className="muted">
-                El Gateway persiste turnos de conversación en SQLite; no hay todavía preferencias
-                ni «recuerdos» administrables desde la UI.
+                Personal, Preferencias, Intereses, Objetivos, Trabajo y proyectos,
+                Personas y relaciones, Hábitos, Información importante.
+              </p>
+              <p className="muted">
+                Usa Memory en la barra lateral para buscar, corregir u olvidar.
+                Persistencia Gateway: <code>/v1/memory</code>.
               </p>
             </div>
           </Section>
@@ -371,5 +398,106 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
       <h2>{title}</h2>
       <div className="settings-stack">{children}</div>
     </section>
+  );
+}
+
+function AgentRulesEditor({
+  httpBase,
+  token,
+}: {
+  httpBase: string;
+  token: string;
+}) {
+  const [rules, setRules] = useState<AgentRuleRow[]>([]);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const base = (httpBase || "").replace(/\/$/, "");
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    listAgentRules(base, token)
+      .then((list) => {
+        if (!cancelled) setRules(list);
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudieron cargar las reglas (¿Gateway?).");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [base, token]);
+
+  async function onAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!draft.trim() || !token) return;
+    try {
+      const rule = await createAgentRule(base, token, draft.trim());
+      setRules((prev) => [rule, ...prev]);
+      setDraft("");
+      setError(null);
+    } catch {
+      setError("No se pudo guardar la regla.");
+    }
+  }
+
+  async function onDelete(id: string) {
+    if (!token) return;
+    try {
+      await deleteAgentRule(base, token, id);
+      setRules((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      setError("No se pudo eliminar.");
+    }
+  }
+
+  if (!token) {
+    return (
+      <p className="muted">Conecta al Gateway para gestionar reglas persistentes.</p>
+    );
+  }
+
+  return (
+    <div>
+      <form
+        onSubmit={onAdd}
+        style={{ display: "flex", gap: 8, marginBottom: 12 }}
+      >
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Nueva regla…"
+          aria-label="Nueva regla del agente"
+          style={{ flex: 1 }}
+        />
+        <button type="submit" className="btn">
+          Añadir
+        </button>
+      </form>
+      {error ? <p className="muted">{error}</p> : null}
+      <ul className="memory-list" style={{ listStyle: "none", padding: 0 }}>
+        {rules.map((r) => (
+          <li
+            key={r.id}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "8px 0",
+              borderBottom: "1px solid var(--line)",
+            }}
+          >
+            <span>{r.content}</span>
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => onDelete(r.id)}
+            >
+              Quitar
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

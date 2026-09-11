@@ -114,12 +114,52 @@ export type CompanionSignal = {
   seen: boolean;
 };
 
+export type MemoryCategory =
+  | "PERSONAL"
+  | "PREFERENCES"
+  | "INTERESTS"
+  | "GOALS"
+  | "WORK_AND_PROJECTS"
+  | "PEOPLE_AND_RELATIONSHIPS"
+  | "HABITS"
+  | "IMPORTANT_INFORMATION";
+
+export type MemoryType =
+  | "EXPLICIT"
+  | "INFERRED"
+  | "OBSERVED"
+  | "IMPORTED"
+  | "PROJECT_DERIVED";
+
+export type MemoryScope =
+  | "GLOBAL"
+  | "PROJECT"
+  | "TASK"
+  | "CONVERSATION"
+  | "TEMPORARY";
+
+export type MemoryStatus = "ACTIVE" | "SUPERSEDED" | "ARCHIVED" | "DELETED";
+
+/** Lo que el agente recuerda del usuario (no historial ni reglas). */
 export type MemoryEntry = {
   id: string;
-  scope: "personal" | "project";
+  category: MemoryCategory;
+  type: MemoryType;
+  scope: MemoryScope;
+  content: string;
+  importance: number;
+  confidence: number;
+  sourceType?: string;
+  sourceId?: string;
+  sourceReason?: string;
+  status: MemoryStatus;
   projectId?: string;
-  text: string;
   createdAt: number;
+  updatedAt: number;
+  /** Importante: flota al inicio del grupo. */
+  pin?: boolean;
+  /** @deprecated usar scope GLOBAL/PROJECT — compat lectura */
+  legacyScope?: "personal" | "project";
 };
 
 export type PromoteState = {

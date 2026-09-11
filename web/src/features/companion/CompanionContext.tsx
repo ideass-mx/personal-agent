@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { interpretProjectGoal } from "./policies/interpretProjectGoal";
+import { classifyMemoryText } from "./policies/classifyMemory";
 import { routeIntent } from "./policies/routeIntent";
 import {
   inferBookProject,
@@ -35,7 +36,9 @@ import type {
   CompanionMessage,
   CompanionTask,
   CompanionWorkspace,
+  MemoryCategory,
   MemoryEntry,
+  MemoryScope,
   PromoteState,
   ToastItem,
   WorkspaceKind,
@@ -106,7 +109,19 @@ type CompanionState = {
   approveTask: (taskId: string) => void;
   toggleTodo: (taskId: string) => void;
   forgetMemory: (id: string) => void;
-  rememberText: (text: string, scope?: "personal" | "project") => void;
+  restoreMemory: (id: string) => void;
+  setMemoryPin: (id: string, pin: boolean) => void;
+  rememberText: (
+    text: string,
+    opts?: { scope?: MemoryScope; category?: MemoryCategory },
+  ) => void;
+  updateMemory: (
+    id: string,
+    patch: { content?: string; category?: MemoryCategory },
+  ) => void;
+  agentRules: { id: string; content: string; createdAt: number }[];
+  addAgentRule: (content: string) => void;
+  removeAgentRule: (id: string) => void;
 };
 
 const Ctx = createContext<CompanionState | null>(null);
@@ -252,10 +267,18 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
       setMemory((prev) => [
         {
           id: companionId("mem"),
-          scope: "project",
+          category: "WORK_AND_PROJECTS",
+          type: "EXPLICIT",
+          scope: "PROJECT",
           projectId: ws.id,
-          text: `Objetivo: ${goal.trim()}`,
+          content: `Objetivo: ${goal.trim()}`,
+          importance: 0.7,
+          confidence: 0.85,
+          sourceType: "project",
+          sourceReason: "Creado al abrir el espacio.",
+          status: "ACTIVE",
           createdAt: Date.now(),
+          updatedAt: Date.now(),
         },
         ...prev,
       ]);
@@ -596,25 +619,117 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const [agentRules, setAgentRules] = useState<
+    { id: string; content: string; createdAt: number }[]
+  >([]);
+
   const forgetMemory = useCallback((id: string) => {
-    setMemory((prev) => prev.filter((m) => m.id !== id));
+    setMemory((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? { ...m, status: "DELETED" as const, updatedAt: Date.now() }
+          : m,
+      ),
+    );
+  }, []);
+
+  const restoreMemory = useCallback((id: string) => {
+    setMemory((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? { ...m, status: "ACTIVE" as const, updatedAt: Date.now() }
+          : m,
+      ),
+    );
+  }, []);
+
+  const setMemoryPin = useCallback((id: string, pin: boolean) => {
+    setMemory((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, pin, updatedAt: Date.now() } : m,
+      ),
+    );
+  }, []);
+
+  const updateMemory = useCallback(
+    (id: string, patch: { content?: string; category?: MemoryCategory }) => {
+      setMemory((prev) =>
+        prev.map((m) =>
+          m.id === id
+            ? {
+                ...m,
+                content: patch.content?.trim() || m.content,
+                category: patch.category ?? m.category,
+                updatedAt: Date.now(),
+              }
+            : m,
+        ),
+      );
+    },
+    [],
+  );
+
+  const addAgentRule = useCallback((content: string) => {
+    const text = content.trim();
+    if (!text) return;
+    setAgentRules((prev) => [
+      { id: companionId("rule"), content: text, createdAt: Date.now() },
+      ...prev,
+    ]);
+  }, []);
+
+  const removeAgentRule = useCallback((id: string) => {
+    setAgentRules((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
   const rememberText = useCallback(
-    (text: string, scope: "personal" | "project" = "personal") => {
+    (
+      text: string,
+      opts?: { scope?: MemoryScope; category?: MemoryCategory },
+    ) => {
+      const scope = opts?.scope ?? "GLOBAL";
+      const classified = classifyMemoryText(text);
+      if (classified.kind === "agent_rule") {
+        addAgentRule(text);
+        pushToast(
+          "Eso es una regla del agente — la guardé en Configuración, no en Memory.",
+          "settings",
+        );
+        return;
+      }
+      if (
+        classified.kind === "ephemeral" ||
+        classified.kind === "project_knowledge"
+      ) {
+        pushToast("Eso no se guarda como memoria permanente.");
+        return;
+      }
+      const category: MemoryCategory =
+        opts?.category ??
+        (classified.kind === "memory"
+          ? classified.category
+          : "IMPORTANT_INFORMATION");
       setMemory((prev) => [
         {
           id: companionId("mem"),
+          category,
+          type: "EXPLICIT",
           scope,
           projectId:
-            scope === "project" ? activeWorkspaceId || undefined : undefined,
-          text: text.trim(),
+            scope === "PROJECT" ? activeWorkspaceId || undefined : undefined,
+          content: text.trim(),
+          importance: 0.7,
+          confidence: 0.9,
+          sourceType: "user_manual",
+          sourceReason: "Lo añadiste tú manualmente.",
+          status: "ACTIVE",
           createdAt: Date.now(),
+          updatedAt: Date.now(),
         },
         ...prev,
       ]);
     },
-    [activeWorkspaceId],
+    [activeWorkspaceId, addAgentRule, pushToast],
   );
 
   // Mensaje proactivo del agente.
@@ -711,7 +826,13 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
       approveTask,
       toggleTodo,
       forgetMemory,
+      restoreMemory,
+      setMemoryPin,
       rememberText,
+      updateMemory,
+      agentRules,
+      addAgentRule,
+      removeAgentRule,
     }),
     [
       companionNav,
@@ -751,7 +872,13 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
       approveTask,
       toggleTodo,
       forgetMemory,
+      restoreMemory,
+      setMemoryPin,
       rememberText,
+      updateMemory,
+      agentRules,
+      addAgentRule,
+      removeAgentRule,
     ],
   );
 

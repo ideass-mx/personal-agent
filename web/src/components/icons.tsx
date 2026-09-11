@@ -129,6 +129,33 @@ export function IconMoon(p: IconProps) {
   );
 }
 
+export function IconSun(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
+    </svg>
+  );
+}
+
+export function IconUser(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 19.5c1.8-3.2 4-4.5 6.5-4.5s4.7 1.3 6.5 4.5" />
+    </svg>
+  );
+}
+
+export function IconPencil(p: IconProps) {
+  return (
+    <svg {...base({ size: 14, ...p })}>
+      <path d="M12.5 5.5 18 11l-9.5 9.5H3v-5.5L12.5 5.5z" />
+      <path d="m11 7 5.5 5.5" />
+    </svg>
+  );
+}
+
 export function IconLogOut(p: IconProps) {
   return (
     <svg {...base(p)}>
