@@ -523,6 +523,17 @@ export function ensureExternalProviderStubs(): LLMConnection[] {
         existing.displayName = "xAI / Grok";
         changed = true;
       }
+      // Gemini: 3.6 no es ID canónico; docs usan 3.8-flash (rápido + tools).
+      if (
+        s.provider === "gemini" &&
+        (existing.modelId === "gemini-3.6-flash" ||
+          existing.modelId === "gemini-2.0-flash" ||
+          existing.modelId === "gemini-1.5-flash")
+      ) {
+        existing.modelId = "gemini-3.8-flash";
+        existing.displayName = "Gemini";
+        changed = true;
+      }
       continue;
     }
     cfg.connections.push({

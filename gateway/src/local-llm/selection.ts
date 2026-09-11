@@ -136,7 +136,9 @@ export function resolveLlmSelection(
 }
 
 export function isLocalLlmConfigured(manager: LocalModelManager): boolean {
-  return Boolean(manager.getActive());
+  if (manager.getActive()) return true;
+  // Modelo en disco cuenta como instalado aunque aún no esté marcado active.
+  return manager.isInstalled(DEFAULT_LOCAL_MODEL_ID);
 }
 
 export function defaultLocalPreference(): LlmPreference {

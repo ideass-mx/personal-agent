@@ -22,7 +22,7 @@ export const PROVIDER_MODEL_DEFAULTS: Record<
   openai: { recommendedModel: "gpt-4.1-mini" },
   anthropic: { recommendedModel: "claude-sonnet-4-6" },
   xai: { recommendedModel: "grok-4.6" },
-  gemini: { recommendedModel: "gemini-3.6-flash" },
+  gemini: { recommendedModel: "gemini-3.8-flash" },
   openrouter: { recommendedModel: "openai/gpt-4.1-mini" },
   groq: { recommendedModel: "llama-3.3-70b-versatile" },
   "personal-agent-cloud": { recommendedModel: "claude-sonnet-4-6" },

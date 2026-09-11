@@ -139,11 +139,23 @@ export async function fetchIntelligenceStatus(
   base: string,
   token: string,
 ): Promise<IntelligenceStatusDto> {
-  const res = await fetch(`${base}/v1/setup/intelligence`, {
-    headers: authHeaders(token),
-  });
-  if (!res.ok) throw new Error(`intelligence_status_${res.status}`);
-  return (await res.json()) as IntelligenceStatusDto;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
+  try {
+    const res = await fetch(`${base}/v1/setup/intelligence`, {
+      headers: authHeaders(token),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`intelligence_status_${res.status}`);
+    return (await res.json()) as IntelligenceStatusDto;
+  } catch (err) {
+    if (ctrl.signal.aborted) {
+      throw new Error("intelligence_status_timeout");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function transitionSetup(

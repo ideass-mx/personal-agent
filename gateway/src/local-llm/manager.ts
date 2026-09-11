@@ -131,11 +131,16 @@ export function createLocalModelManager(
   function getActive() {
     const state = readState(paths);
     if (!state.active) {
-      // Auto-activate unique installed default.
+      // Auto-activate unique installed default and persist so UI/status agree.
       const only = state.installed.find(
         (i) => i.modelId === DEFAULT_LOCAL_MODEL_ID,
       );
       if (only && fs.existsSync(only.path)) {
+        state.active = {
+          modelId: only.modelId,
+          variantId: only.variantId,
+        };
+        writeState(paths, state);
         return {
           modelId: only.modelId,
           variantId: only.variantId,
@@ -149,7 +154,25 @@ export function createLocalModelManager(
         i.modelId === state.active!.modelId &&
         i.variantId === state.active!.variantId,
     );
-    if (!rec || !fs.existsSync(rec.path)) return null;
+    if (!rec || !fs.existsSync(rec.path)) {
+      // Active apunta a un archivo perdido: intentar default instalado.
+      const only = state.installed.find(
+        (i) => i.modelId === DEFAULT_LOCAL_MODEL_ID && fs.existsSync(i.path),
+      );
+      if (only) {
+        state.active = {
+          modelId: only.modelId,
+          variantId: only.variantId,
+        };
+        writeState(paths, state);
+        return {
+          modelId: only.modelId,
+          variantId: only.variantId,
+          path: only.path,
+        };
+      }
+      return null;
+    }
     return { modelId: rec.modelId, variantId: rec.variantId, path: rec.path };
   }
 

@@ -176,6 +176,8 @@ function gatewayEnv() {
   }
   // Always set (even empty) so inherited OS ANTHROPIC_API_KEY cannot survive uninstall.
   env.ANTHROPIC_API_KEY = apiKey || "";
+  // Misma raíz para DB, models, config e intelligence (evita «No instalado» fantasma).
+  env.PERSONAL_AGENT_DATA_DIR = data.root;
   env.PERSONAL_AGENT_DB = path.join(data.dbDir, "personal-agent.db");
   env.PERSONAL_AGENT_OBJECTS_DIR = data.objectsDir;
   env.PERSONAL_AGENT_CREDENTIALS_DIR = data.credentialsDir;

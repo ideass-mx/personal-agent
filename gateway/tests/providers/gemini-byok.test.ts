@@ -36,11 +36,11 @@ describe("gemini BYOK provider", () => {
     const intel = await import("../../src/providers/intelligence.ts");
     const conn = await intel.upsertExternalConnection({
       provider: "gemini",
-      modelId: "gemini-3.6-flash",
+      modelId: "gemini-3.8-flash",
       apiKey: "AIzaSyTestGeminiKeyForUnitXXXXXXXX",
     });
     assert.equal(conn.provider, "gemini");
-    assert.equal(conn.modelId, "gemini-3.6-flash");
+    assert.equal(conn.modelId, "gemini-3.8-flash");
     assert.match(
       conn.baseUrl || "",
       /generativelanguage\.googleapis\.com\/v1beta\/openai/,

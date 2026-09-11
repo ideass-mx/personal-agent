@@ -131,21 +131,47 @@ export function IntelligenceCenter() {
   const token = session?.token || "";
 
   const refresh = useCallback(async () => {
-    if (!session || !base) return;
+    if (!session || !base) {
+      // Evita «Cargando…» eterno si aún no hay sesión HTTP.
+      if (!session) {
+        setErr("Conecta el agente para ver la inteligencia.");
+      }
+      return;
+    }
     try {
-      const [st, cs, loc, models] = await Promise.all([
-        fetchIntelligenceStatus(base, token),
+      // Critico primero: no bloquear Predeterminada si local-llm/cloud cuelgan.
+      const st = await fetchIntelligenceStatus(base, token);
+      setSnap(st);
+      setLocalReady(Boolean(st.local?.installed));
+      setErr(null);
+
+      void Promise.all([
         fetchCloudAuthStatus(base, token).catch(() => null),
         fetchLocalLlmStatus(base, token).catch(() => null),
         fetchLocalModels(base, token).catch(() => null),
-      ]);
-      setSnap(st);
-      setCloud(cs);
-      setLocalReady(loc?.ready ?? st.local?.installed ?? false);
-      setLocalModels(models);
-      setErr(null);
-    } catch {
-      setErr("No pudimos cargar el estado de inteligencia.");
+      ]).then(([cs, loc, models]) => {
+        if (cs) setCloud(cs);
+        if (models) setLocalModels(models);
+        const catalogInstalled = Boolean(
+          models?.active ||
+            (models?.installed || []).some((m) =>
+              ["installed", "active", "ready"].includes(m.state),
+            ),
+        );
+        // ready=false (runtime ausente) no debe ocultar un modelo ya en disco.
+        setLocalReady(
+          Boolean(loc?.ready) ||
+            Boolean(st.local?.installed) ||
+            catalogInstalled,
+        );
+      });
+    } catch (ex) {
+      const msg = ex instanceof Error ? ex.message : "";
+      setErr(
+        msg.includes("timeout")
+          ? "El Gateway no respondió a tiempo. ¿Está encendido Personal Agent?"
+          : "No pudimos cargar el estado de inteligencia.",
+      );
     }
   }, [session, base, token]);
 

@@ -98,3 +98,74 @@ describe("parseLeakedToolCallJson / strip", () => {
     assert.equal(classifyContentHold("Hola mundo"), "stream");
   });
 });
+
+describe("gemini openai-compat request shaping", () => {
+  it("sends reasoning_effort=low and aborts on idle stream", async () => {
+    const { createOpenAiCompatibleProvider } = await import(
+      "../../src/providers/openai-compatible.ts"
+    );
+    let seenBody: Record<string, unknown> | null = null;
+    let signalAborted = false;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"delta":{"content":"hola"}}]}\n\n',
+          ),
+        );
+        // Sin [DONE]: el idle timeout debe abortar la lectura.
+      },
+    });
+    const provider = createOpenAiCompatibleProvider({
+      providerId: "gemini",
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+      model: "gemini-3.8-flash",
+      apiKey: "AIzaSyTest",
+      timeoutMs: 5_000,
+      idleTimeoutMs: 80,
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (_url, init) => {
+      seenBody = JSON.parse(String(init?.body || "{}")) as Record<
+        string,
+        unknown
+      >;
+      const signal = init?.signal as AbortSignal | undefined;
+      signal?.addEventListener("abort", () => {
+        signalAborted = true;
+      });
+      return new Response(body, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    }) as typeof fetch;
+
+    try {
+      const events: string[] = [];
+      try {
+        for await (const ev of provider.stream({
+          messages: [{ role: "user", content: "hi" }],
+          model: "gemini-3.8-flash",
+        })) {
+          events.push(ev.type);
+        }
+        assert.fail("expected idle timeout abort");
+      } catch (err) {
+        assert.ok(err instanceof Error);
+        assert.match(
+          err.message,
+          /provider_stream_timeout|aborted|AbortError/i,
+        );
+      }
+      assert.ok(seenBody);
+      assert.equal(seenBody.reasoning_effort, "low");
+      assert.equal(seenBody.model, "gemini-3.8-flash");
+      assert.equal(seenBody.stream, true);
+      assert.equal(signalAborted, true);
+      assert.ok(events.includes("text_delta"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

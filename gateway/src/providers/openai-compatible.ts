@@ -31,8 +31,10 @@ type OpenAiCompatProviderInput = {
   apiKey?: string;
   extraHeaders?: Record<string, string>;
   diagnostics?: SqliteDiagnosticsStore;
-  /** Default 60s for chat completions. */
+  /** Default overall wall-clock for chat completions (incluye stream). */
   timeoutMs?: number;
+  /** Sin chunks SSE durante este tiempo → abort (default por proveedor). */
+  idleTimeoutMs?: number;
   capabilities?: Partial<LLMCapabilities>;
 };
 
@@ -175,6 +177,7 @@ export function classifyContentHold(held: string): "stream" | "hold" | "undecide
 
 async function* parseSseToEvents(
   stream: ReadableStream<Uint8Array>,
+  signal?: AbortSignal,
 ): AsyncGenerator<LLMEvent> {
   const decoder = new TextDecoder();
   let buffer = "";
@@ -184,6 +187,11 @@ async function* parseSseToEvents(
   >();
   let held = "";
   let contentMode: "undecided" | "stream" | "hold" = "undecided";
+  const reader = stream.getReader();
+  const onAbort = () => {
+    void reader.cancel("aborted");
+  };
+  signal?.addEventListener("abort", onAbort);
 
   const flushTools = function* (): Generator<LLMEvent> {
     const keys = [...pending.keys()].sort((a, b) => a - b);
@@ -249,69 +257,87 @@ async function* parseSseToEvents(
     contentMode = "undecided";
   };
 
-  for await (const chunk of stream) {
-    buffer += decoder.decode(chunk, { stream: true });
+  try {
     for (;;) {
-      const idx = buffer.indexOf("\n\n");
-      if (idx < 0) break;
-      const frame = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
-      const lines = frame
-        .split("\n")
-        .map((x) => x.trim())
-        .filter((x) => x.startsWith("data:"))
-        .map((x) => x.slice(5).trim());
-      for (const line of lines) {
-        if (!line || line === "[DONE]") {
-          if (line === "[DONE]") {
-            yield* flushHeld();
-            yield* flushTools();
-          }
-          continue;
-        }
-        let payload: any;
-        try {
-          payload = JSON.parse(line);
-        } catch {
-          continue;
-        }
-        const choices = Array.isArray(payload?.choices) ? payload.choices : [];
-        for (const c of choices) {
-          const delta = c?.delta ?? {};
-          if (typeof delta?.content === "string" && delta.content.length > 0) {
-            yield* onContentPiece(delta.content);
-          }
-          const toolCalls = Array.isArray(delta?.tool_calls)
-            ? delta.tool_calls
-            : [];
-          for (const tc of toolCalls) {
-            const i = typeof tc?.index === "number" ? tc.index : 0;
-            const prev = pending.get(i) || { id: "", name: "", arguments: "" };
-            if (typeof tc?.id === "string" && tc.id) prev.id = tc.id;
-            const fn = tc?.function ?? {};
-            if (typeof fn?.name === "string" && fn.name) prev.name = fn.name;
-            if (typeof fn?.arguments === "string") {
-              prev.arguments += fn.arguments;
-            }
-            pending.set(i, prev);
-          }
-          const finish = c?.finish_reason;
-          if (
-            finish === "tool_calls" ||
-            finish === "stop" ||
-            finish === "length"
-          ) {
-            yield* flushHeld();
-            if (finish === "tool_calls" || pending.size > 0) {
+      if (signal?.aborted) {
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value;
+      buffer += decoder.decode(chunk, { stream: true });
+      for (;;) {
+        const idx = buffer.indexOf("\n\n");
+        if (idx < 0) break;
+        const frame = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        const lines = frame
+          .split("\n")
+          .map((x) => x.trim())
+          .filter((x) => x.startsWith("data:"))
+          .map((x) => x.slice(5).trim());
+        for (const line of lines) {
+          if (!line || line === "[DONE]") {
+            if (line === "[DONE]") {
+              yield* flushHeld();
               yield* flushTools();
+            }
+            continue;
+          }
+          let payload: any;
+          try {
+            payload = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const choices = Array.isArray(payload?.choices) ? payload.choices : [];
+          for (const c of choices) {
+            const delta = c?.delta ?? {};
+            if (typeof delta?.content === "string" && delta.content.length > 0) {
+              yield* onContentPiece(delta.content);
+            }
+            const toolCalls = Array.isArray(delta?.tool_calls)
+              ? delta.tool_calls
+              : [];
+            for (const tc of toolCalls) {
+              const i = typeof tc?.index === "number" ? tc.index : 0;
+              const prev = pending.get(i) || { id: "", name: "", arguments: "" };
+              if (typeof tc?.id === "string" && tc.id) prev.id = tc.id;
+              const fn = tc?.function ?? {};
+              if (typeof fn?.name === "string" && fn.name) prev.name = fn.name;
+              if (typeof fn?.arguments === "string") {
+                prev.arguments += fn.arguments;
+              }
+              pending.set(i, prev);
+            }
+            const finish = c?.finish_reason;
+            if (
+              finish === "tool_calls" ||
+              finish === "stop" ||
+              finish === "length"
+            ) {
+              yield* flushHeld();
+              if (finish === "tool_calls" || pending.size > 0) {
+                yield* flushTools();
+              }
             }
           }
         }
       }
     }
+    yield* flushHeld();
+    yield* flushTools();
+    if (signal?.aborted) {
+      throw new DOMException("The operation was aborted.", "AbortError");
+    }
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+    try {
+      reader.releaseLock();
+    } catch {
+      /* ignore */
+    }
   }
-  yield* flushHeld();
-  yield* flushTools();
 }
 
 export function createOpenAiCompatibleProvider(
@@ -369,6 +395,10 @@ export function createOpenAiCompatibleProvider(
           },
         }));
       }
+      // Gemini 3 «piensa» por defecto; sin esto la UI parece trabada.
+      if (input.providerId === "gemini") {
+        body.reasoning_effort = "low";
+      }
       input.diagnostics?.record({
         diagnosticId: request.diagnosticId || "PA-UNKNOWN",
         component: "LLM_PROVIDER",
@@ -382,8 +412,29 @@ export function createOpenAiCompatibleProvider(
         },
       });
       const ctrl = new AbortController();
-      const timeoutMs = input.timeoutMs ?? 60_000;
-      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      // El timeout debe cubrir TODO el stream. Antes se limpiaba al recibir
+      // headers y Gemini podía quedarse pensando sin límite (UI «trabada»).
+      const overallMs =
+        input.timeoutMs ??
+        (input.providerId === "gemini" ? 120_000 : 90_000);
+      const idleMs =
+        input.idleTimeoutMs ??
+        (input.providerId === "gemini" ? 45_000 : 60_000);
+      const startedAt = Date.now();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const armTimeout = () => {
+        if (timer) clearTimeout(timer);
+        const remaining = overallMs - (Date.now() - startedAt);
+        if (remaining <= 0) {
+          ctrl.abort();
+          return;
+        }
+        timer = setTimeout(
+          () => ctrl.abort(),
+          Math.min(idleMs, remaining),
+        );
+      };
+      armTimeout();
       let res: Response;
       try {
         res = await fetch(url, {
@@ -392,24 +443,43 @@ export function createOpenAiCompatibleProvider(
           body: JSON.stringify(body),
           signal: ctrl.signal,
         });
+        if (!res.ok || !res.body) {
+          const errBody = await res.text().catch(() => "");
+          throw mapHttpError({
+            provider: input.providerId,
+            model,
+            diagnosticId: request.diagnosticId,
+            status: res.status,
+            body: errBody,
+            stage: "LLM_REQUEST",
+          });
+        }
+        armTimeout();
+        for await (const ev of parseSseToEvents(res.body, ctrl.signal)) {
+          armTimeout();
+          yield ev;
+        }
+        yield { type: "done" };
+      } catch (err) {
+        if (ctrl.signal.aborted) {
+          throw new AgentDiagnosticError({
+            message: "provider_stream_timeout",
+            component: "LLM_PROVIDER",
+            stage: "LLM_STREAM",
+            errorCode: "LLM_PROVIDER_UNAVAILABLE",
+            diagnosticId: request.diagnosticId,
+            metadata: {
+              provider: input.providerId,
+              model,
+              timeoutMs: overallMs,
+              idleMs,
+            },
+          });
+        }
+        throw err;
       } finally {
-        clearTimeout(timer);
+        if (timer) clearTimeout(timer);
       }
-      if (!res.ok || !res.body) {
-        const errBody = await res.text().catch(() => "");
-        throw mapHttpError({
-          provider: input.providerId,
-          model,
-          diagnosticId: request.diagnosticId,
-          status: res.status,
-          body: errBody,
-          stage: "LLM_REQUEST",
-        });
-      }
-      for await (const ev of parseSseToEvents(res.body)) {
-        yield ev;
-      }
-      yield { type: "done" };
     },
   };
 }
