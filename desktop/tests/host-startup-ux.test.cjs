@@ -125,16 +125,20 @@ test("host happy path delays tray until boot completes", () => {
   assert.match(bootSlice, /ensureTray\(\)/);
 });
 
-test("automatic browser launch is idempotent; second-instance reopens product UI", () => {
+test("automatic browser launch is idempotent; second-instance avoids double tab during boot", () => {
   const src = fs.readFileSync(mainPath, "utf8");
   assert.match(src, /browserLaunchState\s*=\s*"IDLE"/);
   assert.match(src, /browserLaunchState\s*=\s*"OPENING"/);
   assert.match(src, /browserLaunchState\s*=\s*"OPENED"/);
   assert.match(src, /browserLaunchState\s*=\s*"FAILED"/);
   assert.match(src, /ensureAutomaticBrowserLaunch\("bootHostMode",\s*reason\)/);
+  assert.match(src, /BROWSER_OPEN_COOLDOWN_MS/);
+  assert.match(src, /browserOpenInFlight/);
+  assert.match(src, /recent_open_cooldown/);
   const secondIdx = src.indexOf('app.on("second-instance"');
-  const secondSlice = src.slice(secondIdx, secondIdx + 900);
-  assert.match(secondSlice, /showProductWindow\(\)/);
+  const secondSlice = src.slice(secondIdx, secondIdx + 1100);
+  assert.match(secondSlice, /boot_in_progress/);
+  assert.match(secondSlice, /showProductWindow\(/);
   assert.match(secondSlice, /desktop_icon_or_second_launch/);
   assert.doesNotMatch(secondSlice, /bootHostMode\(/);
   assert.doesNotMatch(secondSlice, /supervisor\.start\(/);

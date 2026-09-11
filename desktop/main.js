@@ -73,6 +73,10 @@ let lastConsolePort = 8787;
 let browserOpenedForCurrentStartup = false;
 let browserLaunchState = "IDLE";
 let automaticBrowserLaunchPromise = null;
+/** Evita dos pestañas cuando el instalador / icono dispara un second-instance. */
+let browserOpenInFlight = null;
+let lastSuccessfulBrowserOpenAt = 0;
+const BROWSER_OPEN_COOLDOWN_MS = 12_000;
 let hostBootPromise = null;
 /** IDLE | BOOTING | READY | FAILED — avoids automatic re-boot after success. */
 let hostBootState = "IDLE";
@@ -276,13 +280,21 @@ if (!singleInstanceLock) {
       void shutdownHost("uninstall");
       return;
     }
-    // Doble clic en el icono / segundo lanzamiento: reabrir la UI del producto.
-    logHostBrowser("browser_open_attempt", {
+    // Durante el boot del instalador no abrir otra pestaña: el primer proceso ya lo hará.
+    if (hostBootState === "BOOTING" || browserLaunchState === "OPENING") {
+      logHostBrowser("browser_open_skipped", {
+        source: "second-instance",
+        reason: "boot_in_progress",
+        note: "First instance will open the browser when ready.",
+      });
+      return;
+    }
+    // Icono del escritorio con host ya listo: reabrir (con cooldown anti-doble pestaña).
+    void showProductWindow({
       source: "second-instance",
       reason: "desktop_icon_or_second_launch",
-      note: "Reopen Personal Agent for the user (browser or splash).",
+      force: false,
     });
-    void showProductWindow();
   });
 }
 
@@ -552,14 +564,16 @@ async function showHostSplashMessage(state) {
 
 /**
  * Recreate / show the product window. In host mode never load legacy onboarding UI.
+ * @param {{ source?: string, reason?: string, force?: boolean }} [opts]
  */
-async function showProductWindow() {
+async function showProductWindow(opts = {}) {
   if (hostModeActive) {
     const snap = supervisor?.snapshot?.() || {};
     if (snap.running && snap.bootReady) {
       await openPersonalAgentInBrowser({
-        source: "showProductWindow",
-        reason: "user_requested_browser_launch",
+        source: opts.source || "showProductWindow",
+        reason: opts.reason || "user_requested_browser_launch",
+        force: opts.force === true,
       });
       return;
     }
@@ -588,16 +602,50 @@ async function showProductWindow() {
 async function openPersonalAgentInBrowser(input = {}) {
   const source = input.source || "unknown";
   const reason = input.reason || "unknown";
-  logHostBrowser("browser_open_attempt", { source, reason });
-  const token = config.getHubToken();
-  const launchUrl = await requestBrowserLaunchUrl(lastConsolePort, token);
-  await shell.openExternal(launchUrl);
-  logHostBrowser("browser_open_success", {
-    source,
-    reason,
-    url: "localhost",
-  });
-  return { ok: true, url: launchUrl };
+  const force = input.force === true;
+
+  if (browserOpenInFlight) {
+    logHostBrowser("browser_open_skipped", {
+      source,
+      reason,
+      note: "Browser open already in flight.",
+    });
+    return browserOpenInFlight;
+  }
+
+  const now = Date.now();
+  if (
+    !force &&
+    lastSuccessfulBrowserOpenAt > 0 &&
+    now - lastSuccessfulBrowserOpenAt < BROWSER_OPEN_COOLDOWN_MS
+  ) {
+    logHostBrowser("browser_open_skipped", {
+      source,
+      reason,
+      note: "recent_open_cooldown",
+      msSinceLast: now - lastSuccessfulBrowserOpenAt,
+    });
+    return { ok: true, skipped: true, reason: "cooldown" };
+  }
+
+  browserOpenInFlight = (async () => {
+    try {
+      logHostBrowser("browser_open_attempt", { source, reason, force });
+      const token = config.getHubToken();
+      const launchUrl = await requestBrowserLaunchUrl(lastConsolePort, token);
+      await shell.openExternal(launchUrl);
+      lastSuccessfulBrowserOpenAt = Date.now();
+      logHostBrowser("browser_open_success", {
+        source,
+        reason,
+        url: "localhost",
+      });
+      return { ok: true, url: launchUrl };
+    } finally {
+      browserOpenInFlight = null;
+    }
+  })();
+  return browserOpenInFlight;
 }
 
 async function ensureAutomaticBrowserLaunch(source, reason) {
@@ -621,9 +669,12 @@ async function ensureAutomaticBrowserLaunch(source, reason) {
   automaticBrowserLaunchPromise = (async () => {
     try {
       const result = await openPersonalAgentInBrowser({ source, reason });
+      // Cooldown/in-flight skip cuenta como éxito si ya hubo apertura reciente.
       browserOpenedForCurrentStartup = true;
       browserLaunchState = "OPENED";
-      return result;
+      return result?.skipped
+        ? { ok: true, alreadyOpened: true, ...result }
+        : result;
     } catch (err) {
       browserLaunchState = "FAILED";
       throw err;
@@ -841,13 +892,21 @@ function buildTrayTemplate() {
     {
       label: "Abrir Personal Agent",
       click: () => {
-        void showProductWindow();
+        void showProductWindow({
+          source: "tray",
+          reason: "tray_open_personal_agent",
+          force: true,
+        });
       },
     },
     {
       label: hostModeActive ? "Mostrar agente" : "Mostrar panel",
       click: () => {
-        void showProductWindow();
+        void showProductWindow({
+          source: "tray",
+          reason: "tray_show_agent",
+          force: true,
+        });
       },
     },
     {
@@ -881,7 +940,11 @@ function createTray() {
   tray = new Tray(img);
   refreshTrayMenu();
   tray.on("click", () => {
-    void showProductWindow();
+    void showProductWindow({
+      source: "tray",
+      reason: "tray_click",
+      force: true,
+    });
   });
 }
 
