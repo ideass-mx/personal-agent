@@ -38,12 +38,14 @@ describe("PHASE 58.5 conversation sidebar", () => {
     assert.match(src, /title=\{fullTitle\}/);
   });
 
-  it("Shell uses ConversationSidebarList", () => {
+  it("Shell no longer mounts multi-chat sidebar (un chat)", () => {
     const shell = fs.readFileSync(
       path.join(root, "src/components/Shell.tsx"),
       "utf8",
     );
-    assert.match(shell, /ConversationSidebarList/);
+    assert.equal(shell.includes("ConversationSidebarList"), false);
+    assert.match(shell, /title="Chat"/);
+    assert.match(shell, /BellRouter/);
   });
 
   it("AppContext exposes pin/remove and sorts pinned first", () => {

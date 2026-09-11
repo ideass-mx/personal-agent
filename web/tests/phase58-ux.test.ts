@@ -22,13 +22,14 @@ describe("PHASE 58.1 Personal Agent UX", () => {
     assert.match(app, /st\.llmConfigured/);
   });
 
-  it("Shell shows Plan Personal, not Tu agente", () => {
+  it("Shell companion nav uses Settings, not Tu agente", () => {
     const shell = fs.readFileSync(
       path.join(root, "src/components/Shell.tsx"),
       "utf8",
     );
-    assert.match(shell, /Plan Personal/);
+    assert.match(shell, /Settings/);
     assert.equal(shell.includes("Tu agente"), false);
+    assert.match(shell, /title="Chat"/);
   });
 
   it("ConversationScreen blank state has hero + composer autofocus", () => {

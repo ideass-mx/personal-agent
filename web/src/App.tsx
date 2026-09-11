@@ -1,18 +1,13 @@
 import { HitlModal } from "./components/HitlModal";
 import { Shell } from "./components/Shell";
-import { AutomationsScreen } from "./features/automations/AutomationsScreen";
-import { ConversationScreen } from "./features/conversations/ConversationThreadScreen";
-import { ConversationsListScreen } from "./features/conversations/ConversationsListScreen";
+import { CompanionHost } from "./features/companion/CompanionHost";
 import { DiagnosticsScreen } from "./features/diagnostics/DiagnosticsScreen";
 import { ExperienceLabScreen } from "./experience/ExperienceLabScreen";
-import { LibraryScreen } from "./features/library/LibraryScreen";
-import { ProjectsScreen } from "./features/projects/ProjectsScreen";
 import { SettingsScreen } from "./features/configuration/SettingsScreen";
 import { SetupScreen } from "./features/setup/SetupScreen";
 import { OnboardingWizard } from "./features/setup/OnboardingWizard";
 import { ProfileNameScreen } from "./features/setup/ProfileNameScreen";
 import { resolveProductSurfaceGate } from "./features/setup/setup-flow";
-import { TasksScreen } from "./features/tasks/TasksScreen";
 import { useApp } from "./state/AppContext";
 import { useEffect, useState } from "react";
 import { resolveHttpBase } from "./api/http";
@@ -138,17 +133,15 @@ function Routed() {
     (() => {
       switch (nav) {
         case "conversation":
-          return <ConversationScreen />;
         case "conversations":
-          return <ConversationsListScreen />;
         case "projects":
-          return <ProjectsScreen />;
         case "tasks":
-          return <TasksScreen />;
+        case "memory":
+        case "files":
+        case "activity":
         case "automations":
-          return <AutomationsScreen />;
         case "library":
-          return <LibraryScreen />;
+          return <CompanionHost />;
         case "settings":
           return <SettingsScreen />;
         case "diagnostics":
@@ -160,7 +153,7 @@ function Routed() {
         case "experience":
           return <ExperienceLabScreen />;
         default:
-          return <ConversationScreen />;
+          return <CompanionHost />;
       }
     })()
   );

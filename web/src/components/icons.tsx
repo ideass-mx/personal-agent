@@ -203,3 +203,11 @@ export function IconTrash(p: IconProps) {
     </svg>
   );
 }
+
+export function IconActivity(p: IconProps) {
+  return (
+    <svg {...base(p)}>
+      <path d="M3 12h4l2-7 4 14 2-7h6" />
+    </svg>
+  );
+}

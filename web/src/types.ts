@@ -1,9 +1,12 @@
-/** Navegación: sustantivos que el usuario posee (no capacidades). */
+/** Navegación: un compañero · una línea principal · muchos espacios. */
 export type NavId =
   | "conversation"
   | "conversations"
   | "projects"
   | "tasks"
+  | "memory"
+  | "files"
+  | "activity"
   | "automations"
   | "library"
   | "settings"
