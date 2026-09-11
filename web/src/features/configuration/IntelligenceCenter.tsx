@@ -131,24 +131,26 @@ export function IntelligenceCenter() {
   const token = session?.token || "";
 
   const refresh = useCallback(async () => {
-    if (!session || !base) {
-      // Evita «Cargando…» eterno si aún no hay sesión HTTP.
-      if (!session) {
-        setErr("Conecta el agente para ver la inteligencia.");
-      }
+    if (!session) {
+      setErr("Conecta el agente para ver la inteligencia.");
+      return;
+    }
+    const httpBase = resolveHttpBase(session);
+    if (!httpBase) {
+      setErr("No hay URL del Gateway. Reconecta desde la pantalla de inicio.");
       return;
     }
     try {
       // Critico primero: no bloquear Predeterminada si local-llm/cloud cuelgan.
-      const st = await fetchIntelligenceStatus(base, token);
+      const st = await fetchIntelligenceStatus(httpBase, token);
       setSnap(st);
       setLocalReady(Boolean(st.local?.installed));
       setErr(null);
 
       void Promise.all([
-        fetchCloudAuthStatus(base, token).catch(() => null),
-        fetchLocalLlmStatus(base, token).catch(() => null),
-        fetchLocalModels(base, token).catch(() => null),
+        fetchCloudAuthStatus(httpBase, token).catch(() => null),
+        fetchLocalLlmStatus(httpBase, token).catch(() => null),
+        fetchLocalModels(httpBase, token).catch(() => null),
       ]).then(([cs, loc, models]) => {
         if (cs) setCloud(cs);
         if (models) setLocalModels(models);
@@ -170,10 +172,12 @@ export function IntelligenceCenter() {
       setErr(
         msg.includes("timeout")
           ? "El Gateway no respondió a tiempo. ¿Está encendido Personal Agent?"
-          : "No pudimos cargar el estado de inteligencia.",
+          : msg.includes("401") || msg.includes("403")
+            ? "Sesión no autorizada para configurar inteligencia. Reabre la consola desde Personal Agent."
+            : "No pudimos cargar el estado de inteligencia.",
       );
     }
-  }, [session, base, token]);
+  }, [session, token]);
 
   useEffect(() => {
     void refresh();
@@ -740,6 +744,23 @@ export function IntelligenceCenter() {
                   <strong>Cargando inteligencia…</strong>
                   <p className="muted">Un momento.</p>
                 </div>
+              </div>
+            ) : !snap && err ? (
+              <div className="intel-default-card is-empty">
+                <div>
+                  <strong>No pudimos cargar la inteligencia</strong>
+                  <p className="muted">{err}</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => {
+                    setErr(null);
+                    void refresh();
+                  }}
+                >
+                  Reintentar
+                </button>
               </div>
             ) : selected ? (
               <div className="intel-default-card">

@@ -1,3 +1,4 @@
+import { resolveHttpBase } from "./http";
 import type { ConnectionConfig } from "../types";
 
 export type IdentityMeDto = {
@@ -15,10 +16,28 @@ export type IdentityMeDto = {
 };
 
 function authHeaders(token: string): HeadersInit {
-  return {
+  const headers: HeadersInit = {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
     "Content-Type": "application/json",
+  };
+  if (!token.trim()) {
+    return {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+  }
+  return headers;
+}
+
+function identityFetchInit(token: string, init?: RequestInit): RequestInit {
+  return {
+    ...init,
+    credentials: "same-origin",
+    headers: {
+      ...authHeaders(token),
+      ...(init?.headers || {}),
+    },
   };
 }
 
@@ -26,9 +45,10 @@ export async function fetchIdentityMe(
   base: string,
   token: string,
 ): Promise<IdentityMeDto> {
-  const res = await fetch(`${base}/v1/identity/me`, {
-    headers: authHeaders(token),
-  });
+  const res = await fetch(
+    `${base}/v1/identity/me`,
+    identityFetchInit(token),
+  );
   if (!res.ok) throw new Error(`identity_me_${res.status}`);
   return (await res.json()) as IdentityMeDto;
 }
@@ -38,11 +58,13 @@ export async function updateIdentityName(
   token: string,
   name: string,
 ): Promise<IdentityMeDto["user"]> {
-  const res = await fetch(`${base}/v1/identity/me`, {
-    method: "PATCH",
-    headers: authHeaders(token),
-    body: JSON.stringify({ name }),
-  });
+  const res = await fetch(
+    `${base}/v1/identity/me`,
+    identityFetchInit(token, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+  );
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as {
       error?: { message?: string };
@@ -54,5 +76,5 @@ export async function updateIdentityName(
 }
 
 export function resolveIdentityBase(session: ConnectionConfig): string {
-  return session.httpBase.trim().replace(/\/$/, "");
+  return resolveHttpBase(session);
 }

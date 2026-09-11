@@ -15,6 +15,17 @@ function authHeaders(token: string): HeadersInit {
   return headers;
 }
 
+function localFetchInit(token: string, init?: RequestInit): RequestInit {
+  return {
+    ...init,
+    credentials: "same-origin",
+    headers: {
+      ...authHeaders(token),
+      ...(init?.headers || {}),
+    },
+  };
+}
+
 export type LocalRecommendationDto = {
   modelId: string;
   displayName: string;
@@ -53,9 +64,7 @@ export async function fetchLocalRecommendation(
   recommendation: LocalRecommendationDto;
   hardware: { memoryGb: number; cpuCores: number };
 }> {
-  const res = await fetch(`${base}/v1/local-llm/recommendation`, {
-    headers: authHeaders(token),
-  });
+  const res = await fetch(`${base}/v1/local-llm/recommendation`, localFetchInit(token));
   if (!res.ok) throw new Error(`local_rec_${res.status}`);
   return (await res.json()) as {
     recommendation: LocalRecommendationDto;
@@ -67,9 +76,7 @@ export async function fetchLocalModels(
   base: string,
   token: string,
 ): Promise<LocalModelsDto> {
-  const res = await fetch(`${base}/v1/local-llm/models`, {
-    headers: authHeaders(token),
-  });
+  const res = await fetch(`${base}/v1/local-llm/models`, localFetchInit(token));
   if (!res.ok) throw new Error(`local_models_${res.status}`);
   return (await res.json()) as LocalModelsDto;
 }
@@ -79,11 +86,13 @@ export async function activateLocalModel(
   token: string,
   opts: { modelId: string; variantId?: string },
 ): Promise<void> {
-  const res = await fetch(`${base}/v1/local-llm/activate`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(opts),
-  });
+  const res = await fetch(
+    `${base}/v1/local-llm/activate`,
+    localFetchInit(token, {
+      method: "POST",
+      body: JSON.stringify(opts),
+    }),
+  );
   if (!res.ok) {
     const json = (await res.json().catch(() => ({}))) as {
       error?: { message?: string };
@@ -117,9 +126,7 @@ export async function fetchLocalLlmStatus(
     errorMessage?: string | null;
   } | null;
 }> {
-  const res = await fetch(`${base}/v1/local-llm/status`, {
-    headers: authHeaders(token),
-  });
+  const res = await fetch(`${base}/v1/local-llm/status`, localFetchInit(token));
   if (!res.ok) throw new Error(`local_status_${res.status}`);
   return (await res.json()) as {
     ready: boolean;
@@ -149,11 +156,13 @@ export async function installLocalModel(
   token: string,
   opts?: { modelId?: string; variantId?: string },
 ): Promise<{ ok: boolean; model?: { id: string; displayName: string; state: string } }> {
-  const res = await fetch(`${base}/v1/local-llm/install`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify(opts ?? {}),
-  });
+  const res = await fetch(
+    `${base}/v1/local-llm/install`,
+    localFetchInit(token, {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }),
+  );
   const json = (await res.json()) as {
     ok?: boolean;
     model?: { id: string; displayName: string; state: string };

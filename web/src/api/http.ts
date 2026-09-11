@@ -12,7 +12,13 @@ function authHeaders(token: string): HeadersInit {
 }
 
 export function resolveHttpBase(cfg: ConnectionConfig): string {
-  if (cfg.httpBase.trim()) return cfg.httpBase.replace(/\/$/, "");
+  const trimmed = (cfg.httpBase || "").trim().replace(/\/$/, "");
+  if (trimmed) return trimmed;
+  // Mismo origen (bootstrap Desktop / Host URL vacío): usar origin del documento.
+  if (typeof window !== "undefined" && window.location?.origin) {
+    const origin = window.location.origin;
+    if (origin && origin !== "null") return origin;
+  }
   return "";
 }
 

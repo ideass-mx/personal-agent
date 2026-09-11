@@ -83,13 +83,26 @@ function authHeaders(token: string): HeadersInit {
   return headers;
 }
 
+/** Cookie de sesión browser (Desktop bootstrap) + Bearer opcional. */
+function setupFetchInit(token: string, init?: RequestInit): RequestInit {
+  return {
+    ...init,
+    credentials: "same-origin",
+    headers: {
+      ...authHeaders(token),
+      ...(init?.headers || {}),
+    },
+  };
+}
+
 export async function fetchSetupStatus(
   base: string,
   token: string,
 ): Promise<SetupStatusDto> {
-  const res = await fetch(`${base}/v1/setup/status`, {
-    headers: authHeaders(token),
-  });
+  const res = await fetch(
+    `${base}/v1/setup/status`,
+    setupFetchInit(token),
+  );
   if (!res.ok) throw new Error(`setup_status_${res.status}`);
   return (await res.json()) as SetupStatusDto;
 }
@@ -109,9 +122,10 @@ export async function fetchSetupProviders(
   };
   cloud?: { available: boolean };
 }> {
-  const res = await fetch(`${base}/v1/setup/providers`, {
-    headers: authHeaders(token),
-  });
+  const res = await fetch(
+    `${base}/v1/setup/providers`,
+    setupFetchInit(token),
+  );
   if (!res.ok) throw new Error(`setup_providers_${res.status}`);
   const json = (await res.json()) as {
     ok?: boolean;
@@ -142,10 +156,10 @@ export async function fetchIntelligenceStatus(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8_000);
   try {
-    const res = await fetch(`${base}/v1/setup/intelligence`, {
-      headers: authHeaders(token),
-      signal: ctrl.signal,
-    });
+    const res = await fetch(
+      `${base}/v1/setup/intelligence`,
+      setupFetchInit(token, { signal: ctrl.signal }),
+    );
     if (!res.ok) throw new Error(`intelligence_status_${res.status}`);
     return (await res.json()) as IntelligenceStatusDto;
   } catch (err) {
@@ -164,11 +178,13 @@ export async function transitionSetup(
   state: string,
   extra?: { llmProvider?: string },
 ): Promise<SetupStatusDto> {
-  const res = await fetch(`${base}/v1/setup/transition`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ state, ...extra }),
-  });
+  const res = await fetch(
+    `${base}/v1/setup/transition`,
+    setupFetchInit(token, {
+      method: "POST",
+      body: JSON.stringify({ state, ...extra }),
+    }),
+  );
   if (!res.ok) throw new Error(`setup_transition_${res.status}`);
   return (await res.json()) as SetupStatusDto;
 }
@@ -184,18 +200,20 @@ export async function configureSetupLlm(
     modelSelection?: "recommended" | "specific";
   },
 ): Promise<SetupStatusDto & { discovery?: ProviderModelsDto }> {
-  const res = await fetch(`${base}/v1/setup/llm`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({
-      provider: opts.provider,
-      credential: opts.credential,
-      apiKey: opts.credential,
-      modelId: opts.modelId,
-      baseUrl: opts.baseUrl,
-      modelSelection: opts.modelSelection,
+  const res = await fetch(
+    `${base}/v1/setup/llm`,
+    setupFetchInit(token, {
+      method: "POST",
+      body: JSON.stringify({
+        provider: opts.provider,
+        credential: opts.credential,
+        apiKey: opts.credential,
+        modelId: opts.modelId,
+        baseUrl: opts.baseUrl,
+        modelSelection: opts.modelSelection,
+      }),
     }),
-  });
+  );
   const json = (await res.json()) as SetupStatusDto & {
     error?: { code: string; message: string };
     discovery?: ProviderModelsDto;
@@ -211,11 +229,13 @@ export async function selectIntelligenceConnection(
   token: string,
   connectionId: string,
 ): Promise<SetupStatusDto> {
-  const res = await fetch(`${base}/v1/setup/intelligence/select`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ connectionId }),
-  });
+  const res = await fetch(
+    `${base}/v1/setup/intelligence/select`,
+    setupFetchInit(token, {
+      method: "POST",
+      body: JSON.stringify({ connectionId }),
+    }),
+  );
   const json = (await res.json()) as SetupStatusDto & {
     error?: { code: string; message: string };
   };
@@ -231,11 +251,13 @@ export async function updateIntelligenceConnectionModel(
   connectionId: string,
   modelId: string,
 ): Promise<IntelligenceConnectionDto> {
-  const res = await fetch(`${base}/v1/setup/intelligence/model`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({ connectionId, modelId }),
-  });
+  const res = await fetch(
+    `${base}/v1/setup/intelligence/model`,
+    setupFetchInit(token, {
+      method: "POST",
+      body: JSON.stringify({ connectionId, modelId }),
+    }),
+  );
   const json = (await res.json()) as {
     connection?: IntelligenceConnectionDto;
     error?: { code: string; message: string };
@@ -253,11 +275,10 @@ export async function verifySetup(
   base: string,
   token: string,
 ): Promise<SetupStatusDto & { checks?: Record<string, boolean> }> {
-  const res = await fetch(`${base}/v1/setup/verify`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: "{}",
-  });
+  const res = await fetch(
+    `${base}/v1/setup/verify`,
+    setupFetchInit(token, { method: "POST", body: "{}" }),
+  );
   const json = (await res.json()) as SetupStatusDto & {
     error?: { code: string; message: string };
     checks?: Record<string, boolean>;
@@ -283,9 +304,10 @@ export async function fetchCloudAuthStatus(
   base: string,
   token: string,
 ): Promise<CloudAuthStatusDto> {
-  const res = await fetch(`${base}/v1/setup/cloud/status`, {
-    headers: authHeaders(token),
-  });
+  const res = await fetch(
+    `${base}/v1/setup/cloud/status`,
+    setupFetchInit(token),
+  );
   if (!res.ok) throw new Error(`cloud_status_${res.status}`);
   return (await res.json()) as CloudAuthStatusDto;
 }
@@ -294,11 +316,10 @@ export async function disconnectCloudAuth(
   base: string,
   token: string,
 ): Promise<void> {
-  const res = await fetch(`${base}/v1/setup/cloud/disconnect`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: "{}",
-  });
+  const res = await fetch(
+    `${base}/v1/setup/cloud/disconnect`,
+    setupFetchInit(token, { method: "POST", body: "{}" }),
+  );
   if (!res.ok) {
     const json = (await res.json().catch(() => ({}))) as {
       error?: { message?: string };
@@ -311,11 +332,10 @@ export async function connectCloudAuth(
   base: string,
   token: string,
 ): Promise<CloudAuthStatusDto> {
-  const res = await fetch(`${base}/v1/setup/cloud/connect`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: "{}",
-  });
+  const res = await fetch(
+    `${base}/v1/setup/cloud/connect`,
+    setupFetchInit(token, { method: "POST", body: "{}" }),
+  );
   const json = (await res.json()) as CloudAuthStatusDto & {
     error?: { message?: string };
   };
@@ -332,11 +352,7 @@ export async function disconnectProvider(
 ): Promise<IntelligenceStatusDto> {
   const res = await fetch(
     `${base}/v1/setup/providers/${encodeURIComponent(providerId)}/disconnect`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-      body: "{}",
-    },
+    setupFetchInit(token, { method: "POST", body: "{}" }),
   );
   const json = (await res.json()) as {
     ok?: boolean;
@@ -368,11 +384,7 @@ export async function testProviderConnection(
 }> {
   const res = await fetch(
     `${base}/v1/setup/providers/${encodeURIComponent(providerId)}/test`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-      body: "{}",
-    },
+    setupFetchInit(token, { method: "POST", body: "{}" }),
   );
   const json = (await res.json()) as {
     ok?: boolean;
@@ -406,9 +418,7 @@ export async function fetchProviderModels(
   const q = opts?.refresh ? "?refresh=1" : "";
   const res = await fetch(
     `${base}/v1/setup/providers/${encodeURIComponent(providerId)}/models${q}`,
-    {
-      headers: authHeaders(token),
-    },
+    setupFetchInit(token),
   );
   const json = (await res.json()) as ProviderModelsDto & {
     error?: { message?: string };
@@ -432,11 +442,13 @@ export async function createPairingSession(
   base: string,
   token: string,
 ): Promise<PairingCreateResponse> {
-  const res = await fetch(`${base}/v1/pairing/sessions`, {
-    method: "POST",
-    headers: authHeaders(token),
-    body: JSON.stringify({}),
-  });
+  const res = await fetch(
+    `${base}/v1/pairing/sessions`,
+    setupFetchInit(token, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  );
   const json = (await res.json()) as PairingCreateResponse & {
     error?: string;
   };
