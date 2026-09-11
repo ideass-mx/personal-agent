@@ -24,7 +24,7 @@ export const STATIC_RECOMMENDED_MODEL_ID: Record<string, string> = {
   openai: "gpt-4.1-mini",
   anthropic: "claude-sonnet-4-6",
   xai: "grok-4.6",
-  gemini: "gemini-3.8-flash",
+  gemini: "gemini-3.5-flash",
   openrouter: "openai/gpt-4.1-mini",
   groq: "llama-3.3-70b-versatile",
   "personal-agent-cloud": "claude-sonnet-4-6",

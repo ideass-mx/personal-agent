@@ -395,10 +395,8 @@ export function createOpenAiCompatibleProvider(
           },
         }));
       }
-      // Gemini 3 «piensa» por defecto; sin esto la UI parece trabada.
-      if (input.providerId === "gemini") {
-        body.reasoning_effort = "low";
-      }
+      // No forzar reasoning_effort: en Gemini 3.x "low" midió peor latencia
+      // que el default del proveedor (pruebas reales ~1s vs ~12s).
       input.diagnostics?.record({
         diagnosticId: request.diagnosticId || "PA-UNKNOWN",
         component: "LLM_PROVIDER",

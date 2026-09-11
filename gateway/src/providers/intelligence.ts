@@ -523,14 +523,17 @@ export function ensureExternalProviderStubs(): LLMConnection[] {
         existing.displayName = "xAI / Grok";
         changed = true;
       }
-      // Gemini: 3.6 no es ID canónico; docs usan 3.8-flash (rápido + tools).
+      // Preferir 3.5-flash (latencia estable). 3.8 suele saturar (503);
+      // 3.6 es válido pero más lento en pruebas reales.
       if (
         s.provider === "gemini" &&
         (existing.modelId === "gemini-3.6-flash" ||
+          existing.modelId === "gemini-3.8-flash" ||
           existing.modelId === "gemini-2.0-flash" ||
+          existing.modelId === "gemini-2.5-flash" ||
           existing.modelId === "gemini-1.5-flash")
       ) {
-        existing.modelId = "gemini-3.8-flash";
+        existing.modelId = "gemini-3.5-flash";
         existing.displayName = "Gemini";
         changed = true;
       }

@@ -100,7 +100,7 @@ describe("parseLeakedToolCallJson / strip", () => {
 });
 
 describe("gemini openai-compat request shaping", () => {
-  it("sends reasoning_effort=low and aborts on idle stream", async () => {
+  it("does not force reasoning_effort and aborts on idle stream", async () => {
     const { createOpenAiCompatibleProvider } = await import(
       "../../src/providers/openai-compatible.ts"
     );
@@ -120,7 +120,7 @@ describe("gemini openai-compat request shaping", () => {
     const provider = createOpenAiCompatibleProvider({
       providerId: "gemini",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-      model: "gemini-3.8-flash",
+      model: "gemini-3.5-flash",
       apiKey: "AIzaSyTest",
       timeoutMs: 5_000,
       idleTimeoutMs: 80,
@@ -146,7 +146,7 @@ describe("gemini openai-compat request shaping", () => {
       try {
         for await (const ev of provider.stream({
           messages: [{ role: "user", content: "hi" }],
-          model: "gemini-3.8-flash",
+          model: "gemini-3.5-flash",
         })) {
           events.push(ev.type);
         }
@@ -159,8 +159,8 @@ describe("gemini openai-compat request shaping", () => {
         );
       }
       assert.ok(seenBody);
-      assert.equal(seenBody.reasoning_effort, "low");
-      assert.equal(seenBody.model, "gemini-3.8-flash");
+      assert.equal("reasoning_effort" in seenBody, false);
+      assert.equal(seenBody.model, "gemini-3.5-flash");
       assert.equal(seenBody.stream, true);
       assert.equal(signalAborted, true);
       assert.ok(events.includes("text_delta"));

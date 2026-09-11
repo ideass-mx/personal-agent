@@ -38,6 +38,7 @@ export function humanModelLabel(provider: string, modelId: string): string {
     if (modelId.includes("3.1-pro") || modelId.includes("pro")) {
       return "Gemini 3.1 Pro";
     }
+    if (modelId.includes("3.5-flash")) return "Gemini 3.5 Flash";
     if (modelId.includes("3.8-flash")) return "Gemini 3.8 Flash";
     if (modelId.includes("3.6-flash")) return "Gemini 3.6 Flash";
     if (modelId.includes("flash")) return "Gemini Flash";

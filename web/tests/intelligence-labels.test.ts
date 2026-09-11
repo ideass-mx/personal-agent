@@ -32,6 +32,10 @@ describe("PHASE 63 intelligence labels", () => {
     assert.equal(modeTitle("external", "xAI / Grok"), "xAI / Grok");
     assert.equal(providerCardTitle("gemini"), "Gemini");
     assert.equal(
+      humanModelLabel("gemini", "gemini-3.5-flash"),
+      "Gemini 3.5 Flash",
+    );
+    assert.equal(
       humanModelLabel("gemini", "gemini-3.8-flash"),
       "Gemini 3.8 Flash",
     );

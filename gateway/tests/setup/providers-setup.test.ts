@@ -58,7 +58,7 @@ async function mockDiscover(input: {
     anthropic: "claude-sonnet-4-6",
     openai: "gpt-4.1-mini",
     xai: "grok-4.6",
-    gemini: "gemini-3.8-flash",
+    gemini: "gemini-3.5-flash",
     openrouter: "openai/gpt-4.1-mini",
     groq: "llama-3.3-70b-versatile",
   };
