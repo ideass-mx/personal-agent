@@ -107,6 +107,15 @@ describe("companion shell wiring", () => {
     assert.equal(app.includes("ConversationsListScreen"), false);
   });
 
+  it("main chat embeds live ConversationScreen", () => {
+    const src = fs.readFileSync(
+      path.join(root, "src/features/companion/MainChatScreen.tsx"),
+      "utf8",
+    );
+    assert.match(src, /ConversationScreen/);
+    assert.match(src, /newConversation|selectConversation/);
+  });
+
   it("workspace is three-panel", () => {
     const ws = fs.readFileSync(
       path.join(root, "src/features/companion/WorkspaceScreen.tsx"),

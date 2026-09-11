@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useApp } from "../../../state/AppContext";
 import { useCompanion } from "../CompanionContext";
 import { routeIntent } from "../policies/routeIntent";
 
@@ -6,12 +7,12 @@ export function CommandPalette() {
   const {
     paletteOpen,
     setPaletteOpen,
-    sendMain,
     startCreateProject,
     setCompanionNav,
     openWorkspace,
     workspaces,
   } = useCompanion();
+  const { setNav, sendText } = useApp();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -27,10 +28,12 @@ export function CommandPalette() {
     const intent = routeIntent(t);
     if (intent === "project") {
       startCreateProject(t);
+      setNav("projects");
       return;
     }
     setCompanionNav("chat");
-    sendMain(t);
+    setNav("conversation");
+    sendText(t);
   }
 
   return (
@@ -57,17 +60,38 @@ export function CommandPalette() {
         </form>
         <ul className="cp-palette-shortcuts">
           <li>
-            <button type="button" onClick={() => { setPaletteOpen(false); setCompanionNav("chat"); }}>
+            <button
+              type="button"
+              onClick={() => {
+                setPaletteOpen(false);
+                setCompanionNav("chat");
+                setNav("conversation");
+              }}
+            >
               Ir al chat
             </button>
           </li>
           <li>
-            <button type="button" onClick={() => { setPaletteOpen(false); startCreateProject(); }}>
+            <button
+              type="button"
+              onClick={() => {
+                setPaletteOpen(false);
+                startCreateProject();
+                setNav("projects");
+              }}
+            >
               Nuevo proyecto
             </button>
           </li>
           <li>
-            <button type="button" onClick={() => { setPaletteOpen(false); setCompanionNav("tasks"); }}>
+            <button
+              type="button"
+              onClick={() => {
+                setPaletteOpen(false);
+                setCompanionNav("tasks");
+                setNav("tasks");
+              }}
+            >
               Tasks
             </button>
           </li>
@@ -78,6 +102,7 @@ export function CommandPalette() {
                 onClick={() => {
                   setPaletteOpen(false);
                   openWorkspace(w.id);
+                  setNav("projects");
                 }}
               >
                 Abrir {w.name}

@@ -1,101 +1,87 @@
-import { useEffect, useRef } from "react";
+/**
+ * Línea principal: chat real vía Gateway (inteligencia instalada) + chrome companion.
+ */
+import { useEffect } from "react";
+import { ConversationScreen } from "../conversations/ConversationThreadScreen";
+import { useApp } from "../../state/AppContext";
 import { useCompanion } from "./CompanionContext";
-import { CompanionMessageList } from "./components/CompanionMessageList";
-import type { CompanionMessage } from "./types";
 
 export function MainChatScreen() {
   const {
-    mainMessages,
-    draft,
-    setDraft,
-    sendMain,
-    handleCardAction,
-    typing,
     workingCount,
-    openWorkspace,
-    setCompanionNav,
     markMainRead,
+    unreadMain,
   } = useCompanion();
-  const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const {
+    wsStatus,
+    activeConversationId,
+    conversations,
+    selectConversation,
+    newConversation,
+    busy,
+    session,
+  } = useApp();
 
   useEffect(() => {
     markMainRead();
   }, [markMainRead]);
 
+  // Una línea principal: reutilizar la conversación más reciente o crear una.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [mainMessages, typing]);
+    if (!session || wsStatus !== "authenticated") return;
+    if (activeConversationId) return;
+    let cancelled = false;
+    void (async () => {
+      if (conversations.length > 0) {
+        const first = conversations[0];
+        if (first && !cancelled) await selectConversation(first.id);
+        return;
+      }
+      if (!cancelled) await newConversation();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session,
+    wsStatus,
+    activeConversationId,
+    conversations,
+    selectConversation,
+    newConversation,
+  ]);
 
-  function onAction(msg: CompanionMessage) {
-    if (!msg.action) return;
-    if (msg.action.kind === "open" && msg.action.target) {
-      openWorkspace(msg.action.target);
-      return;
-    }
-    if (msg.action.kind === "tasks") {
-      setCompanionNav("tasks");
-      return;
-    }
-    if (msg.action.kind === "project") {
-      setCompanionNav("projects");
-    }
-  }
+  const statusLabel =
+    wsStatus === "authenticated"
+      ? busy
+        ? "Pensando…"
+        : workingCount > 0
+          ? `En línea · trabajando en ${workingCount} cosa${workingCount === 1 ? "" : "s"}`
+          : "En línea"
+      : wsStatus === "connecting"
+        ? "Conectando…"
+        : "Sin conexión";
 
   return (
-    <div className="cp-chat screen" data-agent="personal">
+    <div className="cp-chat" data-agent="personal">
       <header className="cp-chat-head">
         <div className="cp-presence">
-          <span className="cp-breath" aria-hidden />
+          <span
+            className={`cp-breath ${wsStatus === "authenticated" ? "is-live" : "is-off"}`}
+            aria-hidden
+          />
           <div>
             <h1>Agente</h1>
             <p className="muted">
-              En línea
-              {workingCount > 0
-                ? ` · trabajando en ${workingCount} cosa${workingCount === 1 ? "" : "s"}`
-                : ""}
+              {statusLabel}
+              {unreadMain ? " · mensaje nuevo" : ""}
             </p>
           </div>
         </div>
       </header>
-
-      <CompanionMessageList
-        messages={mainMessages}
-        onCardAction={handleCardAction}
-        onAction={onAction}
-      />
-      {typing ? (
-        <p className="cp-typing muted" role="status">
-          El agente está escribiendo…
-        </p>
-      ) : null}
-      <div ref={endRef} />
-
-      <form
-        className="cp-composer"
-        onSubmit={(e) => {
-          e.preventDefault();
-          sendMain();
-        }}
-      >
-        <textarea
-          ref={inputRef}
-          rows={1}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Habla con el agente…"
-          aria-label="Mensaje"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              sendMain();
-            }
-          }}
-        />
-        <button type="submit" className="btn primary" disabled={!draft.trim()}>
-          Enviar
-        </button>
-      </form>
+      <div className="cp-live-chat">
+        <ConversationScreen />
+      </div>
     </div>
   );
 }

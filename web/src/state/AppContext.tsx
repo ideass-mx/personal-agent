@@ -76,6 +76,8 @@ type AppState = {
   setConversationPinned: (id: string, pinned: boolean) => Promise<void>;
   removeConversation: (id: string) => Promise<void>;
   send: () => void;
+  /** Enviar texto concreto (p. ej. paleta ⌘K) sin depender del draft React. */
+  sendText: (text: string) => void;
   pendingConfirm: ConfirmPending | null;
   respondConfirm: (approved: boolean) => void;
   toolBanner: string | null;
@@ -551,6 +553,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [draft, activeConversationId]);
 
+  const sendText = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text || !socketRef.current) return;
+      setDraft("");
+      setBannerError(null);
+      setMessages((prev) => [
+        ...prev,
+        { id: uid(), role: "user", text },
+      ]);
+      setBusy(true);
+      try {
+        socketRef.current.sendUserMessage(
+          text,
+          activeConversationId ?? undefined,
+          conversationIntelRef.current ?? undefined,
+        );
+      } catch {
+        setBusy(false);
+        setBannerError("No hay conexión con el Agent Host.");
+        setToolBanner(null);
+      }
+    },
+    [activeConversationId],
+  );
+
   const respondConfirm = useCallback((approved: boolean) => {
     const p = pendingConfirm;
     if (!p || !socketRef.current) return;
@@ -605,6 +633,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setConversationPinned,
       removeConversation,
       send,
+      sendText,
       pendingConfirm,
       respondConfirm,
       toolBanner,
@@ -644,6 +673,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setConversationPinned,
       removeConversation,
       send,
+      sendText,
       pendingConfirm,
       respondConfirm,
       toolBanner,
