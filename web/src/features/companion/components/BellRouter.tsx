@@ -1,40 +1,23 @@
+import { IconRailBell } from "../../../components/railIcons";
 import { useCompanion } from "../CompanionContext";
 
 export function BellRouter() {
-  const {
-    signals,
-    notifOpen,
-    setNotifOpen,
-    openSignal,
-    unreadMain,
-  } = useCompanion();
+  const { signals, notifOpen, setNotifOpen, openSignal, unreadMain } =
+    useCompanion();
   const unseen = signals.filter((s) => !s.seen).length + (unreadMain ? 1 : 0);
 
   return (
     <div className="cp-bell-wrap">
       <button
         type="button"
-        className="icon-btn cp-bell"
+        className="rail-bell"
         title="Señales"
         aria-label="Señales del agente"
         aria-expanded={notifOpen}
         onClick={() => setNotifOpen(!notifOpen)}
       >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path
-            d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 7H3s3 0 3-7"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-          <path
-            d="M10 19a2 2 0 0 0 4 0"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
-        {unseen > 0 ? <span className="cp-bell-dot" aria-hidden /> : null}
+        <IconRailBell size={17} />
+        {unseen > 0 ? <span className="nd" aria-hidden /> : null}
       </button>
       {notifOpen ? (
         <div className="cp-bell-panel" role="dialog" aria-label="Señales recientes">

@@ -99,8 +99,9 @@ describe("companion shell wiring", () => {
       "utf8",
     );
     const app = fs.readFileSync(path.join(root, "src/App.tsx"), "utf8");
-    assert.match(shell, /title="Chat"/);
+    assert.match(shell, /label="Chat"/);
     assert.match(shell, /BellRouter/);
+    assert.match(shell, /className="rail"/);
     assert.equal(shell.includes("newConversation"), false);
     assert.equal(shell.includes("ConversationSidebarList"), false);
     assert.match(app, /CompanionHost/);
@@ -112,7 +113,10 @@ describe("companion shell wiring", () => {
       path.join(root, "src/features/companion/MainChatScreen.tsx"),
       "utf8",
     );
-    assert.match(src, /ConversationScreen/);
+    assert.match(src, /send\b/);
+    assert.match(src, /chat-head/);
+    assert.match(src, /chat-composer/);
+    assert.match(src, /Message your companion/);
     assert.match(src, /newConversation|selectConversation/);
   });
 

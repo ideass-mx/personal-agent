@@ -2,6 +2,7 @@
  * Menú compacto «Nuevo proyecto» (popover desktop / sheet mobile).
  */
 import { useEffect, useId, useRef, useState } from "react";
+import { IconRailPlus } from "../../components/railIcons";
 import {
   NEW_PROJECT_OPTIONS,
   type MockProjectType,
@@ -62,7 +63,10 @@ export function NewProjectMenu({ onSelect, collapsed }: Props) {
               type="button"
               role="menuitem"
               className="np-menu-item"
-              onClick={() => choose(opt.type)}
+              onClick={(e) => {
+                e.stopPropagation();
+                choose(opt.type);
+              }}
             >
               <strong>{opt.title}</strong>
               <span className="muted">{opt.description}</span>
@@ -77,7 +81,7 @@ export function NewProjectMenu({ onSelect, collapsed }: Props) {
     <div className={`np-root ${collapsed ? "is-collapsed" : ""}`} ref={rootRef}>
       <button
         type="button"
-        className="icon-btn sm np-plus"
+        className="proj-add"
         title="Nuevo proyecto"
         aria-label="Nuevo proyecto"
         aria-haspopup="menu"
@@ -88,7 +92,7 @@ export function NewProjectMenu({ onSelect, collapsed }: Props) {
           setOpen((v) => !v);
         }}
       >
-        <span aria-hidden="true">+</span>
+        <IconRailPlus size={15} />
       </button>
       {open && isNarrow ? (
         <>

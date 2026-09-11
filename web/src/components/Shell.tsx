@@ -6,18 +6,15 @@ import { BellRouter } from "../features/companion/components/BellRouter";
 import { NewProjectMenu } from "../features/projects/NewProjectMenu";
 import type { MockProjectType } from "../features/projects/mockProjects";
 import {
-  IconActivity,
-  IconBook,
-  IconCheckSquare,
-  IconCreditCard,
-  IconFolder,
-  IconLogOut,
-  IconMessage,
-  IconMoon,
-  IconPanelLeft,
-  IconSettings,
-  IconZap,
-} from "./icons";
+  IconRailActivity,
+  IconRailChat,
+  IconRailFiles,
+  IconRailMemory,
+  IconRailProjects,
+  IconRailSettings,
+  IconRailTasks,
+} from "./railIcons";
+import { IconCreditCard, IconLogOut, IconMoon, IconSettings } from "./icons";
 
 export function Shell({ children }: { children: ReactNode }) {
   const {
@@ -26,8 +23,6 @@ export function Shell({ children }: { children: ReactNode }) {
     wsStatus,
     health,
     disconnect,
-    sidebarCollapsed,
-    toggleSidebar,
     accountMenuOpen,
     setAccountMenuOpen,
     openSettings,
@@ -41,7 +36,6 @@ export function Shell({ children }: { children: ReactNode }) {
     setCompanionNav,
     openWorkspace,
     startCreateProject,
-    unreadMain,
     tasks,
   } = useCompanion();
 
@@ -93,6 +87,7 @@ export function Shell({ children }: { children: ReactNode }) {
     (companionNav === "projects" ||
       companionNav === "workspace" ||
       companionNav === "create-project");
+  const inProjects = projectsActive;
 
   const showConnWarning =
     wsStatus === "error" ||
@@ -101,171 +96,131 @@ export function Shell({ children }: { children: ReactNode }) {
     wsStatus === "connecting";
 
   return (
-    <div className={`app-shell companion-shell ${sidebarCollapsed ? "is-collapsed" : ""}`}>
-      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
-        <div className="sidebar-top">
-          <button
-            type="button"
-            className="brand"
-            onClick={() => goCompanion("chat", "conversation")}
-            title="Personal Agent"
-          >
-            <span className="brand-mark" aria-hidden />
-            {!sidebarCollapsed ? <span className="brand-text">Agente</span> : null}
-          </button>
-          <div className="sidebar-tools">
-            <BellRouter />
+    <div className="app-shell companion-shell">
+      <aside className="rail" aria-label="Navegación">
+        <div className="rail-top">
+          <div className="brand brand-row">
             <button
               type="button"
-              className="icon-btn"
-              onClick={toggleSidebar}
-              title={sidebarCollapsed ? "Expandir" : "Colapsar"}
-              aria-label={sidebarCollapsed ? "Expandir barra" : "Colapsar barra"}
-            >
-              <IconPanelLeft />
-            </button>
-          </div>
-        </div>
-
-        <div className="sidebar-scroll">
-          {!sidebarCollapsed ? (
-            <p className="section-head" style={{ marginBottom: 0 }}>
-              <span>Agente</span>
-            </p>
-          ) : null}
-
-          <nav className="nav-section" style={{ marginTop: 4 }}>
-            <NavBtn
-              active={chatActive}
-              title="Chat"
-              collapsed={sidebarCollapsed}
-              badge={unreadMain ? "dot" : undefined}
+              className="brand-hit"
               onClick={() => goCompanion("chat", "conversation")}
-              icon={<IconMessage />}
-            />
-          </nav>
-
-          <div className="nav-section">
-            <div className="section-head">
-              {!sidebarCollapsed ? <span>Projects</span> : null}
-              <div className="section-actions">
-                <NewProjectMenu
-                  collapsed={sidebarCollapsed}
-                  onSelect={onNewProjectType}
-                />
-              </div>
-            </div>
-            {sidebarCollapsed ? (
-              <NavBtn
-                active={projectsActive}
-                title="Projects"
-                collapsed
-                onClick={() => goCompanion("projects", "projects")}
-                icon={<IconFolder />}
-              />
-            ) : (
-              <>
-                <ul className="project-list mock-project-list">
-                  {workspaces.slice(0, 8).map((w) => (
-                    <li key={w.id}>
-                      <button
-                        type="button"
-                        className={`nav-item listed ${
-                          activeWorkspaceId === w.id && companionNav === "workspace"
-                            ? "active"
-                            : ""
-                        }`}
-                        onClick={() => {
-                          openWorkspace(w.id);
-                          setNav("projects");
-                        }}
-                        title={w.name}
-                      >
-                        <span className="truncate">{w.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  className={`nav-item listed ${
-                    companionNav === "projects" ? "active" : ""
-                  }`}
-                  onClick={() => goCompanion("projects", "projects")}
-                >
-                  <span className="truncate">Ver todos</span>
-                </button>
-              </>
-            )}
+              title="Companion"
+            >
+              <span className="brand-mark" aria-hidden />
+              <span className="brand-copy">
+                <span className="brand-name">Companion</span>
+                <span className="brand-sub">your agent</span>
+              </span>
+            </button>
+            <BellRouter />
           </div>
-
-          <nav className="nav-section">
-            <NavBtn
-              active={nav === "tasks" && companionNav === "tasks"}
-              title="Tasks"
-              collapsed={sidebarCollapsed}
-              count={needsYou || undefined}
-              onClick={() => goCompanion("tasks", "tasks")}
-              icon={<IconCheckSquare />}
-            />
-            <NavBtn
-              active={nav === "memory" && companionNav === "memory"}
-              title="Memory"
-              collapsed={sidebarCollapsed}
-              onClick={() => goCompanion("memory", "memory")}
-              icon={<IconBook />}
-            />
-            <NavBtn
-              active={nav === "files" && companionNav === "files"}
-              title="Files"
-              collapsed={sidebarCollapsed}
-              onClick={() => goCompanion("files", "files")}
-              icon={<IconFolder />}
-            />
-            <NavBtn
-              active={nav === "activity" && companionNav === "activity"}
-              title="Activity"
-              collapsed={sidebarCollapsed}
-              onClick={() => goCompanion("activity", "activity")}
-              icon={<IconActivity />}
-            />
-          </nav>
-
-          {!sidebarCollapsed ? (
-            <div className="nav-section">
-              <button
-                type="button"
-                className={`nav-item listed ${isActive(nav, "experience") ? "active" : ""}`}
-                onClick={() => setNav("experience")}
-              >
-                <IconZap />
-                <span className="truncate">Lab (avanzado)</span>
-              </button>
-            </div>
-          ) : null}
         </div>
 
-        <div className="sidebar-foot">
-          {showConnWarning && !sidebarCollapsed ? (
-            <div className="conn-badge-row">
-              <span className={wsStatus === "connecting" ? "badge muted" : "badge err"}>
-                {wsStatus === "connecting" ? "Conectando…" : "Sin conexión"}
+        <div className="nav-label">Agente</div>
+        <nav className="nav">
+          <NavItem
+            active={chatActive}
+            label="Chat"
+            icon={<IconRailChat />}
+            onClick={() => goCompanion("chat", "conversation")}
+          />
+          <NavItem
+            active={projectsActive && companionNav !== "workspace"}
+            label="Projects"
+            icon={<IconRailProjects />}
+            onClick={() => goCompanion("projects", "projects")}
+            trailing={
+              <span
+                className="proj-add-wrap"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <NewProjectMenu onSelect={onNewProjectType} />
               </span>
-            </div>
+            }
+          />
+          {inProjects ? (
+            <ul className="proj-sublist">
+              {workspaces.slice(0, 8).map((w) => (
+                <li key={w.id}>
+                  <button
+                    type="button"
+                    className={`proj-sub ${
+                      activeWorkspaceId === w.id && companionNav === "workspace"
+                        ? "on"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      openWorkspace(w.id);
+                      setNav("projects");
+                    }}
+                  >
+                    <span className="proj-dot" aria-hidden />
+                    <span className="truncate">{w.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : null}
+        </nav>
+
+        <nav className="nav" style={{ marginTop: 14 }}>
+          <NavItem
+            active={nav === "tasks" && companionNav === "tasks"}
+            label="Tasks"
+            icon={<IconRailTasks />}
+            onClick={() => goCompanion("tasks", "tasks")}
+            count={needsYou || undefined}
+            countVariant="wait"
+          />
+          <NavItem
+            active={nav === "memory" && companionNav === "memory"}
+            label="Memory"
+            icon={<IconRailMemory />}
+            onClick={() => goCompanion("memory", "memory")}
+          />
+          <NavItem
+            active={nav === "files" && companionNav === "files"}
+            label="Files"
+            icon={<IconRailFiles />}
+            onClick={() => goCompanion("files", "files")}
+          />
+          <NavItem
+            active={nav === "activity" && companionNav === "activity"}
+            label="Activity"
+            icon={<IconRailActivity />}
+            onClick={() => goCompanion("activity", "activity")}
+          />
+        </nav>
+
+        <div className="rail-spacer" />
+
+        {showConnWarning ? (
+          <p className="rail-conn muted">
+            {wsStatus === "connecting" ? "Conectando…" : "Sin conexión"}
+          </p>
+        ) : null}
+
+        <nav className="nav">
+          <NavItem
+            active={nav === "settings"}
+            label="Settings"
+            icon={<IconRailSettings />}
+            onClick={() => openSettings("profile")}
+          />
+        </nav>
+
+        <div className="rail-bottom">
           <button
             type="button"
-            className={`account-btn ${accountMenuOpen ? "open" : ""}`}
+            className={`profile ${accountMenuOpen ? "open" : ""}`}
             onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-            title={displayName}
           >
             <span className="avatar">{initials || "PA"}</span>
-            {!sidebarCollapsed ? (
-              <span className="account-meta">
-                <strong className="truncate account-name">{displayName}</strong>
-                <span className="muted account-plan">Settings</span>
-              </span>
-            ) : null}
+            <span className="profile-meta">
+              <span className="profile-name truncate">{displayName}</span>
+              <span className="profile-plan">Companion Pro</span>
+            </span>
           </button>
 
           {accountMenuOpen ? (
@@ -285,7 +240,7 @@ export function Shell({ children }: { children: ReactNode }) {
                   <IconSettings size={16} /> Comportamiento
                 </button>
                 <button type="button" role="menuitem" onClick={() => openSettings("system")}>
-                  <IconCreditCard size={16} /> Sistema · Lab
+                  <IconCreditCard size={16} /> Sistema
                 </button>
                 <button type="button" role="menuitem" onClick={() => openSettings("appearance")}>
                   <IconMoon size={16} /> Apariencia
@@ -312,36 +267,32 @@ export function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function isActive(nav: NavId, id: NavId) {
-  return nav === id;
-}
-
-function NavBtn(props: {
+function NavItem(props: {
   active: boolean;
-  title: string;
-  collapsed: boolean;
-  onClick: () => void;
+  label: string;
   icon: ReactNode;
-  badge?: "dot";
+  onClick: () => void;
+  trailing?: ReactNode;
   count?: number;
+  countVariant?: "wait";
 }) {
   return (
     <button
       type="button"
-      className={`nav-item ${props.active ? "active" : ""}`}
+      className={`nav-item ${props.active ? "on" : ""}`}
       onClick={props.onClick}
-      title={props.title}
+      title={props.label}
     >
-      <span className="nav-icon-wrap">
-        {props.icon}
-        {props.badge === "dot" ? <span className="cp-nav-dot" aria-hidden /> : null}
-      </span>
-      {!props.collapsed ? <span>{props.title}</span> : null}
-      {!props.collapsed && props.count ? (
-        <span className="cp-nav-count" aria-label={`${props.count} te necesitan`}>
+      <span className="ico">{props.icon}</span>
+      <span className="nav-label-text">{props.label}</span>
+      {props.count != null && props.count > 0 ? (
+        <span
+          className={`nav-count ${props.countVariant === "wait" ? "wait" : ""}`}
+        >
           {props.count}
         </span>
       ) : null}
+      {props.trailing}
     </button>
   );
 }

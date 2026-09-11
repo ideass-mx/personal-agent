@@ -44,7 +44,7 @@ describe("PHASE 58.5 conversation sidebar", () => {
       "utf8",
     );
     assert.equal(shell.includes("ConversationSidebarList"), false);
-    assert.match(shell, /title="Chat"/);
+    assert.match(shell, /label="Chat"/);
     assert.match(shell, /BellRouter/);
   });
 

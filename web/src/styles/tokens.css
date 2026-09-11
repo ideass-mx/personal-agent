@@ -1,53 +1,80 @@
+/**
+ * Tokens tema oscuro — Companion / Personal Agent.
+ * Alias legacy (--shell-bg, --muted, …) para no romper pantallas existentes.
+ */
 :root {
-  /* Dark product theme — minimal LLM premium */
-  --shell-bg: #0d0f12;
-  --surface: #161a20;
-  --ink: #f2f4f8;
-  --muted: #8b93a7;
-  --line: #2a303c;
-  --sunken: #1c2129;
-  --danger: #f07178;
-  --danger-soft: #3a1f24;
-  --ok: #3dd68c;
-  --warning: #e6b84d;
+  /* superficies */
+  --bg: #0e1013;
+  --surface: #16181d;
+  --surface-2: #1b1e24;
+  --surface-3: #232730;
 
-  /* Tipografía — chat: equivalente a Gemini (Google Sans Text → Roboto / system) */
-  --font-ui: Roboto, "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-chat: Roboto, "Segoe UI", system-ui, -apple-system, "Helvetica Neue",
-    Arial, sans-serif;
-  --font-agent: "Newsreader", Georgia, "Times New Roman", serif;
+  /* texto */
+  --ink: #e7e9ee;
+  --ink-soft: #a6acb8;
+  --ink-mute: #737985;
+  --ink-faint: #565c67;
 
-  /* Forma */
-  --radius-sm: 10px;
-  --radius: 14px;
-  --radius-lg: 18px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.45);
+  /* líneas */
+  --line: #262a31;
+  --line-soft: #1f232a;
+  --line-strong: #333944;
 
-  --sidebar-w: 272px;
+  /* acento */
+  --accent: #7c84f2;
+  --accent-ink: #9aa0f6;
+  --accent-soft: rgba(124, 132, 242, 0.14);
+  --accent-line: rgba(124, 132, 242, 0.32);
+
+  /* estados */
+  --live: #3fb389;
+  --live-soft: rgba(63, 179, 137, 0.14);
+  --wait: #e0a54a;
+  --wait-soft: rgba(224, 165, 74, 0.14);
+  --danger: #e5675a;
+  --danger-soft: rgba(229, 103, 90, 0.14);
+  --ok: var(--live);
+  --warning: var(--wait);
+
+  /* radios / sombras / tipografía */
+  --radius: 9px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+  --shadow-pop:
+    0 16px 48px -16px rgba(0, 0, 0, 0.6), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: var(--shadow-soft);
+  --shadow: var(--shadow-pop);
+  --shadow-lg: var(--shadow-pop);
+
+  --sans: "Hanken Grotesk", system-ui, sans-serif;
+  --serif: "Newsreader", Georgia, serif;
+  --font-ui: var(--sans);
+  --font-chat: var(--sans);
+  --font-agent: var(--serif);
+
+  /* alias legacy */
+  --shell-bg: var(--bg);
+  --muted: var(--ink-soft);
+  --sunken: var(--surface-2);
+  --user-bubble: var(--accent);
+  --user-bubble-ink: #fff;
+  --accent-ink-legacy: var(--accent-ink);
+
+  --sidebar-w: 248px;
   --sidebar-collapsed: 64px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-
-  /* Accent único y controlado */
-  --accent: #7c8cff;
-  --accent-soft: color-mix(in srgb, var(--accent) 18%, var(--surface));
-  --accent-ink: #e8ebff;
-
-  /* Bubble usuario (ChatGPT-like, azul sobrio dark) */
-  --user-bubble: #1e4a7a;
-  --user-bubble-ink: #eef5fc;
+  --brand-grad: linear-gradient(150deg, #7c84f2, #4b54c9);
 }
 
 [data-agent="personal"] {
-  --accent: #7c8cff;
+  --accent: #7c84f2;
 }
 [data-agent="research"] {
   --accent: #3dbeb0;
 }
 [data-agent="trading"] {
-  --accent: #e6b84d;
+  --accent: #e0a54a;
 }
 [data-agent="office"] {
   --accent: #6b9dff;
@@ -72,11 +99,12 @@ body,
 
 body {
   margin: 0;
-  font-family: var(--font-ui);
+  font-family: var(--sans);
   color: var(--ink);
-  background: var(--shell-bg);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  letter-spacing: -0.005em;
 }
 
 button,
@@ -101,7 +129,7 @@ a {
 }
 
 .agent-voice {
-  font-family: var(--font-agent);
+  font-family: var(--serif);
   font-style: italic;
   font-weight: 400;
   letter-spacing: -0.01em;
@@ -129,4 +157,10 @@ a {
 
 .fade-in {
   animation: fade-in 0.35s var(--ease) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: none;
+  }
 }

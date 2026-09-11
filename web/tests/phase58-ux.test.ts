@@ -29,7 +29,7 @@ describe("PHASE 58.1 Personal Agent UX", () => {
     );
     assert.match(shell, /Settings/);
     assert.equal(shell.includes("Tu agente"), false);
-    assert.match(shell, /title="Chat"/);
+    assert.match(shell, /label="Chat"/);
   });
 
   it("ConversationScreen blank state has hero + composer autofocus", () => {
@@ -44,10 +44,11 @@ describe("PHASE 58.1 Personal Agent UX", () => {
     assert.equal(/ID \$\{activeConversationId/.test(src), false);
   });
 
-  it("tokens.css is dark-first", () => {
+  it("tokens.css is dark-first companion palette", () => {
     const tokens = fs.readFileSync(path.join(root, "src/styles/tokens.css"), "utf8");
     assert.match(tokens, /color-scheme:\s*dark/);
-    assert.match(tokens, /--shell-bg:\s*#0d0f12/);
+    assert.match(tokens, /--bg:\s*#0e1013/i);
+    assert.match(tokens, /--shell-bg:\s*var\(--bg\)/);
   });
 
   it("AppContext polls refreshConversationsUntilTitled after assistant_done", () => {
