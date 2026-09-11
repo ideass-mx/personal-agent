@@ -95,6 +95,14 @@ type Props = {
   channel?: ExperienceChannel;
   dimensions?: LabDimensions;
   onDimensions?: (d: LabDimensions) => void;
+  /** Arranque externo (p. ej. Proyectos + → Artículo científico). */
+  externalStart?: "scientific_article" | null;
+  onExternalStartConsumed?: () => void;
+  /** Abrir artículo ya listado en Proyectos. */
+  externalOpenTitle?: string | null;
+  onExternalOpenConsumed?: () => void;
+  /** Registrar proyecto creado en la lista de Proyectos. */
+  onArticleProjectCreated?: (title: string) => void;
 };
 
 /**
@@ -104,6 +112,11 @@ export function ConversationFirstDemo({
   channel = "desktop",
   dimensions,
   onDimensions,
+  externalStart = null,
+  onExternalStartConsumed,
+  externalOpenTitle = null,
+  onExternalOpenConsumed,
+  onArticleProjectCreated,
 }: Props) {
   const [phase, setPhase] = useState<FlowPhase>("home");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -114,6 +127,7 @@ export function ConversationFirstDemo({
   const [sheet, setSheet] = useState<"ai" | "sources" | "project" | null>(null);
   const [awaitingArticleTopic, setAwaitingArticleTopic] = useState(false);
   const [aiOpen, setAiOpen] = useState(true);
+  const [voiceLine, setVoiceLine] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const formId = useId();
 
@@ -193,6 +207,7 @@ export function ConversationFirstDemo({
       });
       setPhase("project_active");
       setAiOpen(true);
+      onArticleProjectCreated?.(title);
       push([
         {
           role: "assistant",
@@ -249,6 +264,54 @@ export function ConversationFirstDemo({
       complexity: "long_running",
     });
   }
+
+  function openExistingArticleProject(title: string) {
+    setAwaitingArticleTopic(false);
+    setMessages([
+      {
+        id: uid("assistant"),
+        role: "assistant",
+        text: `Artículo científico\n${title}\n\nContinuamos en el workspace del proyecto.`,
+      },
+    ]);
+    setProject({
+      ...emptyProject(title, {
+        projectType: "scientific_article",
+        understanding: ARTICLE_UNDERSTANDING,
+      }),
+      awaitingDelegation: false,
+      nav: "resumen",
+      emerged: {
+        research: true,
+        manuscript: true,
+        tasks: false,
+        artifacts: false,
+        sources: true,
+      },
+    });
+    setPhase("project_active");
+    setAiOpen(true);
+    setDims({
+      startingPoint: "direct_article",
+      intent: "scientific_article",
+      complexity: "long_running",
+    });
+  }
+
+  useEffect(() => {
+    if (externalStart !== "scientific_article") return;
+    startDirectArticleFlow();
+    onExternalStartConsumed?.();
+    // Solo reaccionar a la señal externa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot bridge
+  }, [externalStart]);
+
+  useEffect(() => {
+    if (!externalOpenTitle) return;
+    openExistingArticleProject(externalOpenTitle);
+    onExternalOpenConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot bridge
+  }, [externalOpenTitle]);
 
   function startResearch() {
     setProject((p) =>

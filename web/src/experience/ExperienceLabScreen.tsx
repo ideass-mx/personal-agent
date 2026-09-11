@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CapabilityId } from "../types";
 import { CAPABILITY_LABELS } from "../types";
+import { useMockProjects } from "../features/projects/MockProjectsContext";
 import { ConversationFirstDemo } from "./conversationFirst/ConversationFirstDemo";
 import {
   PRINCIPLE_INTERNAL,
@@ -32,6 +33,15 @@ type LabTab = "conversation" | "lab" | "compare";
  * Mock-only: sin LLM, Cloud ni red.
  */
 export function ExperienceLabScreen() {
+  const {
+    pendingCreate,
+    clearPendingCreate,
+    pendingOpenId,
+    clearPendingOpen,
+    getProject,
+    addProject,
+  } = useMockProjects();
+
   const [mode, setMode] = useState<ExperienceMode>("adaptive");
   const [agent, setAgent] = useState<ExperienceAgentId>("research");
   const [channel, setChannel] = useState<ExperienceChannel>("desktop");
@@ -44,6 +54,30 @@ export function ExperienceLabScreen() {
     delegation: "together",
     channel: "desktop",
   });
+  const [externalStart, setExternalStart] = useState<
+    "scientific_article" | null
+  >(null);
+  const [externalOpenTitle, setExternalOpenTitle] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (pendingCreate === "scientific_article") {
+      setTab("conversation");
+      setExternalStart("scientific_article");
+      clearPendingCreate();
+    }
+  }, [pendingCreate, clearPendingCreate]);
+
+  useEffect(() => {
+    if (!pendingOpenId) return;
+    const p = getProject(pendingOpenId);
+    clearPendingOpen();
+    if (p?.type === "scientific_article") {
+      setTab("conversation");
+      setExternalOpenTitle(p.title);
+    }
+  }, [pendingOpenId, getProject, clearPendingOpen]);
 
   return (
     <div className="screen exp-lab">
@@ -119,6 +153,17 @@ export function ExperienceLabScreen() {
               channel={channel}
               dimensions={{ ...dims, channel }}
               onDimensions={setDims}
+              externalStart={externalStart}
+              onExternalStartConsumed={() => setExternalStart(null)}
+              externalOpenTitle={externalOpenTitle}
+              onExternalOpenConsumed={() => setExternalOpenTitle(null)}
+              onArticleProjectCreated={(title) => {
+                addProject({
+                  title,
+                  type: "scientific_article",
+                  summary: title,
+                });
+              }}
             />
           </div>
         </>

@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import { useApp } from "../state/AppContext";
 import type { NavId } from "../types";
 import { ConversationSidebarList } from "../features/conversations/ConversationSidebarList";
+import { useMockProjects } from "../features/projects/MockProjectsContext";
+import { NewProjectMenu } from "../features/projects/NewProjectMenu";
+import type { MockProjectType } from "../features/projects/mockProjects";
 import {
   IconArchive,
   IconBook,
@@ -34,6 +37,30 @@ export function Shell({ children }: { children: ReactNode }) {
     session,
     userDisplayName,
   } = useApp();
+  const {
+    projects,
+    activeProjectId,
+    requestCreate,
+    requestOpen,
+  } = useMockProjects();
+
+  function onNewProjectType(type: MockProjectType) {
+    requestCreate(type);
+    if (type === "scientific_article") {
+      setNav("experience");
+      return;
+    }
+    setNav("projects");
+  }
+
+  function onOpenMockProject(id: string, type: MockProjectType) {
+    requestOpen(id);
+    if (type === "scientific_article") {
+      setNav("experience");
+      return;
+    }
+    setNav("projects");
+  }
 
   const displayName =
     userDisplayName?.trim() ||
@@ -134,6 +161,10 @@ export function Shell({ children }: { children: ReactNode }) {
             <div className="section-head">
               {!sidebarCollapsed ? <span>Proyectos</span> : null}
               <div className="section-actions">
+                <NewProjectMenu
+                  collapsed={sidebarCollapsed}
+                  onSelect={onNewProjectType}
+                />
                 <button
                   type="button"
                   className="icon-btn sm"
@@ -154,13 +185,34 @@ export function Shell({ children }: { children: ReactNode }) {
                 icon={<IconFolder />}
               />
             ) : (
-              <button
-                type="button"
-                className={`nav-item listed ${isActive("projects") ? "active" : ""}`}
-                onClick={() => setNav("projects")}
-              >
-                <span className="truncate">Ver proyectos</span>
-              </button>
+              <>
+                <ul className="project-list mock-project-list">
+                  {projects.slice(0, 8).map((p) => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        className={`nav-item listed ${
+                          activeProjectId === p.id &&
+                          (nav === "projects" || nav === "experience")
+                            ? "active"
+                            : ""
+                        }`}
+                        onClick={() => onOpenMockProject(p.id, p.type)}
+                        title={p.title}
+                      >
+                        <span className="truncate">{p.title}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className={`nav-item listed ${isActive("projects") ? "active" : ""}`}
+                  onClick={() => setNav("projects")}
+                >
+                  <span className="truncate">Ver todos</span>
+                </button>
+              </>
             )}
           </div>
 
