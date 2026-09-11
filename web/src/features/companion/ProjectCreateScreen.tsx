@@ -1,6 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
+/**
+ * Crear proyecto — lenguaje natural, sin menús ni plantillas.
+ */
+import { useEffect, useId, useRef, useState } from "react";
+import { IconRailArrow, IconRailSpark } from "../../components/railIcons";
 import { useCompanion } from "./CompanionContext";
-import { kindLabel, type WorkspaceKind } from "./types";
+import {
+  interpretProjectGoal,
+  type ProjectInterpretation,
+} from "./policies/interpretProjectGoal";
+
+type Phase = "input" | "loading" | "interp" | "error";
+
+const EXAMPLES = [
+  "Escribir un artículo científico sobre IA generativa y productividad",
+  "Investigar la regulación de privacidad de datos en México",
+  "Construir un modelo financiero para mi startup",
+];
 
 export function ProjectCreateScreen() {
   const {
@@ -9,121 +24,210 @@ export function ProjectCreateScreen() {
     createWorkspaceFromGoal,
     openWorkspace,
     setCompanionNav,
+    pushToast,
   } = useCompanion();
-  const [goal, setGoal] = useState(createPreset || "");
-  const [adjusting, setAdjusting] = useState(false);
+
+  const [text, setText] = useState(createPreset || "");
+  const [phase, setPhase] = useState<Phase>("input");
+  const [interp, setInterp] = useState<(ProjectInterpretation & { said: string }) | null>(
+    null,
+  );
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const formId = useId();
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (createPreset) setGoal(createPreset);
+    if (createPreset) {
+      setText(createPreset);
+      setPhase("input");
+      setInterp(null);
+    }
   }, [createPreset]);
 
-  const interpretation = useMemo(() => {
-    const g = goal.trim();
-    let kind: WorkspaceKind = "Generic";
-    if (/libro|empleo|ia/i.test(g)) kind = "Book";
-    else if (/viaje|jap[oó]n/i.test(g)) kind = "Travel";
-    else if (/art[ií]culo|cient[ií]fico|paper/i.test(g)) kind = "Paper";
-    else if (/inversi[oó]n|finanzas/i.test(g)) kind = "Finance";
-    else if (/software|app|c[oó]digo/i.test(g)) kind = "Software";
-    return {
-      kind,
-      objective: g || "Sin objetivo aún",
-      sectionsHint:
-        kind === "Book"
-          ? "Concepto, Investigación, Esquema, Capítulos, Manuscrito, Revisión"
-          : kind === "Travel"
-            ? "Fechas, Vuelos, Alojamiento, Itinerario, Presupuesto, Reservas"
-            : "Secciones adaptadas al objetivo",
+  useEffect(() => {
+    if (phase === "input") {
+      window.setTimeout(() => taRef.current?.focus(), 40);
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current != null) window.clearTimeout(timerRef.current);
     };
-  }, [goal]);
+  }, []);
+
+  function runInterpret() {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setPhase("loading");
+    if (timerRef.current != null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => {
+      try {
+        const result = interpretProjectGoal(trimmed);
+        if (!result.objective) {
+          setPhase("error");
+          return;
+        }
+        setInterp({ ...result, said: trimmed });
+        setPhase("interp");
+      } catch {
+        setPhase("error");
+      }
+    }, 900);
+  }
+
+  function createFromInterp() {
+    if (!interp) return;
+    const ws = createWorkspaceFromGoal(interp.objective, {
+      kind: interp.kind,
+      sections: interp.sections,
+      name: `${interp.label} · ${interp.objective.slice(0, 40)}`,
+    });
+    clearCreatePreset();
+    pushToast(`Proyecto «${ws.name}» creado`, `workspace:${ws.id}`);
+    openWorkspace(ws.id);
+  }
 
   return (
-    <div className="cp-create screen" data-agent="personal">
-      <header className="screen-header">
-        <p className="exp-kicker">Nuevo proyecto</p>
-        <h1>¿Qué quieres lograr?</h1>
-        <p className="muted">
-          Una sola pregunta. El agente interpreta el espacio — tú confirmas.
-        </p>
-      </header>
+    <div className="np-wrap" data-agent="personal">
+      <div className="np-eyebrow">
+        <IconRailSpark size={16} /> Nuevo proyecto
+      </div>
 
-      <form
-        className="cp-create-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!goal.trim()) return;
-          setAdjusting(false);
-        }}
-      >
-        <textarea
-          value={goal}
-          onChange={(e) => {
-            setGoal(e.target.value);
-            setAdjusting(true);
-          }}
-          placeholder="Ej. Quiero escribir un libro sobre IA y empleo"
-          rows={3}
-          autoFocus
-        />
-      </form>
-
-      {goal.trim() ? (
-        <section className="cp-interpret fade-in">
-          <p className="cp-card-kicker">Interpretación</p>
-          <dl>
-            <div>
-              <dt>Tipo</dt>
-              <dd>{kindLabel(interpretation.kind)}</dd>
+      {phase !== "interp" ? (
+        <>
+          <h2 className="np-q">¿Qué quieres lograr?</h2>
+          <div className="np-box">
+            <textarea
+              id={formId}
+              ref={taRef}
+              className="np-ta"
+              autoFocus
+              value={text}
+              placeholder="Ej. Quiero escribir un artículo científico sobre cómo la IA generativa afecta la productividad de los desarrolladores."
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  runInterpret();
+                }
+              }}
+              aria-label="Qué quieres lograr"
+            />
+          </div>
+          <div className="np-foot">
+            <div className="np-eg">
+              Prueba:{" "}
+              {EXAMPLES.map((eg, i) => (
+                <span key={eg}>
+                  <button
+                    type="button"
+                    className="np-eg-btn"
+                    onClick={() => {
+                      setText(eg);
+                      taRef.current?.focus();
+                    }}
+                  >
+                    {eg}
+                  </button>
+                  {i < EXAMPLES.length - 1 ? " · " : ""}
+                </span>
+              ))}
             </div>
-            <div>
-              <dt>Objetivo</dt>
-              <dd>{interpretation.objective}</dd>
-            </div>
-            <div>
-              <dt>Secciones sugeridas</dt>
-              <dd>{interpretation.sectionsHint}</dd>
-            </div>
-          </dl>
-          <div className="cp-card-actions">
             <button
               type="button"
-              className="btn primary"
-              onClick={() => {
-                const ws = createWorkspaceFromGoal(
-                  goal.trim(),
-                  interpretation.kind,
-                );
-                clearCreatePreset();
-                openWorkspace(ws.id);
-              }}
+              className="btn btn-primary"
+              onClick={runInterpret}
+              disabled={!text.trim() || phase === "loading"}
+              style={{ opacity: text.trim() && phase !== "loading" ? 1 : 0.5 }}
             >
-              Crear
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                setAdjusting(true);
-                document.querySelector<HTMLTextAreaElement>(
-                  ".cp-create-form textarea",
-                )?.focus();
-              }}
-            >
-              Ajustar
+              Continuar <IconRailArrow size={15} />
             </button>
           </div>
-          {adjusting ? (
-            <p className="muted" style={{ marginTop: 10, fontSize: 13 }}>
-              Edita el objetivo arriba y vuelve a Crear.
-            </p>
+          {phase === "loading" ? (
+            <div className="np-thinking" role="status">
+              <span className="spin" aria-hidden /> Entendiendo tu objetivo y
+              dando forma al espacio…
+            </div>
           ) : null}
-        </section>
+          {phase === "error" ? (
+            <div className="np-error" role="alert">
+              <p>No pude interpretar eso. Reformúlalo con lo que quieres lograr.</p>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setPhase("input")}
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {phase === "interp" && interp ? (
+        <>
+          <h2 className="np-q" style={{ fontSize: 22 }}>
+            Así lo configuraría.
+          </h2>
+          <div className="interp">
+            <div className="interp-head">
+              <div className="interp-said">“{interp.said}”</div>
+            </div>
+            <div className="interp-body">
+              <div className="interp-field">
+                <div className="if-label">Proyecto</div>
+                <div className="if-val">{interp.label}</div>
+              </div>
+              <div className="interp-field">
+                <div className="if-label">Objetivo</div>
+                <div className="if-obj">{interp.objective}</div>
+              </div>
+              <div className="interp-field">
+                <div className="if-label">Espacio sugerido</div>
+                <div className="if-note">
+                  Empezaré con estas secciones — puedes cambiarlas cuando
+                  quieras.
+                </div>
+                <div className="sugg-flow">
+                  {interp.sections.map((s, i) => (
+                    <span key={s} className="sugg-flow-item">
+                      <span className="sugg-node">{s}</span>
+                      {i < interp.sections.length - 1 ? (
+                        <span className="sugg-arrow" aria-hidden>
+                          <IconRailArrow size={14} />
+                        </span>
+                      ) : null}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="interp-foot">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={createFromInterp}
+              >
+                Crear proyecto
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setPhase("input");
+                }}
+              >
+                Ajustar
+              </button>
+            </div>
+          </div>
+        </>
       ) : null}
 
       <button
         type="button"
-        className="btn ghost"
-        style={{ marginTop: 20 }}
+        className="btn btn-ghost np-cancel"
         onClick={() => {
           clearCreatePreset();
           setCompanionNav("projects");

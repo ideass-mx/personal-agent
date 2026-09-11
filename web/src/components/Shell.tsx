@@ -3,13 +3,12 @@ import { useApp } from "../state/AppContext";
 import type { NavId } from "../types";
 import { useCompanion } from "../features/companion/CompanionContext";
 import { BellRouter } from "../features/companion/components/BellRouter";
-import { NewProjectMenu } from "../features/projects/NewProjectMenu";
-import type { MockProjectType } from "../features/projects/mockProjects";
 import {
   IconRailActivity,
   IconRailChat,
   IconRailFiles,
   IconRailMemory,
+  IconRailPlus,
   IconRailProjects,
   IconRailSettings,
   IconRailTasks,
@@ -49,16 +48,8 @@ export function Shell({ children }: { children: ReactNode }) {
     setNav(appNav);
   }
 
-  function onNewProjectType(type: MockProjectType) {
-    const preset =
-      type === "scientific_article"
-        ? "Quiero crear un artículo científico"
-        : type === "research"
-          ? "Quiero investigar un tema a fondo"
-          : type === "document"
-            ? "Quiero crear un documento"
-            : undefined;
-    startCreateProject(preset);
+  function onNewProject() {
+    startCreateProject();
     setNav("projects");
   }
 
@@ -135,7 +126,18 @@ export function Shell({ children }: { children: ReactNode }) {
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
-                <NewProjectMenu onSelect={onNewProjectType} />
+                <button
+                  type="button"
+                  className="proj-add"
+                  title="Nuevo proyecto"
+                  aria-label="Nuevo proyecto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNewProject();
+                  }}
+                >
+                  <IconRailPlus size={15} />
+                </button>
               </span>
             }
           />

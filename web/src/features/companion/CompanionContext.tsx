@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { interpretProjectGoal } from "./policies/interpretProjectGoal";
 import { routeIntent } from "./policies/routeIntent";
 import {
   inferBookProject,
@@ -75,6 +76,7 @@ type CompanionState = {
   setNotifOpen: (v: boolean) => void;
   toasts: ToastItem[];
   dismissToast: (id: string) => void;
+  pushToast: (text: string, target?: string) => void;
   paletteOpen: boolean;
   setPaletteOpen: (v: boolean) => void;
   draft: string;
@@ -88,7 +90,14 @@ type CompanionState = {
   handleCardAction: (msg: CompanionMessage, action: string) => void;
   acceptPromote: (topicId: string) => void;
   rejectPromote: (topicId: string) => void;
-  createWorkspaceFromGoal: (goal: string, kind?: WorkspaceKind) => CompanionWorkspace;
+  createWorkspaceFromGoal: (
+    goal: string,
+    opts?: {
+      kind?: WorkspaceKind;
+      sections?: string[];
+      name?: string;
+    },
+  ) => CompanionWorkspace;
   startCreateProject: (preset?: string) => void;
   createPreset: string | null;
   clearCreatePreset: () => void;
@@ -182,33 +191,31 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createWorkspaceFromGoal = useCallback(
-    (goal: string, kind?: WorkspaceKind) => {
-      const inferred: WorkspaceKind =
-        kind ||
-        (inferBookProject(goal)
-          ? "Book"
-          : /viaje|jap[oó]n/i.test(goal)
-            ? "Travel"
-            : /art[ií]culo|paper|cient[ií]fico/i.test(goal)
-              ? "Paper"
-              : /inversi[oó]n|finanzas/i.test(goal)
-                ? "Finance"
-                : /software|app|c[oó]digo/i.test(goal)
-                  ? "Software"
-                  : "Generic");
+    (
+      goal: string,
+      opts?: {
+        kind?: WorkspaceKind;
+        sections?: string[];
+        name?: string;
+      },
+    ) => {
+      const interpreted = interpretProjectGoal(goal);
+      const inferred: WorkspaceKind = opts?.kind ?? interpreted.kind;
+      const sections = opts?.sections ?? sectionsForKind(inferred);
       const name =
-        inferred === "Book"
+        opts?.name?.trim() ||
+        (inferred === "Book" && inferBookProject(goal)
           ? "Libro · IA y empleo"
-          : inferred === "Travel"
+          : inferred === "Travel" && /jap[oó]n/i.test(goal)
             ? "Viaje a Japón"
-            : goal.trim().slice(0, 48) || kindLabel(inferred);
+            : goal.trim().slice(0, 48) || kindLabel(inferred));
       const threadId = companionId("th");
       const ws: CompanionWorkspace = {
         id: companionId("ws"),
         kind: inferred,
         name,
-        objective: goal.trim(),
-        sections: sectionsForKind(inferred),
+        objective: goal.trim() || interpreted.objective,
+        sections,
         status: "live",
         progress: 8,
         threadId,
@@ -216,10 +223,7 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
         nextSteps: ["Revisar el overview", "Decidir el siguiente paso"],
         needsDecision: undefined,
         liveSections: Object.fromEntries(
-          sectionsForKind(inferred).map((s, i) => [
-            s,
-            i === 0 ? "live" : "wait",
-          ]),
+          sections.map((s, i) => [s, i === 0 ? "live" : "wait"]),
         ) as CompanionWorkspace["liveSections"],
       };
       setWorkspaces((prev) => [ws, ...prev]);
@@ -267,7 +271,7 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
       const goal =
         notes.join(" · ") ||
         "Planear un viaje a Japón en marzo: vuelos, alojamiento e itinerario.";
-      const ws = createWorkspaceFromGoal(goal, "Travel");
+      const ws = createWorkspaceFromGoal(goal, { kind: "Travel" });
       setPromote((p) => ({
         ...p,
         workspaceId: ws.id,
@@ -684,6 +688,7 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
       setNotifOpen,
       toasts,
       dismissToast,
+      pushToast,
       paletteOpen,
       setPaletteOpen,
       draft,
@@ -726,6 +731,7 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
       notifOpen,
       toasts,
       dismissToast,
+      pushToast,
       paletteOpen,
       draft,
       workspaceDraft,

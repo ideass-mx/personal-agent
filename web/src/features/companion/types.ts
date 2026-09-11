@@ -12,6 +12,7 @@ export type WorkspaceKind =
   | "Paper"
   | "Finance"
   | "Software"
+  | "Legal"
   | "Travel"
   | "Generic";
 
@@ -177,12 +178,20 @@ export function sectionsForKind(kind: WorkspaceKind): string[] {
         "Dataset",
         "Análisis",
         "Manuscrito",
-        "Referencias",
       ];
     case "Finance":
-      return ["Tesis", "Datos", "Modelos", "Riesgo", "Escenarios", "Reportes"];
+      return [
+        "Tesis",
+        "Datos de mercado",
+        "Investigación",
+        "Modelos",
+        "Riesgo",
+        "Reportes",
+      ];
     case "Software":
       return ["Requisitos", "Arquitectura", "Código", "Tests", "Deploy"];
+    case "Legal":
+      return ["Casos", "Leyes", "Regulaciones", "Análisis", "Reporte"];
     case "Travel":
       return [
         "Fechas",
@@ -193,7 +202,7 @@ export function sectionsForKind(kind: WorkspaceKind): string[] {
         "Reservas",
       ];
     default:
-      return ["Resumen", "Notas", "Tareas", "Archivos"];
+      return ["Investigación", "Notas", "Trabajo", "Revisión"];
   }
 }
 
@@ -202,11 +211,13 @@ export function kindLabel(kind: WorkspaceKind): string {
     case "Book":
       return "Libro";
     case "Paper":
-      return "Artículo";
+      return "Artículo científico";
     case "Finance":
       return "Finanzas";
     case "Software":
       return "Software";
+    case "Legal":
+      return "Investigación legal";
     case "Travel":
       return "Viaje";
     default:
