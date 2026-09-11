@@ -480,7 +480,7 @@ export function createOpenAiCompatibleProvider(
             ? 120_000
             : 90_000
           : 60_000);
-      const maxAttempts = input.providerId === "gemini" ? 2 : 1;
+      const maxAttempts = input.providerId === "gemini" ? 3 : 1;
       let lastErr: unknown;
 
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -553,14 +553,27 @@ export function createOpenAiCompatibleProvider(
             mapped instanceof AgentDiagnosticError
               ? mapped.errorCode
               : undefined;
+          const httpStatus =
+            mapped instanceof AgentDiagnosticError
+              ? mapped.httpStatus
+              : undefined;
+          const safe =
+            mapped instanceof AgentDiagnosticError
+              ? String(mapped.metadata?.safeProviderMessage || "")
+              : "";
+          const highDemand =
+            httpStatus === 503 ||
+            /high demand|unavailable|overloaded|try again later/i.test(safe);
           const retryable =
             attempt < maxAttempts &&
             !yieldedAny &&
             (code === "LLM_PROVIDER_UNAVAILABLE" ||
               code === "LLM_TIMEOUT" ||
-              (mapped instanceof AgentDiagnosticError &&
-                mapped.httpStatus === 503));
+              highDemand);
           if (!retryable) throw mapped;
+          const delayMs = highDemand
+            ? 1000 * attempt * attempt
+            : 800 * attempt;
           input.diagnostics?.record({
             diagnosticId: request.diagnosticId || "PA-UNKNOWN",
             component: "LLM_PROVIDER",
@@ -572,9 +585,11 @@ export function createOpenAiCompatibleProvider(
               model,
               reason: code || "retry",
               attempt,
+              delayMs,
+              highDemand,
             },
           });
-          await new Promise((r) => setTimeout(r, 800));
+          await new Promise((r) => setTimeout(r, delayMs));
         } finally {
           if (timer) clearTimeout(timer);
         }

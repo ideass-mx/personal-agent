@@ -43,6 +43,10 @@ describe("sanitize", () => {
       humanizeError("LLM_TIMEOUT"),
       /tardó demasiado/i,
     );
+    assert.match(
+      humanizeError("LLM_PROVIDER_UNAVAILABLE", "high demand"),
+      /saturado|alta demanda/i,
+    );
   });
 });
 

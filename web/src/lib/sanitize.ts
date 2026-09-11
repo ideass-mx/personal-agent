@@ -48,6 +48,15 @@ export function humanizeError(code?: string, message?: string): string {
   if (c === "llm_timeout" || m.includes("provider_stream_timeout")) {
     return "El modelo tardó demasiado en responder. Inténtalo de nuevo; si se repite, prueba otro modelo en Inteligencia.";
   }
+  if (
+    c === "llm_provider_unavailable" ||
+    c === "llm_rate_limited" ||
+    m.includes("high demand") ||
+    m.includes("unavailable") ||
+    m.includes("overloaded")
+  ) {
+    return "El modelo está saturado por alta demanda. Espera unos segundos e inténtalo de nuevo; si continúa, cambia de modelo en Inteligencia.";
+  }
   if (c === "internal") {
     return "No pude generar la respuesta. Inténtalo nuevamente.";
   }

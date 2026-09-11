@@ -284,7 +284,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       streamIdRef.current = null;
       const text = humanizeError(
         msg.diagnostic?.errorCode || msg.code,
-        msg.message,
+        [msg.message, msg.diagnostic?.safeMessage].filter(Boolean).join(" "),
       );
       setBannerError(text);
       setBannerDiagnostic(msg.diagnostic ?? null);
