@@ -82,6 +82,10 @@ export type MessageCard =
 
 export type IntentKind =
   | "simple_ask"
+  | "conversation_continue"
+  | "research_only"
+  | "scientific_article_propose"
+  | "scientific_article_direct"
   | "task"
   | "complex_work"
   | "explicit_work"
@@ -110,6 +114,10 @@ export type ArticleAutomationPhase =
 
 export type ProjectState = {
   title: string;
+  /** Tipo de proyecto (mock). */
+  projectType: "scientific_article" | "generic";
+  /** Resumen de intención para la pantalla «Entendí que quieres…». */
+  understanding?: string;
   nav: ProjectNavId;
   experience: ExperienceKind;
   emerged: {
@@ -135,12 +143,15 @@ export type DemoScenarioId =
   | "task"
   | "doctorado"
   | "article"
+  | "article_via_conversation"
+  | "article_direct"
+  | "research_only"
   | "files"
   | "evidence";
 
 export type LabDimensions = {
-  startingPoint: "conversation" | "existing_project";
-  intent: "ask" | "research" | "write" | "analyze" | "execute" | "create" | "organize";
+  startingPoint: "conversation" | "direct_article" | "existing_project";
+  intent: "ask" | "research" | "scientific_article" | "write" | "analyze" | "execute" | "create" | "organize";
   complexity: "simple" | "multi_step" | "long_running";
   delegation: DelegationMode;
   channel: "desktop" | "mobile" | "voice";

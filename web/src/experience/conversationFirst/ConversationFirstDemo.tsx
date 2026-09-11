@@ -26,6 +26,8 @@ import {
 } from "./mockContent";
 import {
   DEMO_SCENARIOS,
+  ARTICLE_UNDERSTANDING,
+  ARTICLE_WORK_PLAN,
   type DemoScenario,
 } from "./scenarios";
 import type {
@@ -44,10 +46,18 @@ function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function emptyProject(title: string): ProjectState {
+function emptyProject(
+  title: string,
+  opts?: {
+    projectType?: ProjectState["projectType"];
+    understanding?: string;
+  },
+): ProjectState {
   return {
     title,
-    nav: "trabajo",
+    projectType: opts?.projectType || "generic",
+    understanding: opts?.understanding,
+    nav: "resumen",
     experience: "conversation",
     emerged: {
       research: false,
@@ -64,7 +74,7 @@ function emptyProject(title: string): ProjectState {
     articlePhase: "idle",
     articleStep: 0,
     articleType: null,
-    awaitingDelegation: false,
+    awaitingDelegation: opts?.projectType === "scientific_article",
   };
 }
 
@@ -74,6 +84,12 @@ const SUGGESTIONS = [
   "Analizar un archivo",
   "Organizar una tarea",
 ];
+
+const CREATE_CHIPS = [
+  { id: "scientific_article", label: "Artículo científico" },
+  { id: "document", label: "Documento" },
+  { id: "research", label: "Investigación" },
+] as const;
 
 type Props = {
   channel?: ExperienceChannel;
@@ -96,7 +112,8 @@ export function ConversationFirstDemo({
   const [delegation, setDelegation] = useState<DelegationMode>("together");
   const [pendingTitle, setPendingTitle] = useState("Proyecto");
   const [sheet, setSheet] = useState<"ai" | "sources" | "project" | null>(null);
-  const [voiceLine, setVoiceLine] = useState<string | null>(null);
+  const [awaitingArticleTopic, setAwaitingArticleTopic] = useState(false);
+  const [aiOpen, setAiOpen] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const formId = useId();
 
@@ -107,6 +124,10 @@ export function ConversationFirstDemo({
     delegation,
     channel,
   };
+
+  function priorUserTexts(): string[] {
+    return messages.filter((m) => m.role === "user").map((m) => m.text);
+  }
 
   function push(msgs: Omit<ChatMessage, "id">[]) {
     setMessages((m) => [
@@ -128,6 +149,8 @@ export function ConversationFirstDemo({
     setSheet(null);
     setVoiceLine(null);
     setDelegation("together");
+    setAwaitingArticleTopic(false);
+    setAiOpen(true);
   }
 
   function enterConversation(
@@ -145,7 +168,44 @@ export function ConversationFirstDemo({
     }
   }
 
-  function createProject(title: string, nextExperience: ExperienceKind = "conversation") {
+  function createArticleProject(title: string) {
+    setPhase("project_creating");
+    setVoiceLine(
+      channel === "voice"
+        ? "Voy a organizar el artículo científico como proyecto."
+        : null,
+    );
+    window.setTimeout(() => {
+      setProject({
+        ...emptyProject(title, {
+          projectType: "scientific_article",
+          understanding: ARTICLE_UNDERSTANDING,
+        }),
+        awaitingDelegation: true,
+        nav: "resumen",
+        emerged: {
+          research: true,
+          manuscript: true,
+          tasks: false,
+          artifacts: false,
+          sources: true,
+        },
+      });
+      setPhase("project_active");
+      setAiOpen(true);
+      push([
+        {
+          role: "assistant",
+          text: `Artículo científico\n${title}\n\nEsta conversación forma parte del proyecto.`,
+        },
+      ]);
+    }, 700);
+  }
+
+  function createProject(
+    title: string,
+    nextExperience: ExperienceKind = "conversation",
+  ) {
     setPhase("project_creating");
     setVoiceLine(
       channel === "voice"
@@ -156,6 +216,7 @@ export function ConversationFirstDemo({
       setProject({
         ...emptyProject(title),
         experience: nextExperience,
+        nav: "trabajo",
         emerged: {
           ...emptyProject(title).emerged,
           research: nextExperience === "research",
@@ -170,6 +231,23 @@ export function ConversationFirstDemo({
         },
       ]);
     }, 900);
+  }
+
+  function startDirectArticleFlow() {
+    setAwaitingArticleTopic(true);
+    enterConversation();
+    setMessages([
+      {
+        id: uid("assistant"),
+        role: "assistant",
+        text: "Vamos a crear tu artículo científico.\n¿Qué quieres investigar?",
+      },
+    ]);
+    setDims({
+      startingPoint: "direct_article",
+      intent: "scientific_article",
+      complexity: "long_running",
+    });
   }
 
   function startResearch() {
@@ -202,7 +280,11 @@ export function ConversationFirstDemo({
 
   function handleUserText(
     raw: string,
-    opts?: { inProject?: boolean; ensureConversation?: boolean },
+    opts?: {
+      inProject?: boolean;
+      ensureConversation?: boolean;
+      priorUserTexts?: string[];
+    },
   ) {
     const text = raw.trim();
     if (!text) return;
@@ -212,13 +294,42 @@ export function ConversationFirstDemo({
 
     const inProject =
       opts?.inProject ?? (phase === "project_active" && !!project);
+    const prior = opts?.priorUserTexts ?? priorUserTexts();
     push([{ role: "user", text }]);
 
-    const intent = detectIntent(text, { inProject });
+    if (awaitingArticleTopic && !inProject) {
+      setAwaitingArticleTopic(false);
+      const title = text;
+      setPendingTitle(title);
+      push([
+        {
+          role: "assistant",
+          text: `Perfecto.\nPuedo ayudarte a:\n• investigar literatura científica\n• encontrar fuentes\n• comparar enfoques\n• identificar tendencias\n• construir la estructura\n• redactar el manuscrito`,
+          card: {
+            kind: "project_auto",
+            title: "Artículo científico",
+            body: `Entendí que quieres:\n${ARTICLE_UNDERSTANDING}`,
+            plan: ARTICLE_WORK_PLAN,
+          },
+        },
+      ]);
+      setPhase("project_proposed");
+      setDims({
+        startingPoint: "direct_article",
+        intent: "scientific_article",
+        complexity: "long_running",
+      });
+      return;
+    }
 
-    if (channel === "voice" && intent.kind === "complex_work") {
+    const intent = detectIntent(text, {
+      inProject,
+      priorUserTexts: prior,
+    });
+
+    if (channel === "voice" && intent.kind === "scientific_article_propose") {
       setVoiceLine(
-        "Encontré que esto puede convertirse en un trabajo de investigación. ¿Quieres que lo organice como proyecto?",
+        "Esto ya parece un artículo científico. ¿Quieres que lo organice como proyecto?",
       );
     }
 
@@ -229,9 +340,15 @@ export function ConversationFirstDemo({
 
     switch (intent.kind) {
       case "simple_ask":
+      case "conversation_continue":
+      case "research_only":
         setPhase("conversation");
         push([{ role: "assistant", text: intent.reply || "" }]);
-        setDims({ intent: "ask", complexity: "simple" });
+        setDims({
+          intent: intent.kind === "research_only" ? "research" : "ask",
+          complexity:
+            intent.kind === "research_only" ? "multi_step" : "simple",
+        });
         break;
       case "task":
         setPhase("task_offer");
@@ -263,6 +380,52 @@ export function ConversationFirstDemo({
         ]);
         setDims({ intent: "create", complexity: "simple" });
         break;
+      case "scientific_article_propose": {
+        const title = intent.projectTitle || "Artículo científico";
+        setPendingTitle(title);
+        setPhase("project_proposed");
+        push([
+          {
+            role: "assistant",
+            text: intent.reply || "",
+            card: {
+              kind: "project_propose",
+              title: "Proyecto de artículo científico",
+              body: "La investigación, las fuentes y el manuscrito permanecerán juntos.",
+              createLabel: "Crear proyecto",
+              continueLabel: "Seguir conversando",
+            },
+          },
+        ]);
+        setDims({
+          intent: "scientific_article",
+          complexity: "long_running",
+        });
+        break;
+      }
+      case "scientific_article_direct": {
+        const title = intent.projectTitle || "Artículo científico";
+        setPendingTitle(title);
+        setPhase("project_proposed");
+        push([
+          {
+            role: "assistant",
+            text: intent.reply || "",
+            card: {
+              kind: "project_auto",
+              title: "Artículo científico",
+              body: `Entendí que quieres:\n${ARTICLE_UNDERSTANDING}`,
+              plan: ARTICLE_WORK_PLAN,
+            },
+          },
+        ]);
+        setDims({
+          startingPoint: "direct_article",
+          intent: "scientific_article",
+          complexity: "long_running",
+        });
+        break;
+      }
       case "complex_work": {
         const title = intent.projectTitle || "Proyecto";
         setPendingTitle(title);
@@ -375,8 +538,13 @@ export function ConversationFirstDemo({
     if (id === "evidence") {
       setPhase("project_active");
       setProject({
-        ...emptyProject("Optimización en trading"),
+        ...emptyProject("Optimización en trading", {
+          projectType: "scientific_article",
+          understanding: ARTICLE_UNDERSTANDING,
+        }),
         experience: "manuscript",
+        nav: "resultados",
+        awaitingDelegation: false,
         emerged: {
           research: true,
           manuscript: true,
@@ -406,10 +574,14 @@ export function ConversationFirstDemo({
       })),
     );
     if (sc.seedUser) {
+      const priorFromSeed = seed
+        .filter((s) => s.role === "user")
+        .map((s) => s.text);
       window.setTimeout(() => {
         handleUserText(sc.seedUser!, {
           inProject: false,
           ensureConversation: false,
+          priorUserTexts: priorFromSeed,
         });
       }, 30);
     }
@@ -520,7 +692,26 @@ export function ConversationFirstDemo({
           setDraft={setDraft}
           onSubmit={() => handleUserText(draft)}
           onSuggestion={(s) => {
-            setDraft(s === "Investigar algo" ? "Quiero investigar mis opciones de doctorado y comparar universidades." : s);
+            setDraft(
+              s === "Investigar algo"
+                ? "Quiero investigar mis opciones de doctorado y comparar universidades."
+                : s,
+            );
+            inputRef.current?.focus();
+          }}
+          onCreateChip={(id) => {
+            if (id === "scientific_article") {
+              startDirectArticleFlow();
+              return;
+            }
+            if (id === "research") {
+              setDraft(
+                "Quiero investigar los principales algoritmos utilizados en trading cuantitativo.",
+              );
+              inputRef.current?.focus();
+              return;
+            }
+            setDraft("Quiero escribir un documento.");
             inputRef.current?.focus();
           }}
           inputRef={inputRef}
@@ -550,9 +741,19 @@ export function ConversationFirstDemo({
           ) : null}
 
           <div className="cf-main">
-            {project && project.nav === "trabajo" ? (
+            {project &&
+            (project.nav === "trabajo" ||
+              (project.projectType === "scientific_article" &&
+                project.nav === "resultados")) ? (
               <ExperienceSurface
-                project={project}
+                project={
+                  project.nav === "resultados"
+                    ? { ...project, experience: "manuscript", nav: "trabajo" }
+                    : project.projectType === "scientific_article" &&
+                        project.nav === "trabajo"
+                      ? { ...project, experience: "research" }
+                      : project
+                }
                 channel={channel}
                 delegation={delegation}
                 onDelegation={setDelegation}
@@ -563,7 +764,37 @@ export function ConversationFirstDemo({
               />
             ) : null}
             {project && project.nav === "resumen" ? (
-              <ProjectResumen project={project} messageCount={messages.length} />
+              <ProjectResumen
+                project={project}
+                messageCount={messages.length}
+                delegation={delegation}
+                onDelegation={(d) => {
+                  setDelegation(d);
+                  setProject((p) =>
+                    p ? { ...p, awaitingDelegation: false } : p,
+                  );
+                }}
+                onBegin={() => {
+                  setProject((p) =>
+                    p
+                      ? {
+                          ...p,
+                          awaitingDelegation: false,
+                          nav: "trabajo",
+                          experience: "research",
+                          researchPhase: "working",
+                          researchStep: 0,
+                          articlePhase:
+                            p.projectType === "scientific_article"
+                              ? "working"
+                              : p.articlePhase,
+                        }
+                      : p,
+                  );
+                }}
+                onOpenManuscript={openManuscript}
+                onOpenResearch={startResearch}
+              />
             ) : null}
             {project && project.nav === "fuentes" ? <ResourcesPanel /> : null}
             {project && project.nav === "archivos" ? (
@@ -572,10 +803,13 @@ export function ConversationFirstDemo({
             {project && project.nav === "tareas" ? (
               <TasksPanel emerged={project.emerged.tasks} />
             ) : null}
-            {project && project.nav === "resultados" ? (
+            {project &&
+            project.nav === "resultados" &&
+            project.projectType !== "scientific_article" ? (
               <ResultsPanel project={project} />
             ) : null}
 
+            {(!project || isMobile) ? (
             <ConversationPane
               messages={messages}
               draft={draft}
@@ -589,6 +823,7 @@ export function ConversationFirstDemo({
                 handleCardAction(msg, action, {
                   pendingTitle,
                   createProject,
+                  createArticleProject,
                   setPhase,
                   push,
                   setProject,
@@ -598,7 +833,57 @@ export function ConversationFirstDemo({
                 })
               }
             />
+            ) : null}
           </div>
+
+          {project && !isMobile ? (
+            <aside
+              className={`cf-ai-panel ${aiOpen ? "is-open" : "is-collapsed"}`}
+              aria-label="AI"
+            >
+              <div className="cf-ai-panel-head">
+                <strong>AI</strong>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setAiOpen((v) => !v)}
+                >
+                  {aiOpen ? "Cerrar" : "Abrir"}
+                </button>
+              </div>
+              {aiOpen ? (
+                <div className="cf-ai-panel-body">
+                  <p className="muted">
+                    La conversación del proyecto sigue aquí. Pregunta o pide
+                    cambios sin salir del trabajo.
+                  </p>
+                  <ConversationPane
+                    messages={messages}
+                    draft={draft}
+                    setDraft={setDraft}
+                    onSubmit={() => handleUserText(draft)}
+                    compact
+                    isMobile={false}
+                    isVoice={isVoice}
+                    voiceLine={voiceLine}
+                    onCardAction={(msg, action) =>
+                      handleCardAction(msg, action, {
+                        pendingTitle,
+                        createProject,
+                        createArticleProject,
+                        setPhase,
+                        push,
+                        setProject,
+                        setDelegation,
+                        startResearch,
+                        openManuscript,
+                      })
+                    }
+                  />
+                </div>
+              ) : null}
+            </aside>
+          ) : null}
 
           {isMobile && project ? (
             <div className="cf-mobile-bar">
@@ -651,6 +936,7 @@ function HomeHero({
   setDraft,
   onSubmit,
   onSuggestion,
+  onCreateChip,
   inputRef,
   isVoice,
 }: {
@@ -659,6 +945,7 @@ function HomeHero({
   setDraft: (s: string) => void;
   onSubmit: () => void;
   onSuggestion: (s: string) => void;
+  onCreateChip: (id: (typeof CREATE_CHIPS)[number]["id"]) => void;
   inputRef: RefObject<HTMLInputElement | null>;
   isVoice: boolean;
 }) {
@@ -694,6 +981,19 @@ function HomeHero({
           🎙
         </span>
       </form>
+      <div className="cf-create-row">
+        <span className="muted">Crear</span>
+        {CREATE_CHIPS.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            className="cf-create-chip"
+            onClick={() => onCreateChip(c.id)}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
       <ul className="cf-suggestions">
         {SUGGESTIONS.map((s) => (
           <li key={s}>
@@ -836,11 +1136,14 @@ function MessageCardView({
       <div className="cf-card">
         <p>{card.body}</p>
         {card.plan ? (
-          <ol className="cf-plan">
-            {card.plan.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
+          <>
+            <p className="muted">Propongo trabajar en:</p>
+            <ol className="cf-plan">
+              {card.plan.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </>
         ) : null}
         <div className="exp-actions">
           <button
@@ -982,6 +1285,7 @@ function MessageCardView({
 type CardCtx = {
   pendingTitle: string;
   createProject: (title: string, exp?: ExperienceKind) => void;
+  createArticleProject: (title: string) => void;
   setPhase: (p: FlowPhase) => void;
   push: (msgs: Omit<ChatMessage, "id">[]) => void;
   setProject: Dispatch<SetStateAction<ProjectState | null>>;
@@ -995,6 +1299,10 @@ function handleCardAction(msg: ChatMessage, action: string, ctx: CardCtx) {
   if (!card) return;
 
   if (action === "create_project") {
+    if (card.kind === "project_propose" && card.title.includes("artículo")) {
+      ctx.createArticleProject(ctx.pendingTitle);
+      return;
+    }
     ctx.createProject(ctx.pendingTitle, "conversation");
     return;
   }
@@ -1011,16 +1319,7 @@ function handleCardAction(msg: ChatMessage, action: string, ctx: CardCtx) {
   if (action === "start_auto") {
     const isArticle = Boolean(card.kind === "project_auto" && card.plan?.length);
     if (isArticle) {
-      ctx.createProject(ctx.pendingTitle, "conversation");
-      window.setTimeout(() => {
-        ctx.push([
-          {
-            role: "assistant",
-            text: "¿Cómo quieres trabajar?",
-            card: { kind: "delegation", prompt: "¿Cómo quieres trabajar?" },
-          },
-        ]);
-      }, 1000);
+      ctx.createArticleProject(ctx.pendingTitle);
       return;
     }
     ctx.createProject(ctx.pendingTitle, "computer");
@@ -1169,17 +1468,27 @@ function ProjectNav({
   onNav: (n: ProjectNavId) => void;
   onExperience: (e: ExperienceKind) => void;
 }) {
-  const items: { id: ProjectNavId; label: string; show: boolean }[] = [
-    { id: "resumen", label: "Resumen", show: true },
-    { id: "trabajo", label: "Trabajo", show: true },
-    { id: "fuentes", label: "Fuentes", show: project.emerged.sources },
-    { id: "archivos", label: "Archivos", show: project.emerged.artifacts },
-    { id: "tareas", label: "Tareas", show: project.emerged.tasks },
-    { id: "resultados", label: "Resultados", show: true },
-  ];
+  const isArticle = project.projectType === "scientific_article";
+  const items: { id: ProjectNavId; label: string; show: boolean }[] = isArticle
+    ? [
+        { id: "resumen", label: "Resumen", show: true },
+        { id: "trabajo", label: "Investigación", show: true },
+        { id: "resultados", label: "Manuscrito", show: true },
+        { id: "fuentes", label: "Fuentes", show: true },
+      ]
+    : [
+        { id: "resumen", label: "Resumen", show: true },
+        { id: "trabajo", label: "Trabajo", show: true },
+        { id: "fuentes", label: "Fuentes", show: project.emerged.sources },
+        { id: "archivos", label: "Archivos", show: project.emerged.artifacts },
+        { id: "tareas", label: "Tareas", show: project.emerged.tasks },
+        { id: "resultados", label: "Resultados", show: true },
+      ];
   return (
     <aside className="cf-project-nav" aria-label="Proyecto">
-      <p className="exp-kicker">Proyecto</p>
+      <p className="exp-kicker">
+        {isArticle ? "Artículo científico" : "Proyecto"}
+      </p>
       <h3>{project.title}</h3>
       <nav>
         {items
@@ -1189,51 +1498,17 @@ function ProjectNav({
               key={i.id}
               type="button"
               className={project.nav === i.id ? "active" : ""}
-              onClick={() => onNav(i.id)}
+              onClick={() => {
+                onNav(i.id);
+                if (isArticle && i.id === "trabajo") onExperience("research");
+                if (isArticle && i.id === "resultados")
+                  onExperience("manuscript");
+              }}
             >
               {i.label}
             </button>
           ))}
       </nav>
-      {project.emerged.research || project.emerged.manuscript ? (
-        <div className="cf-exp-switch">
-          <p className="muted">Experiencia</p>
-          {project.emerged.research ? (
-            <button
-              type="button"
-              className={project.experience === "research" ? "active" : ""}
-              onClick={() => {
-                onNav("trabajo");
-                onExperience("research");
-              }}
-            >
-              Research
-            </button>
-          ) : null}
-          {project.emerged.manuscript ? (
-            <button
-              type="button"
-              className={project.experience === "manuscript" ? "active" : ""}
-              onClick={() => {
-                onNav("trabajo");
-                onExperience("manuscript");
-              }}
-            >
-              Manuscript
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className={project.experience === "conversation" ? "active" : ""}
-            onClick={() => {
-              onNav("trabajo");
-              onExperience("conversation");
-            }}
-          >
-            Conversación
-          </button>
-        </div>
-      ) : null}
     </aside>
   );
 }
@@ -1741,10 +2016,80 @@ function TasksPanel({ emerged }: { emerged: boolean }) {
 function ProjectResumen({
   project,
   messageCount,
+  delegation,
+  onDelegation,
+  onBegin,
+  onOpenManuscript,
+  onOpenResearch,
 }: {
   project: ProjectState;
   messageCount: number;
+  delegation: DelegationMode;
+  onDelegation: (d: DelegationMode) => void;
+  onBegin: () => void;
+  onOpenManuscript: () => void;
+  onOpenResearch: () => void;
 }) {
+  if (project.projectType === "scientific_article") {
+    return (
+      <div className="cf-surface panel cf-article-resumen">
+        <p className="exp-kicker">Artículo científico</p>
+        <h2>{project.title}</h2>
+        <p className="muted">
+          Esta conversación forma parte del proyecto · {messageCount} mensajes
+        </p>
+        <hr className="cf-soft-rule" />
+        <p className="muted">Entendí que quieres:</p>
+        <p>{project.understanding || ARTICLE_UNDERSTANDING}</p>
+        <p className="muted">Propongo trabajar en:</p>
+        <ol className="cf-plan">
+          {ARTICLE_WORK_PLAN.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+        <hr className="cf-soft-rule" />
+        <p className="muted">¿Cómo quieres trabajar?</p>
+        <div className="cf-delegation">
+          <button
+            type="button"
+            className={`btn ${delegation === "do_it" ? "primary" : ""}`}
+            onClick={() => onDelegation("do_it")}
+          >
+            ⚡ Hazlo por mí
+            <span className="muted">Yo revisaré el resultado.</span>
+          </button>
+          <button
+            type="button"
+            className={`btn ${delegation === "together" ? "primary" : ""}`}
+            onClick={() => onDelegation("together")}
+          >
+            🤝 Trabajemos juntos
+            <span className="muted">Consúltame cuando una decisión importe.</span>
+          </button>
+          <button
+            type="button"
+            className={`btn ${delegation === "i_control" ? "primary" : ""}`}
+            onClick={() => onDelegation("i_control")}
+          >
+            ✍️ Yo controlo
+            <span className="muted">Quiero decidir cada paso.</span>
+          </button>
+        </div>
+        <div className="exp-actions" style={{ marginTop: 16 }}>
+          <button type="button" className="btn primary" onClick={onBegin}>
+            Comenzar
+          </button>
+          <button type="button" className="btn" onClick={onOpenResearch}>
+            Ir a investigación
+          </button>
+          <button type="button" className="btn" onClick={onOpenManuscript}>
+            Ir al manuscrito
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const bits = useMemo(() => {
     const out: string[] = ["Conversación"];
     if (project.emerged.research) out.push("Research");

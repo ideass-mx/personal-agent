@@ -3586,7 +3586,7 @@ button.linkish {
 }
 .cf-layout.has-project:not(.is-mobile) {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
+  grid-template-columns: 160px minmax(0, 1fr) minmax(280px, 340px);
   gap: 18px;
   align-items: start;
 }
@@ -3640,10 +3640,101 @@ button.linkish {
   min-width: 0;
 }
 .cf-layout.has-project .cf-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.9fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.cf-create-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 8px;
+}
+
+.cf-create-chip {
+  border: 1px solid color-mix(in srgb, var(--ink, #222) 14%, transparent);
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.88rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cf-create-chip:hover {
+  color: var(--fg, #222);
+  border-color: color-mix(in srgb, var(--ink, #222) 28%, transparent);
+}
+
+.cf-soft-rule {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 16px 0;
+}
+
+.cf-article-resumen .cf-delegation {
+  display: grid;
+  gap: 8px;
+}
+
+.cf-ai-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 120px);
+  overflow: hidden;
+  background: var(--bg, #fff);
+}
+
+.cf-ai-panel.is-collapsed {
+  max-height: none;
+}
+
+.cf-ai-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cf-ai-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 16px;
+}
+
+.cf-ai-panel-body .cf-chat {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  max-height: none;
+}
+
+.cf-card {
+  animation: cf-card-in 0.35s ease-out;
+}
+
+@keyframes cf-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .cf-layout.has-project.is-mobile .cf-main {
   display: flex;
@@ -3845,7 +3936,12 @@ button.linkish {
     grid-template-columns: 1fr;
   }
   .cf-layout.has-project .cf-main {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+  }
+  .cf-ai-panel {
+    position: static;
+    max-height: none;
   }
   .cf-manuscript-layout {
     grid-template-columns: 1fr;

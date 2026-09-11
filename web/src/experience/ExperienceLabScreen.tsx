@@ -221,6 +221,7 @@ function DimensionBoard({
           {(
             [
               ["conversation", "Conversation"],
+              ["direct_article", "Direct article"],
               ["existing_project", "Existing Project"],
             ] as const
           ).map(([id, label]) => (
@@ -236,18 +237,16 @@ function DimensionBoard({
           ))}
         </fieldset>
         <fieldset>
-          <legend>Intent</legend>
+          <legend>User intent</legend>
           {(
             [
-              "ask",
-              "research",
-              "write",
-              "analyze",
-              "execute",
-              "create",
-              "organize",
+              ["ask", "Conversation"],
+              ["research", "Research"],
+              ["scientific_article", "Scientific article"],
+              ["write", "Write"],
+              ["organize", "Organize"],
             ] as const
-          ).map((id) => (
+          ).map(([id, label]) => (
             <label key={id}>
               <input
                 type="radio"
@@ -255,7 +254,7 @@ function DimensionBoard({
                 checked={dims.intent === id}
                 onChange={() => onChange({ ...dims, intent: id })}
               />{" "}
-              {id}
+              {label}
             </label>
           ))}
         </fieldset>

@@ -9,6 +9,7 @@ import {
   composerEnterShouldSend,
 } from "../../lib/composerKeyboard";
 import { workingPatienceLabel } from "../../lib/toolActivity";
+import { isScrollNearBottom } from "../../lib/threadScroll";
 import { IconSend } from "../../components/icons";
 import { useApp } from "../../state/AppContext";
 import {
@@ -41,6 +42,9 @@ export function ConversationScreen() {
     sourcesPanelSources,
   } = useApp();
   const endRef = useRef<HTMLDivElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  /** Si el usuario sube a leer, no forzar el scroll con el stream. */
+  const stickToBottomRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [composerTall, setComposerTall] = useState(false);
@@ -95,10 +99,6 @@ export function ConversationScreen() {
   }, [busy, pendingConfirm, messages]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, toolBanner, busy, busyMs, assistantStallMs]);
-
-  useEffect(() => {
     setSelectedSourceId(null);
   }, [sourcesPanelMessageId]);
 
@@ -118,6 +118,25 @@ export function ConversationScreen() {
     ? workingPatienceLabel({ busyMs, hasAssistantTokens })
     : null;
   const showThinkingPulse = showWorkingStatus && !hasAssistantTokens;
+
+  useEffect(() => {
+    stickToBottomRef.current = true;
+  }, [activeConversationId]);
+
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    // Nuevo mensaje del usuario: volver a pegar abajo.
+    if (last?.role === "user") {
+      stickToBottomRef.current = true;
+    }
+    if (!stickToBottomRef.current) return;
+    const el = threadRef.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      return;
+    }
+    endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+  }, [messages, toolBanner, showWorkingStatus]);
 
   const panelOpen = Boolean(
     sourcesPanelMessageId && sourcesPanelSources.length > 0,
@@ -210,7 +229,13 @@ export function ConversationScreen() {
 
   const thread = (
     <>
-      <div className="thread">
+      <div
+        className="thread"
+        ref={threadRef}
+        onScroll={(e) => {
+          stickToBottomRef.current = isScrollNearBottom(e.currentTarget);
+        }}
+      >
         <div className="thread-inner">
           {messages.map((m) =>
             m.role === "user" ? (
