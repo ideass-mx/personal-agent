@@ -142,7 +142,9 @@ class AgentService : Service() {
                 healthTracker.onMessageReceived()
                 when (msg) {
                     is ChatInbound.AssistantDelta -> acquireWakeLock()
-                    is ChatInbound.ConfirmRequest -> acquireWakeLock()
+                    is ChatInbound.ConfirmRequest,
+                    is ChatInbound.ToolProgress,
+                    -> acquireWakeLock()
                     is ChatInbound.AssistantDone,
                     is ChatInbound.Error,
                     -> releaseWakeLock()

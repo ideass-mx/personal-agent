@@ -84,8 +84,27 @@ const HIDDEN = new Set([
   "customer.demo",
 ]);
 
+/** Etiquetas de progreso en curso (gerundio) para `tool_progress`. */
+const TOOL_PROGRESS_LABELS: Record<string, string> = {
+  "research.search": "Buscando en la web",
+  "research.fetch": "Leyendo página web",
+  "filesystem.search": "Buscando archivos",
+  "filesystem.read": "Leyendo archivo",
+  "filesystem.list": "Explorando archivos",
+  "filesystem.write": "Escribiendo archivo",
+  "filesystem.delete": "Eliminando archivo",
+  "process.execute": "Ejecutando comando",
+  "office.excel.read": "Leyendo Excel",
+  "office.excel.write": "Modificando Excel",
+};
+
 export function labelForTool(toolName: string): string {
   return MVP_CAPABILITIES.find((c) => c.toolName === toolName)?.label ?? toolName;
+}
+
+/** Nombre UX mientras la tool se ejecuta (banner `tool_progress`). */
+export function progressLabelForTool(toolName: string): string {
+  return TOOL_PROGRESS_LABELS[toolName] ?? labelForTool(toolName);
 }
 
 export function capabilityFor(toolName: string): Capability | undefined {

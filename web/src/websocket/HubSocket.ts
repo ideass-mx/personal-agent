@@ -18,6 +18,14 @@ export type ServerMsg =
       input: unknown;
       conversationId: string;
     }
+  | {
+      type: "tool_progress";
+      phase: "executing" | "completed" | "failed";
+      toolCallId: string;
+      toolName: string;
+      conversationId: string;
+      detail?: string;
+    }
   | { type: "pong" }
   | {
       type: "error";

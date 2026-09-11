@@ -54,6 +54,16 @@ class HubChatConnection @Inject constructor(
                                 conversationId = msg.conversationId,
                             ),
                         )
+                    is ServerMessage.ToolProgress ->
+                        _inbound.emit(
+                            ChatInbound.ToolProgress(
+                                phase = msg.phase,
+                                toolCallId = msg.toolCallId,
+                                toolName = msg.toolName,
+                                conversationId = msg.conversationId,
+                                detail = msg.detail,
+                            ),
+                        )
                     else -> Unit
                 }
             }

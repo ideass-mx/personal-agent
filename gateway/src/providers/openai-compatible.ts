@@ -178,6 +178,7 @@ export function classifyContentHold(held: string): "stream" | "hold" | "undecide
 async function* parseSseToEvents(
   stream: ReadableStream<Uint8Array>,
   signal?: AbortSignal,
+  onActivity?: () => void,
 ): AsyncGenerator<LLMEvent> {
   const decoder = new TextDecoder();
   let buffer = "";
@@ -264,6 +265,7 @@ async function* parseSseToEvents(
       }
       const { done, value } = await reader.read();
       if (done) break;
+      onActivity?.();
       const chunk = value;
       buffer += decoder.decode(chunk, { stream: true });
       for (;;) {
@@ -271,6 +273,7 @@ async function* parseSseToEvents(
         if (idx < 0) break;
         const frame = buffer.slice(0, idx);
         buffer = buffer.slice(idx + 2);
+        onActivity?.();
         const lines = frame
           .split("\n")
           .map((x) => x.trim())
@@ -409,75 +412,123 @@ export function createOpenAiCompatibleProvider(
           stream: true,
         },
       });
-      const ctrl = new AbortController();
-      // El timeout debe cubrir TODO el stream. Antes se limpiaba al recibir
-      // headers y Gemini podía quedarse pensando sin límite (UI «trabada»).
+      // Gemini puede «pensar» minutos sin text_delta; el idle debe
+      // reiniciarse con CUALQUIER byte SSE, no solo con eventos UI.
+      const hasTools = Boolean(request.tools?.length);
       const overallMs =
         input.timeoutMs ??
-        (input.providerId === "gemini" ? 120_000 : 90_000);
+        (input.providerId === "gemini"
+          ? hasTools
+            ? 300_000
+            : 180_000
+          : 90_000);
       const idleMs =
         input.idleTimeoutMs ??
-        (input.providerId === "gemini" ? 45_000 : 60_000);
-      const startedAt = Date.now();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const armTimeout = () => {
-        if (timer) clearTimeout(timer);
-        const remaining = overallMs - (Date.now() - startedAt);
-        if (remaining <= 0) {
-          ctrl.abort();
-          return;
-        }
-        timer = setTimeout(
-          () => ctrl.abort(),
-          Math.min(idleMs, remaining),
-        );
-      };
-      armTimeout();
-      let res: Response;
-      try {
-        res = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(body),
-          signal: ctrl.signal,
-        });
-        if (!res.ok || !res.body) {
-          const errBody = await res.text().catch(() => "");
-          throw mapHttpError({
-            provider: input.providerId,
-            model,
-            diagnosticId: request.diagnosticId,
-            status: res.status,
-            body: errBody,
-            stage: "LLM_REQUEST",
-          });
-        }
+        (input.providerId === "gemini"
+          ? hasTools
+            ? 120_000
+            : 90_000
+          : 60_000);
+      const maxAttempts = input.providerId === "gemini" ? 2 : 1;
+      let lastErr: unknown;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const ctrl = new AbortController();
+        const startedAt = Date.now();
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const armTimeout = () => {
+          if (timer) clearTimeout(timer);
+          const remaining = overallMs - (Date.now() - startedAt);
+          if (remaining <= 0) {
+            ctrl.abort();
+            return;
+          }
+          timer = setTimeout(
+            () => ctrl.abort(),
+            Math.min(idleMs, remaining),
+          );
+        };
         armTimeout();
-        for await (const ev of parseSseToEvents(res.body, ctrl.signal)) {
+        let yieldedAny = false;
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify(body),
+            signal: ctrl.signal,
+          });
+          if (!res.ok || !res.body) {
+            const errBody = await res.text().catch(() => "");
+            throw mapHttpError({
+              provider: input.providerId,
+              model,
+              diagnosticId: request.diagnosticId,
+              status: res.status,
+              body: errBody,
+              stage: "LLM_REQUEST",
+            });
+          }
           armTimeout();
-          yield ev;
-        }
-        yield { type: "done" };
-      } catch (err) {
-        if (ctrl.signal.aborted) {
-          throw new AgentDiagnosticError({
-            message: "provider_stream_timeout",
+          for await (const ev of parseSseToEvents(
+            res.body,
+            ctrl.signal,
+            armTimeout,
+          )) {
+            yieldedAny = true;
+            yield ev;
+          }
+          yield { type: "done" };
+          return;
+        } catch (err) {
+          const timedOut = ctrl.signal.aborted;
+          const mapped = timedOut
+            ? new AgentDiagnosticError({
+                message: "provider_stream_timeout",
+                component: "LLM_PROVIDER",
+                stage: "LLM_STREAM",
+                errorCode: "LLM_TIMEOUT",
+                diagnosticId: request.diagnosticId,
+                metadata: {
+                  provider: input.providerId,
+                  model,
+                  timeoutMs: overallMs,
+                  idleMs,
+                  hint: "El modelo tardó demasiado en emitir tokens (posible thinking o saturación).",
+                },
+              })
+            : err;
+          lastErr = mapped;
+          const code =
+            mapped instanceof AgentDiagnosticError
+              ? mapped.errorCode
+              : undefined;
+          const retryable =
+            attempt < maxAttempts &&
+            !yieldedAny &&
+            (code === "LLM_PROVIDER_UNAVAILABLE" ||
+              code === "LLM_TIMEOUT" ||
+              (mapped instanceof AgentDiagnosticError &&
+                mapped.httpStatus === 503));
+          if (!retryable) throw mapped;
+          input.diagnostics?.record({
+            diagnosticId: request.diagnosticId || "PA-UNKNOWN",
             component: "LLM_PROVIDER",
-            stage: "LLM_STREAM",
-            errorCode: "LLM_PROVIDER_UNAVAILABLE",
-            diagnosticId: request.diagnosticId,
+            stage: "LLM_REQUEST",
+            level: "WARN",
+            event: "LLM_REQUEST_RETRY",
             metadata: {
               provider: input.providerId,
               model,
-              timeoutMs: overallMs,
-              idleMs,
+              reason: code || "retry",
+              attempt,
             },
           });
+          await new Promise((r) => setTimeout(r, 800));
+        } finally {
+          if (timer) clearTimeout(timer);
         }
-        throw err;
-      } finally {
-        if (timer) clearTimeout(timer);
       }
+      throw lastErr;
     },
   };
 }

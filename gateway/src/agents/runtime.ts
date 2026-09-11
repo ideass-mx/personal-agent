@@ -38,6 +38,7 @@ import {
   parseLeakedToolCallJson,
   stripLeakedToolCallJson,
 } from "./strip-tool-call-leak.ts";
+import { safeToolProgressDetail } from "./tool-progress-detail.ts";
 import {
   resolveAgentInstructions,
   type SkillRegistry,
@@ -62,6 +63,14 @@ export type AgentEvent =
       toolName: string;
       input: unknown;
       conversationId: string;
+    }
+  | {
+      type: "tool_progress";
+      phase: "executing" | "completed" | "failed";
+      toolCallId: string;
+      toolName: string;
+      conversationId: string;
+      detail?: string;
     };
 
 export interface AgentTurnInput {
@@ -355,6 +364,37 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
               }),
             });
 
+            const emitProgress = function* (
+              phase: "executing" | "completed" | "failed",
+              toolName: string,
+              toolInput: unknown,
+            ): Generator<AgentEvent> {
+              const detail = safeToolProgressDetail(toolName, toolInput);
+              yield {
+                type: "tool_progress",
+                phase,
+                toolCallId: call.id,
+                toolName,
+                conversationId,
+                ...(detail ? { detail } : {}),
+              };
+            };
+
+            const runExecute = async function* (
+              toolName: string,
+              toolInput: unknown,
+              execute: () => Promise<ToolResult>,
+            ): AsyncGenerator<AgentEvent, ToolResult> {
+              yield* emitProgress("executing", toolName, toolInput);
+              const result = await executeToolSafe(execute);
+              yield* emitProgress(
+                result.ok ? "completed" : "failed",
+                toolName,
+                toolInput,
+              );
+              return result;
+            };
+
             let result: ToolResult;
 
             if (evaluation.decision === "DENIED") {
@@ -413,12 +453,18 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
                     ) {
                       result = confirmationInconsistentResult();
                     } else {
-                      result = await executeToolSafe(() =>
+                      const exec = runExecute(op.toolName, op.input, () =>
                         toolNow.execute(op.input, {
                           conversationId: op.conversationId,
                           deviceId: op.deviceId,
                         }),
                       );
+                      let next = await exec.next();
+                      while (!next.done) {
+                        yield next.value;
+                        next = await exec.next();
+                      }
+                      result = next.value;
                     }
                   }
                 }
@@ -428,12 +474,18 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
               if (!tool) {
                 result = toolSafetyDeniedResult(evaluation, false);
               } else {
-                result = await executeToolSafe(() =>
+                const exec = runExecute(tool.name, call.input, () =>
                   tool.execute(call.input, {
                     conversationId,
                     deviceId: input.deviceId,
                   }),
                 );
+                let next = await exec.next();
+                while (!next.done) {
+                  yield next.value;
+                  next = await exec.next();
+                }
+                result = next.value;
               }
             }
 

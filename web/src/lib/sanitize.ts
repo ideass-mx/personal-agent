@@ -45,6 +45,9 @@ export function humanizeError(code?: string, message?: string): string {
   if (c === "busy") {
     return "El agente está ocupado con otra solicitud. Espera un momento.";
   }
+  if (c === "llm_timeout" || m.includes("provider_stream_timeout")) {
+    return "El modelo tardó demasiado en responder. Inténtalo de nuevo; si se repite, prueba otro modelo en Inteligencia.";
+  }
   if (c === "internal") {
     return "No pude generar la respuesta. Inténtalo nuevamente.";
   }

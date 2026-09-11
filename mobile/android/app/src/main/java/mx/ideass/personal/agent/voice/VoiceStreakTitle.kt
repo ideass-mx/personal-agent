@@ -146,6 +146,7 @@ private suspend fun requestAgentTitle(
                     finished.complete(null)
                 }
                 is ChatInbound.ConfirmRequest -> Unit
+                is ChatInbound.ToolProgress -> Unit
             }
         }
     }

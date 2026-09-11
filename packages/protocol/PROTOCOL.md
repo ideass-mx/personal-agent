@@ -210,6 +210,28 @@ El AgentRuntime necesita confirmación humana antes de ejecutar una tool con
 - La ejecución usa exclusivamente el `toolName` + `input` congelados en el servidor;
   el cliente no puede redefinir la operación.
 
+### `tool_progress`
+```json
+{
+  "type": "tool_progress",
+  "phase": "executing",
+  "toolCallId": "call_1",
+  "toolName": "research.search",
+  "conversationId": "c_abc123",
+  "detail": "doctorados en Tlaxcala"
+}
+```
+Progreso real de una tool en el Agent Runtime (no inferido por el cliente).
+
+- `phase`: `executing` | `completed` | `failed`.
+- `toolCallId` / `toolName`: la invocación concreta (mismo id que el `tool_call` del LLM).
+- `conversationId`: conversación del turno.
+- `detail` (opcional): resumen seguro para UI (p. ej. query de búsqueda, host de URL).
+  Sin secretos, paths absolutos largos ni cuerpos completos.
+- Se emite al **iniciar** la ejecución (`executing`) y al **terminar** (`completed`/`failed`).
+  Las tools en modo `confirm` emiten `executing` solo tras aprobación.
+- Clientes antiguos pueden ignorar el tipo (evolución aditiva).
+
 ### `pong`
 ```json
 { "type": "pong" }
@@ -280,7 +302,6 @@ TTL de la Pairing Session: **5 minutos**, single-use. Solo se persiste el hash d
 ## Reservado para fases futuras (no implementar aún)
 
 - `voice_*`: sesión de voz (Fase 2)
-- `tool_progress`: progreso de tareas en el Agent (Fase 4)
 - `agent_hello`: registro del Agent ante el Hub — transporte Hub↔Agent distinto
   del WS clientes↔Hub; posible MCP u otro IPC JSON-safe (Fase 4)
 - PKI / clave pública por dispositivo (evolución de Trusted Device)

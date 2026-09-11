@@ -169,6 +169,26 @@ class ChatStore @Inject constructor(
                 refreshToolActivityLocked(msg.conversationId)
                 return@withLock
             }
+            if (msg is ChatInbound.ToolProgress) {
+                when (msg.phase) {
+                    "executing" -> {
+                        forcedPhaseByConversation.remove(msg.conversationId)
+                        executingToolByConversation[msg.conversationId] = msg.toolName
+                    }
+                    "completed" -> {
+                        executingToolByConversation.remove(msg.conversationId)
+                        forcedPhaseByConversation[msg.conversationId] =
+                            ToolActivityPhase.Completed
+                    }
+                    "failed" -> {
+                        executingToolByConversation.remove(msg.conversationId)
+                        forcedPhaseByConversation[msg.conversationId] =
+                            ToolActivityPhase.Failed
+                    }
+                }
+                refreshToolActivityLocked(msg.conversationId)
+                return@withLock
+            }
             if (msg is ChatInbound.AssistantDone) {
                 val pending = _pendingHubConfirm.value
                 if (pending != null && pending.conversationId == msg.conversationId) {
@@ -288,6 +308,16 @@ class ChatStore @Inject constructor(
                         toolName = msg.toolName,
                         inputJson = msg.input.toString(),
                         conversationId = msg.conversationId,
+                    ),
+                )
+            is ServerMessage.ToolProgress ->
+                handleInbound(
+                    ChatInbound.ToolProgress(
+                        phase = msg.phase,
+                        toolCallId = msg.toolCallId,
+                        toolName = msg.toolName,
+                        conversationId = msg.conversationId,
+                        detail = msg.detail,
                     ),
                 )
             else -> Unit

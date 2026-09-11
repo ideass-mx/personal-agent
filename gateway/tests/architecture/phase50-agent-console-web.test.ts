@@ -64,14 +64,15 @@ describe("PHASE 50 Agent Console Web MVP", () => {
     assert.match(joined, /maskToken|sanitizeDiagnostics|sanitizeInputSummary/);
   });
 
-  it("reuses protocol frames; no new WS types invented in client", () => {
+  it("reuses protocol frames; tool_progress is protocol-backed", () => {
     const sock = read("web/src/websocket/HubSocket.ts");
     assert.match(sock, /user_message/);
     assert.match(sock, /confirm_response/);
     assert.match(sock, /confirm_request/);
     assert.match(sock, /assistant_chunk/);
-    assert.doesNotMatch(sock, /tool_progress/);
+    assert.match(sock, /tool_progress/);
     const proto = read("packages/protocol/PROTOCOL.md");
+    assert.match(proto, /### `tool_progress`/);
     assert.doesNotMatch(proto, /PHASE 50/);
   });
 

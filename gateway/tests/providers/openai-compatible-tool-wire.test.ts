@@ -157,6 +157,10 @@ describe("gemini openai-compat request shaping", () => {
           err.message,
           /provider_stream_timeout|aborted|AbortError/i,
         );
+        assert.equal(
+          (err as { errorCode?: string }).errorCode,
+          "LLM_TIMEOUT",
+        );
       }
       assert.ok(seenBody);
       assert.equal("reasoning_effort" in seenBody, false);

@@ -129,6 +129,16 @@ sealed interface ServerMessage {
     ) : ServerMessage
 
     @Serializable
+    @SerialName("tool_progress")
+    data class ToolProgress(
+        val phase: String,
+        val toolCallId: String,
+        val toolName: String,
+        val conversationId: String,
+        val detail: String? = null,
+    ) : ServerMessage
+
+    @Serializable
     @SerialName("pong")
     data object Pong : ServerMessage
 

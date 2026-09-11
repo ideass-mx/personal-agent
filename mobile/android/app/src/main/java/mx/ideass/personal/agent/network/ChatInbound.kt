@@ -37,6 +37,17 @@ sealed interface ChatInbound {
         override val sessionKey: String get() = conversationId
     }
 
+    data class ToolProgress(
+        val phase: String,
+        val toolCallId: String,
+        val toolName: String,
+        val conversationId: String,
+        val detail: String? = null,
+        override val runId: String? = null,
+    ) : ChatInbound {
+        override val sessionKey: String get() = conversationId
+    }
+
     data class Error(
         val code: String,
         val message: String,

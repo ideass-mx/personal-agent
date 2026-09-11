@@ -475,6 +475,11 @@ describe("AgentRuntime tool calling", () => {
       events.some((e) => e.type === "confirm_request"),
       false,
     );
+    const progress = events.filter((e) => e.type === "tool_progress");
+    assert.equal(progress.length, 2);
+    assert.equal(progress[0]?.phase, "executing");
+    assert.equal(progress[0]?.toolName, "test.auto");
+    assert.equal(progress[1]?.phase, "completed");
     assert.ok(events.some((e) => e.type === "done"));
   });
 

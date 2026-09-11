@@ -103,6 +103,7 @@ class ChatThreads {
                 )
             }
             is ChatInbound.ConfirmRequest -> Unit
+            is ChatInbound.ToolProgress -> Unit
         }
         return key == visibleSessionKey
     }

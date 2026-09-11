@@ -37,7 +37,8 @@ import type {
   NavId,
   SettingsSectionId,
 } from "../types";
-import { HITL_TIMEOUT_MS } from "../lib/toolActivity";
+import { HITL_TIMEOUT_MS, toolProgressBanner } from "../lib/toolActivity";
+import { progressLabelForTool } from "../lib/capabilities";
 import { humanizeError } from "../lib/sanitize";
 import {
   normalizeAgentSources,
@@ -202,7 +203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const cid = msg.conversationId ?? activeRef.current;
       if (cid && activeRef.current && cid !== activeRef.current) return;
       setBusy(true);
-      setToolBanner(null);
+      // No borrar banner de tool_progress: el chunk puede llegar entre tools.
       setMessages((prev) => {
         const sid = streamIdRef.current;
         if (sid) {
@@ -269,10 +270,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         receivedAtMs: Date.now(),
       });
       setToolBanner("Esperando autorización…");
+    } else if (msg.type === "tool_progress") {
+      setBusy(true);
+      setToolBanner(
+        toolProgressBanner({
+          phase: msg.phase,
+          toolLabel: progressLabelForTool(msg.toolName),
+          detail: msg.detail,
+        }),
+      );
     } else if (msg.type === "error") {
       setBusy(false);
       streamIdRef.current = null;
-      const text = humanizeError(msg.code, msg.message);
+      const text = humanizeError(
+        msg.diagnostic?.errorCode || msg.code,
+        msg.message,
+      );
       setBannerError(text);
       setBannerDiagnostic(msg.diagnostic ?? null);
       if (

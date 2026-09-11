@@ -748,6 +748,7 @@ class VoiceSession @Inject constructor(
                             finished.complete(null)
                         }
                         is ChatInbound.ConfirmRequest -> Unit
+                        is ChatInbound.ToolProgress -> Unit
                     }
                 }
             }

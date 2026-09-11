@@ -159,6 +159,16 @@ export function attachGateway(
               conversationId: event.conversationId,
             });
             break;
+          case "tool_progress":
+            send(session.ws, {
+              type: "tool_progress",
+              phase: event.phase,
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              conversationId: event.conversationId,
+              ...(event.detail ? { detail: event.detail } : {}),
+            });
+            break;
           case "done":
             diagnostics?.record({
               diagnosticId,

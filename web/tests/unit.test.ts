@@ -39,6 +39,10 @@ describe("sanitize", () => {
       humanizeError("agent_disconnected"),
       /no está disponible/i,
     );
+    assert.match(
+      humanizeError("LLM_TIMEOUT"),
+      /tardó demasiado/i,
+    );
   });
 });
 
@@ -46,6 +50,25 @@ describe("tool activity", () => {
   it("labels phases in Spanish", () => {
     assert.equal(toolActivityLabel("awaiting_auth"), "Esperando autorización…");
     assert.equal(toolActivityLabel("rejected"), "Acción rechazada");
+  });
+
+  it("formats precise tool_progress banners", async () => {
+    const { toolProgressBanner } = await import("../src/lib/toolActivity.ts");
+    assert.match(
+      toolProgressBanner({
+        phase: "executing",
+        toolLabel: "Buscando en la web",
+        detail: "doctorados en Tlaxcala",
+      }),
+      /Buscando en la web….*doctorados/,
+    );
+    assert.match(
+      toolProgressBanner({
+        phase: "completed",
+        toolLabel: "Buscando en la web",
+      }),
+      /listo/i,
+    );
   });
 });
 

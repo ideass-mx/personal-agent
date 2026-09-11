@@ -144,6 +144,15 @@ export type ServerMessage =
       input: unknown;
       conversationId: string;
     }
+  | {
+      type: "tool_progress";
+      phase: "executing" | "completed" | "failed";
+      toolCallId: string;
+      toolName: string;
+      conversationId: string;
+      /** Resumen seguro para UI (query, host, …). Sin secretos. */
+      detail?: string;
+    }
   | { type: "pong" }
   | {
       type: "error";
