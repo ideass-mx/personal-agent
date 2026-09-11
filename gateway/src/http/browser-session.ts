@@ -138,8 +138,11 @@ export function browserBootstrapHtml(input: {
 <body>
   <p>Abriendo Personal Agent…</p>
   <script>
-    sessionStorage.setItem("pa_console_session_v1", ${JSON.stringify(sessionPayload)});
-    sessionStorage.setItem("pa_host_bootstrap", "1");
+    var payload = ${JSON.stringify(sessionPayload)};
+    try { localStorage.setItem("pa_console_session_v1", payload); } catch (e) {}
+    try { sessionStorage.setItem("pa_console_session_v1", payload); } catch (e) {}
+    try { localStorage.setItem("pa_host_bootstrap", "1"); } catch (e) {}
+    try { sessionStorage.setItem("pa_host_bootstrap", "1"); } catch (e) {}
     location.replace("/");
   </script>
 </body>

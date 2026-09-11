@@ -205,7 +205,7 @@ export function OnboardingWizard({
           setStep(stepFromStatus(s));
           return;
         }
-        if (sessionStorage.getItem("pa_host_bootstrap") === "1") {
+        if (sessionStorage.getItem("pa_host_bootstrap") === "1" || localStorage.getItem("pa_host_bootstrap") === "1") {
           setStep(stepFromStatus(s));
         }
       } catch {

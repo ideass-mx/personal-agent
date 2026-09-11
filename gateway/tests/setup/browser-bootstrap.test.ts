@@ -72,6 +72,7 @@ describe("browser bootstrap auth", () => {
     const browserCookie = setCookie.split(";")[0];
     const html = await activated.text();
     assert.match(html, /pa_console_session_v1/);
+    assert.match(html, /localStorage\.setItem\("pa_console_session_v1"/);
     assert.doesNotMatch(html, new RegExp(HUB, "i"));
 
     const extracted = cookieToken(browserCookie, BROWSER_AUTH_COOKIE);

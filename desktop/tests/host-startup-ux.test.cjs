@@ -125,7 +125,7 @@ test("host happy path delays tray until boot completes", () => {
   assert.match(bootSlice, /ensureTray\(\)/);
 });
 
-test("automatic browser launch is idempotent and second-instance does not auto-open", () => {
+test("automatic browser launch is idempotent; second-instance reopens product UI", () => {
   const src = fs.readFileSync(mainPath, "utf8");
   assert.match(src, /browserLaunchState\s*=\s*"IDLE"/);
   assert.match(src, /browserLaunchState\s*=\s*"OPENING"/);
@@ -133,9 +133,9 @@ test("automatic browser launch is idempotent and second-instance does not auto-o
   assert.match(src, /browserLaunchState\s*=\s*"FAILED"/);
   assert.match(src, /ensureAutomaticBrowserLaunch\("bootHostMode",\s*reason\)/);
   const secondIdx = src.indexOf('app.on("second-instance"');
-  const secondSlice = src.slice(secondIdx, secondIdx + 700);
-  assert.match(secondSlice, /browser_open_skipped/);
-  assert.doesNotMatch(secondSlice, /openPersonalAgentInBrowser\(/);
+  const secondSlice = src.slice(secondIdx, secondIdx + 900);
+  assert.match(secondSlice, /showProductWindow\(\)/);
+  assert.match(secondSlice, /desktop_icon_or_second_launch/);
   assert.doesNotMatch(secondSlice, /bootHostMode\(/);
   assert.doesNotMatch(secondSlice, /supervisor\.start\(/);
 });

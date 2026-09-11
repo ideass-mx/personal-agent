@@ -276,19 +276,13 @@ if (!singleInstanceLock) {
       void shutdownHost("uninstall");
       return;
     }
-    logHostBrowser("browser_open_skipped", {
+    // Doble clic en el icono / segundo lanzamiento: reabrir la UI del producto.
+    logHostBrowser("browser_open_attempt", {
       source: "second-instance",
-      reason: "second_instance",
-      note: "Second instance does not trigger automatic browser launch.",
+      reason: "desktop_icon_or_second_launch",
+      note: "Reopen Personal Agent for the user (browser or splash).",
     });
-    if (!hostModeActive) {
-      void showProductWindow();
-      return;
-    }
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
+    void showProductWindow();
   });
 }
 
